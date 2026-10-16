@@ -91,14 +91,11 @@ jobs:
         working-directory: apps/shell/ios
         run: |
           WORKSPACE=$(ls -d *.xcworkspace | head -1)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json | node -e "
-            let data = '';
-            process.stdin.on('data', (c) => (data += c));
-            process.stdin.on('end', () => {
-              const schemes = JSON.parse(data).workspace.schemes.filter((s) => !s.includes('Pods'));
-              console.log(schemes[0]);
-            });
-          ")
+          # Expo/CocoaPods workspaces also expose per-pod schemes (e.g. "EXConstants") via
+          # `xcodebuild -list`, so picking "the first scheme" is unreliable. The app's own
+          # scheme is always named after the generated Xcode project, which matches the
+          # workspace's base name for a fresh single-target Expo prebuild.
+          SCHEME="${WORKSPACE%.xcworkspace}"
           echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
           echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
           echo "Workspace: $WORKSPACE / Scheme: $SCHEME"
