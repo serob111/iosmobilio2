@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+ios/
+android/
+*.ipa
+.env
+.env.local
+data/projects/
+templates/
+.DS_Store
+npm-debug.log*
+coverage/

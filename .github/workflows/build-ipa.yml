@@ -1,0 +1,181 @@
+name: build-ipa
+run-name: build ${{ inputs.projectId }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      projectId:
+        description: "Project id (data/projects/<id>). Leave empty when useTestConfig is true."
+        required: false
+        type: string
+      useTestConfig:
+        description: "Use apps/shell/test/test.config.json instead of fetching from the server"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Select Xcode (Expo SDK 57 needs Xcode 26.4+)
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Selecting $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE"
+          xcodebuild -version
+
+      - name: Fetch project config (test fixture)
+        if: ${{ inputs.useTestConfig == true || inputs.useTestConfig == 'true' }}
+        run: |
+          cp apps/shell/test/test.config.json apps/shell/project.config.json
+          cp apps/shell/test/test-icon.png apps/shell/assets/project-icon.png
+
+      - name: Fetch project config (server)
+        if: ${{ inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
+        env:
+          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+          PROJECT_ID: ${{ inputs.projectId }}
+        run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo "projectId is required when useTestConfig is false" >&2
+            exit 1
+          fi
+          curl -fsS -H "x-build-secret: $BUILD_SECRET" \
+            "$PUBLIC_BASE_URL/api/build-config/$PROJECT_ID" -o build-config.json
+          node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync('build-config.json','utf8')).config))" \
+            > apps/shell/project.config.json
+          curl -fsS -H "x-build-secret: $BUILD_SECRET" \
+            "$PUBLIC_BASE_URL/api/build-icon/$PROJECT_ID" -o apps/shell/assets/project-icon.png
+
+      - name: Bake config into the shell
+        run: |
+          cp apps/shell/project.config.json apps/shell/src/config/generated.config.json
+          echo "CONFIG_PATH=$GITHUB_WORKSPACE/apps/shell/project.config.json" >> "$GITHUB_ENV"
+          echo "ICON_PATH=$GITHUB_WORKSPACE/apps/shell/assets/project-icon.png" >> "$GITHUB_ENV"
+          echo "Resolved config:"
+          cat apps/shell/project.config.json
+
+      - name: Prebuild iOS project
+        working-directory: apps/shell
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/shell/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('apps/shell/ios/Podfile') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Pod install
+        working-directory: apps/shell/ios
+        run: pod install
+
+      - name: Determine workspace and scheme
+        working-directory: apps/shell/ios
+        run: |
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json | node -e "
+            let data = '';
+            process.stdin.on('data', (c) => (data += c));
+            process.stdin.on('end', () => {
+              const schemes = JSON.parse(data).workspace.schemes.filter((s) => !s.includes('Pods'));
+              console.log(schemes[0]);
+            });
+          ")
+          echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+          echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
+          echo "Workspace: $WORKSPACE / Scheme: $SCHEME"
+
+      - name: Archive (unsigned)
+        working-directory: apps/shell/ios
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Package .ipa
+        id: package
+        run: |
+          APP_PATH=$(find apps/shell/ios/build/App.xcarchive/Products/Applications -maxdepth 1 -name "*.app" | head -1)
+          SLUG=$(node -pe "JSON.parse(require('fs').readFileSync(process.env.CONFIG_PATH,'utf8')).slug")
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -qr "${SLUG}.ipa" Payload
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "ipa_path=$GITHUB_WORKSPACE/${SLUG}.ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Verify .ipa
+        run: |
+          IPA_PATH="${{ steps.package.outputs.ipa_path }}"
+          APP_PATH="${{ steps.package.outputs.app_path }}"
+          echo "IPA size: $(du -h "$IPA_PATH" | cut -f1)"
+          echo "CFBundleDisplayName: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")"
+          echo "CFBundleIdentifier: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          PROJECT_NAME=$(node -pe "JSON.parse(require('fs').readFileSync(process.env.CONFIG_PATH,'utf8')).name")
+          if grep -a -q "$PROJECT_NAME" "$APP_PATH/main.jsbundle" 2>/dev/null; then
+            echo "generated.config.json content found baked into main.jsbundle"
+          else
+            echo "::warning::Could not confirm config content inside main.jsbundle (informational only, Hermes bytecode layout may not preserve a plain grep match)"
+          fi
+
+      - name: Upload .ipa artifact
+        if: always() && steps.package.outputs.ipa_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: |
+            ${{ steps.package.outputs.ipa_path }}
+            build.log
+          retention-days: 14
+
+      - name: Upload .ipa to server
+        if: ${{ success() && inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
+        env:
+          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+          PROJECT_ID: ${{ inputs.projectId }}
+        run: |
+          curl -fsS -X POST -H "x-build-secret: $BUILD_SECRET" \
+            -F "ipa=@${{ steps.package.outputs.ipa_path }}" \
+            "$PUBLIC_BASE_URL/api/projects/$PROJECT_ID/ipa"
+
+      - name: Report failure to server
+        if: ${{ failure() && inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
+        env:
+          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+          PROJECT_ID: ${{ inputs.projectId }}
+        run: |
+          LOG_TAIL=$(tail -n 50 build.log 2>/dev/null || echo "no build.log captured")
+          node -e "
+            const body = JSON.stringify({ log: process.env.LOG_TAIL });
+            require('fs').writeFileSync('failure-report.json', body);
+          "
+          curl -fsS -X POST -H "x-build-secret: $BUILD_SECRET" -H "Content-Type: application/json" \
+            --data-binary @failure-report.json \
+            "$PUBLIC_BASE_URL/api/projects/$PROJECT_ID/failed"

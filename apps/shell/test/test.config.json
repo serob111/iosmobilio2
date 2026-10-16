@@ -1,0 +1,12 @@
+{
+  "id": "p_test",
+  "name": "Mobilio Test",
+  "slug": "mobilio-test",
+  "bundleId": "am.mobilio.app.mobiliotest",
+  "source": { "type": "url", "url": "https://example.com" },
+  "theme": { "primary": "#2563EB", "background": "#FFFFFF", "statusBar": "dark" },
+  "tabs": [{ "title": "Главная", "icon": "home", "path": "/" }],
+  "features": { "offline": true, "share": true, "deepLinks": false, "pullToRefresh": true },
+  "allowedDomains": ["example.com"],
+  "trial": true
+}
