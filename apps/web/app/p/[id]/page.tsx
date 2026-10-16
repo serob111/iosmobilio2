@@ -4,6 +4,23 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { SUPPORTED_ICONS, type ProjectConfig } from "@mobilio/config";
 
+type BuildState =
+  | { status: "none" }
+  | {
+      status: "queued" | "building" | "done" | "failed";
+      workflowRunUrl?: string;
+      error?: string;
+      dispatchedAt?: number;
+      finishedAt?: number;
+    };
+
+const BUILD_STATUS_LABELS: Record<string, string> = {
+  queued: "В очереди",
+  building: "Собирается",
+  done: "Готово",
+  failed: "Ошибка",
+};
+
 const ICON_LABELS: Record<string, string> = {
   home: "Главная",
   grid: "Каталог",
@@ -36,6 +53,9 @@ export default function ProjectPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [iconVersion, setIconVersion] = useState(0);
   const [iconError, setIconError] = useState<string | null>(null);
+  const [build, setBuild] = useState<BuildState>({ status: "none" });
+  const [buildStarting, setBuildStarting] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +75,44 @@ export default function ProjectPage() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function pollOnce() {
+      try {
+        const res = await fetch(`/api/projects/${id}/build`);
+        const data = await res.json();
+        if (!cancelled && res.ok) setBuild(data as BuildState);
+      } catch {
+        // Transient network error — the next poll will retry.
+      }
+    }
+
+    void pollOnce();
+    const isActive = build.status === "queued" || build.status === "building";
+    const interval = isActive ? setInterval(() => void pollOnce(), 10_000) : null;
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [id, build.status]);
+
+  async function handleStartBuild() {
+    setBuildStarting(true);
+    setBuildError(null);
+    try {
+      const res = await fetch(`/api/projects/${id}/build`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Не удалось запустить сборку");
+      setBuild(data as BuildState);
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : "Ошибка запуска сборки");
+    } finally {
+      setBuildStarting(false);
+    }
+  }
 
   async function handleSave() {
     if (!config) return;
@@ -246,6 +304,78 @@ export default function ProjectPage() {
           {saved ? <span className="text-sm text-green-600">Сохранено</span> : null}
           {saveError ? <span className="text-sm text-red-600">{saveError}</span> : null}
         </div>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-zinc-200 p-5">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-700">Сборка приложения</span>
+          {build.status === "queued" || build.status === "building" ? (
+            <span className="text-sm text-blue-600">{BUILD_STATUS_LABELS[build.status]}…</span>
+          ) : null}
+        </div>
+
+        {build.status === "none" || build.status === "failed" ? (
+          <button
+            type="button"
+            onClick={handleStartBuild}
+            disabled={buildStarting}
+            className="self-start rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {buildStarting ? "Запускаем…" : "Собрать .ipa"}
+          </button>
+        ) : null}
+
+        {build.status === "queued" || build.status === "building" ? (
+          <p className="text-sm text-zinc-500">
+            Обычно занимает 15–25 минут. Статус обновляется автоматически.
+          </p>
+        ) : null}
+
+        {build.status === "done" ? (
+          <div className="flex flex-col gap-2">
+            <a
+              href={`/api/projects/${id}/ipa`}
+              className="self-start rounded-xl bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+            >
+              Скачать .ipa
+            </a>
+            <p className="text-sm text-zinc-500">
+              Это неподписанный .ipa. Для установки на iPhone его нужно подписать (например,
+              через Sideloadly) и подтвердить доверие разработчику на устройстве.
+            </p>
+            <button
+              type="button"
+              onClick={handleStartBuild}
+              disabled={buildStarting}
+              className="self-start text-sm font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50"
+            >
+              Собрать заново
+            </button>
+          </div>
+        ) : null}
+
+        {build.status === "failed" ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-red-600">Сборка завершилась с ошибкой.</p>
+            {build.error ? (
+              <pre className="max-h-40 overflow-auto rounded-lg bg-zinc-900 p-3 text-xs text-zinc-100">
+                {build.error}
+              </pre>
+            ) : null}
+            {build.workflowRunUrl ? (
+              <a
+                href={build.workflowRunUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                Открыть лог в GitHub Actions
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+
+        {buildError ? <p className="text-sm text-red-600">{buildError}</p> : null}
       </div>
     </div>
   );

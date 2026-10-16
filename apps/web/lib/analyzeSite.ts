@@ -163,7 +163,7 @@ function escapeXml(input: string): string {
   return input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-async function generateLetterAvatar(letter: string, color: string): Promise<Buffer> {
+export async function generateLetterAvatar(letter: string, color: string): Promise<Buffer> {
   const safeLetter = escapeXml(letter.toUpperCase());
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
     <rect width="1024" height="1024" fill="${color}" />

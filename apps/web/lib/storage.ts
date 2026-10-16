@@ -10,7 +10,7 @@ const DATA_ROOT = process.env.DATA_DIR
   : path.resolve(process.cwd(), '..', '..', 'data', 'projects');
 
 export type BuildStatus = {
-  status: 'queued' | 'building' | 'success' | 'failed';
+  status: 'queued' | 'building' | 'done' | 'failed';
   runId?: number;
   workflowRunUrl?: string;
   dispatchedAt?: number;
@@ -97,4 +97,8 @@ export async function hasIpa(id: string): Promise<boolean> {
 export async function writeIpa(id: string, buffer: Buffer): Promise<void> {
   const dir = await ensureProjectDir(id);
   await writeFile(path.join(dir, 'app.ipa'), buffer);
+}
+
+export async function readIpa(id: string): Promise<Buffer> {
+  return readFile(ipaPath(id));
 }
