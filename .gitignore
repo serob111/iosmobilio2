@@ -13,3 +13,6 @@ templates/
 .DS_Store
 npm-debug.log*
 coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/

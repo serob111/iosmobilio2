@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.expo
+ios
+android
+coverage
+playwright-report
+test-results
+*.ipa
+package-lock.json
+data/projects

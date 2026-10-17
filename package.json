@@ -12,13 +12,19 @@
     "test:config": "npm test --workspace=@mobilio/config",
     "typecheck:config": "npm run typecheck --workspace=@mobilio/config",
     "typecheck:shell": "npm run typecheck --workspace=mobilio-shell",
-    "shell": "npm run start --workspace=mobilio-shell"
+    "shell": "npm run start --workspace=mobilio-shell",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
     "eslint": "^10.12.0",
+    "prettier": "^3.4.2",
     "typescript-eslint": "^8.71.2"
   },
   "overrides": {
