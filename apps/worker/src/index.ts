@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { processPingJob, type PingJobData } from './processors';

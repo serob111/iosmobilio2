@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mobilio
+      POSTGRES_PASSWORD: mobilio
+      POSTGRES_DB: mobilio
+    ports:
+      # Host port 5433, not 5432 — this machine also runs a native (non-Docker) Postgres
+      # 18 Windows service bound to 5432, which silently intercepted host connections
+      # meant for this container. Internal container-to-container traffic (api ->
+      # postgres:5432) is unaffected.
+      - '5433:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mobilio']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      # Host port 6380, not 6379 — other projects on this machine already bind 6379.
+      # Internal container-to-container traffic (api/worker -> redis:6379) is unaffected.
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://mobilio:mobilio@postgres:5432/mobilio
+      REDIS_URL: redis://redis:6379
+      PORT: 3000
+    ports:
+      - '3001:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

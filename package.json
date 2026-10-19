@@ -13,6 +13,8 @@
     "typecheck:config": "npm run typecheck --workspace=@mobilio/config",
     "typecheck:shell": "npm run typecheck --workspace=mobilio-shell",
     "shell": "npm run start --workspace=mobilio-shell",
+    "dev": "docker compose up -d postgres redis && concurrently -n web,api,worker -c blue,green,yellow \"npm run dev --workspace=mobilio-web\" \"npm run dev --workspace=mobilio-api\" \"npm run dev --workspace=mobilio-worker\"",
+    "dev:infra": "docker compose up -d postgres redis",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -23,6 +25,7 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "concurrently": "^10.0.6",
     "eslint": "^10.12.0",
     "prettier": "^3.4.2",
     "typescript-eslint": "^8.71.2"
