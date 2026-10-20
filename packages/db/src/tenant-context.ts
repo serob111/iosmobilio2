@@ -1,0 +1,47 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { sql } from 'drizzle-orm';
+import type { Db } from './client';
+
+export interface TenantIdentity {
+  orgId: string;
+  userId: string;
+}
+
+const storage = new AsyncLocalStorage<Db>();
+
+/**
+ * The only sanctioned way to touch org_id-scoped tables. Opens a transaction, sets
+ * `app.org_id`/`app.user_id` for the lifetime of that transaction via `set_config(...,
+ * true)` (SET LOCAL semantics) bound as a real query parameter — never string-
+ * interpolated into SQL — then runs `fn` with the scoped connection stashed in
+ * AsyncLocalStorage so nested repository calls can reach it via `getTenantDb()`
+ * without having it threaded through every function signature. RLS policies
+ * (packages/db/migrations) read those two settings to decide what's visible; this
+ * function is what makes them non-empty.
+ */
+export async function runInTenantContext<T>(
+  db: Db,
+  identity: TenantIdentity,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.org_id', ${identity.orgId}, true)`);
+    await scoped.execute(sql`select set_config('app.user_id', ${identity.userId}, true)`);
+    return storage.run(scoped, fn);
+  });
+}
+
+/**
+ * Throws instead of silently falling back to an unscoped connection — a repository
+ * calling this outside `runInTenantContext` is a bug, not a case to handle gracefully.
+ */
+export function getTenantDb(): Db {
+  const tx = storage.getStore();
+  if (!tx) {
+    throw new Error(
+      'getTenantDb() called outside runInTenantContext() — no tenant transaction is active',
+    );
+  }
+  return tx;
+}

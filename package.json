@@ -7,8 +7,9 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "npm run build --workspace=@mobilio/config",
+    "postinstall": "npm run build --workspace=@mobilio/config && npm run build --workspace=@mobilio/db",
     "build:config": "npm run build --workspace=@mobilio/config",
+    "build:db": "npm run build --workspace=@mobilio/db",
     "test:config": "npm test --workspace=@mobilio/config",
     "typecheck:config": "npm run typecheck --workspace=@mobilio/config",
     "typecheck:shell": "npm run typecheck --workspace=mobilio-shell",
