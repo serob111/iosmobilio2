@@ -33,7 +33,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://mobilio:mobilio@localhost:5432/mobilio
+      # mobilio_app role, not the services: superuser — matches what apps/api actually
+      # connects as (see packages/db/sql/0000_bootstrap_roles.sql). Created by the
+      # "Run database migrations" step below, which also needs the superuser/migrator
+      # URLs — those stay step-local since nothing else needs them.
+      DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@localhost:5432/mobilio
       REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +52,15 @@ jobs:
       - run: npm run lint
 
       - run: npm run typecheck
+
+      - name: Run database migrations
+        working-directory: packages/db
+        env:
+          POSTGRES_BOOTSTRAP_URL: postgres://mobilio:mobilio@localhost:5432/mobilio
+          MOBILIO_MIGRATOR_PASSWORD: mobilio_migrator_pw
+          MOBILIO_APP_PASSWORD: mobilio_app_pw
+          MIGRATOR_DATABASE_URL: postgres://mobilio_migrator:mobilio_migrator_pw@localhost:5432/mobilio
+        run: npm run db:migrate
 
       - run: npm run test:coverage
 

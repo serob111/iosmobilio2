@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
+import { DbModule } from './db/db.module.js';
 import { HealthModule } from './health/health.module.js';
 import { QueueModule } from './queue/queue.module.js';
 
@@ -14,6 +15,7 @@ import { QueueModule } from './queue/queue.module.js';
         },
       },
     }),
+    DbModule,
     HealthModule,
     QueueModule,
   ],

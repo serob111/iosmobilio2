@@ -32,12 +32,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot: bootstraps the mobilio_migrator/mobilio_app roles (if missing) and runs
+  # Drizzle migrations (tables + RLS policies). api/worker wait for this to finish
+  # successfully before starting, since the mobilio_app role they connect as doesn't
+  # exist until this has run at least once.
+  migrate:
+    build:
+      context: .
+      dockerfile: packages/db/Dockerfile
+    environment:
+      POSTGRES_BOOTSTRAP_URL: postgres://mobilio:mobilio@postgres:5432/mobilio
+      MOBILIO_MIGRATOR_PASSWORD: mobilio_migrator_pw
+      MOBILIO_APP_PASSWORD: mobilio_app_pw
+      MIGRATOR_DATABASE_URL: postgres://mobilio_migrator:mobilio_migrator_pw@postgres:5432/mobilio
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     environment:
-      DATABASE_URL: postgres://mobilio:mobilio@postgres:5432/mobilio
+      DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@postgres:5432/mobilio
       REDIS_URL: redis://redis:6379
       PORT: 3000
     ports:
@@ -47,6 +64,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   worker:
     build:
