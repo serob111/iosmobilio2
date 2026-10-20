@@ -59,6 +59,8 @@ jobs:
           path: |
             packages/config/coverage
             apps/web/coverage
+            apps/api/coverage
+            apps/worker/coverage
           retention-days: 14
           if-no-files-found: ignore
 
