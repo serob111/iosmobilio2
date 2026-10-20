@@ -11,9 +11,11 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@sentry/node": "^11.8.0",
     "bullmq": "^6.1.0",
     "dotenv": "^18.0.8",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
