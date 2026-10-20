@@ -10,6 +10,7 @@ module.exports = tseslint.config(
       '**/ios/**',
       '**/android/**',
       '**/eslint.config.js',
+      '**/coverage/**',
     ],
   },
   ...tseslint.configs.recommended,
