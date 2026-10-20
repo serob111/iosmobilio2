@@ -1,4 +1,5 @@
 name: ci
+# Verified on a real PR: build job + e2e job (PR-to-main only) both pass. See PR history.
 
 on:
   push:
