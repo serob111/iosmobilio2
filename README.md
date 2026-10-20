@@ -66,6 +66,50 @@ BUILD_SECRET=тот-же-секрет-что-в-репозитории
 Держи репозиторий **публичным** — на публичных репозиториях GitHub Actions даёт бесплатные минуты
 на `macos-latest`-раннерах; на приватных macOS-минуты платные и расходуются быстро.
 
+## Локальное окружение (apps/api, apps/worker)
+
+Postgres и Redis поднимаются в Docker, `api`/`worker`/`web` можно гонять нативно (быстрее при
+разработке) или тоже в контейнерах.
+
+### Вариант 1 — инфраструктура в Docker, приложения нативно
+
+```
+npm install
+npm run dev
+```
+
+Поднимет `postgres`+`redis` через Docker Compose, затем параллельно запустит `web`, `api`, `worker`
+(`concurrently`). Только инфраструктуру — `npm run dev:infra`.
+
+### Вариант 2 — всё в Docker
+
+```
+docker compose up
+```
+
+Перед первым запуском скопируй `.env.example` → `.env` в `apps/api` и `apps/worker` (и при желании
+заполни `SENTRY_DSN`).
+
+`GET /health` на `api` проверяет живость Postgres и Redis и отвечает 200/503.
+
+## Тесты и CI
+
+```
+npm run typecheck   # tsc --noEmit по всем workspace'ам
+npm run lint         # eslint по всем workspace'ам
+npm run test         # vitest по всем workspace'ам (packages/config, apps/web, apps/api, apps/worker)
+npm run test:coverage  # то же + покрытие (порог 80% для packages/config и apps/web/lib)
+cd apps/web && npm run test:e2e   # Playwright: create → edit → build → download
+```
+
+Тесты, которым нужны живые Postgres/Redis (health-check api, BullMQ-воркер), сами пропускаются
+локально, если `DATABASE_URL`/`REDIS_URL` не заданы — поднимите инфраструктуру (`npm run dev:infra`)
+и экспортируйте переменные из `apps/api/.env.example`/`apps/worker/.env.example`, чтобы прогнать их
+по-настоящему.
+
+`.github/workflows/ci.yml` гоняет lint/typecheck/test:coverage на каждый push и PR (с
+Postgres/Redis как `services:`), и Playwright E2E — на PR в `main`.
+
 ## Как это работает
 
 1. `/` анализирует сайт (cheerio: название, иконка, цвет, до 4 вкладок из навигации), сохраняет
@@ -99,7 +143,12 @@ gh workflow run build-ipa.yml -f useTestConfig=true
 ```
 apps/shell/   — Expo-оболочка (SDK 57, expo-router)
 apps/web/     — Next.js App Router: сайт, анализ сайтов, API сборки
-packages/config/ — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
+apps/api/     — NestJS: health-check (Postgres+Redis), очередь (BullMQ) — каркас для следующих этапов
+apps/worker/  — BullMQ-воркер — каркас для следующих этапов
+packages/config/   — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
+packages/repacker/ — пусто, заготовка под будущую логику репака
 data/projects/   — файловое хранилище проектов (в .gitignore)
+docker-compose.yml — Postgres, Redis, api, worker
 .github/workflows/build-ipa.yml — сборка .ipa в GitHub Actions
+.github/workflows/ci.yml        — lint/typecheck/test на push+PR, Playwright E2E на PR в main
 ```
