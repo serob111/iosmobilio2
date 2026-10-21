@@ -48,6 +48,21 @@ export async function runInUserContext<T>(db: Db, userId: string, fn: () => Prom
 }
 
 /**
+ * For looking up a single invitation by its raw token before its org is known (e.g.
+ * accepting an invite) — sets only app.lookup_token_hash, leaving app.org_id unset.
+ * Relies on a SELECT-only RLS policy on `invitations` matching on token_hash; safe
+ * because token_hash is a SHA-256 hash of a random, unguessable token, so presenting
+ * the right value already proves the right to read that one row.
+ */
+export async function runInTokenLookupContext<T>(db: Db, tokenHash: string, fn: () => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.lookup_token_hash', ${tokenHash}, true)`);
+    return storage.run(scoped, fn);
+  });
+}
+
+/**
  * Throws instead of silently falling back to an unscoped connection — a repository
  * calling this outside `runInTenantContext` is a bug, not a case to handle gracefully.
  */

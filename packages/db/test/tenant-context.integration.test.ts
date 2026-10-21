@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { createDb } from '../src/client';
-import { runInTenantContext, runInUserContext, getTenantDb } from '../src/tenant-context';
-import { organizations, memberships, users } from '../src/schema';
+import { runInTenantContext, runInUserContext, runInTokenLookupContext, getTenantDb } from '../src/tenant-context';
+import { organizations, memberships, invitations, users } from '../src/schema';
 
 // Only runs when a real mobilio_app + mobilio_migrator pair is reachable (CI runs
 // packages/db's migration pipeline against its services: postgres container first —
@@ -88,5 +89,30 @@ describe.skipIf(!hasLiveDb)('runInTenantContext (live Postgres, RLS)', () => {
     }
     expect(caught).toBeInstanceOf(Error);
     expect((caught as { cause?: Error }).cause?.message).toMatch(/row-level security/i);
+  });
+
+  it('runInTokenLookupContext finds an invitation by token hash alone, across orgs', async () => {
+    const tokenHash = `test-hash-${uuidv7()}`;
+    const expiresAt = new Date(Date.now() + 60_000);
+    await runInTenantContext(migrator.db, { orgId: orgAId, userId }, async () => {
+      await getTenantDb()
+        .insert(invitations)
+        .values({ orgId: orgAId, email: 'invitee@example.com', role: 'member', tokenHash, expiresAt });
+    });
+
+    const found = await runInTokenLookupContext(app.db, tokenHash, () =>
+      getTenantDb().select().from(invitations).where(eq(invitations.tokenHash, tokenHash)),
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.orgId).toBe(orgAId);
+
+    const notFound = await runInTokenLookupContext(app.db, 'no-such-hash', () =>
+      getTenantDb().select().from(invitations).where(eq(invitations.tokenHash, 'no-such-hash')),
+    );
+    expect(notFound).toHaveLength(0);
+
+    await runInTenantContext(migrator.db, { orgId: orgAId, userId }, async () => {
+      await getTenantDb().delete(invitations);
+    });
   });
 });

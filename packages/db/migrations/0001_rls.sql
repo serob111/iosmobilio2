@@ -42,6 +42,21 @@ CREATE POLICY "invitations_org_isolation" ON "invitations"
   USING ("org_id" = nullif(current_setting('app.org_id', true), '')::uuid);
 --> statement-breakpoint
 
+-- Accepting an invitation means looking it up by its raw token before we know which
+-- org it belongs to — the same "don't know org_id yet" problem as GET /me, solved the
+-- same way: a SELECT-only policy gated on app.org_id being absent, this time matching
+-- on token_hash instead of user_id (via runInTokenLookupContext, which sets
+-- app.lookup_token_hash only). Safe because token_hash is a SHA-256 hash of a random,
+-- unguessable token — presenting the exact right value already proves the right to
+-- read that one row, independent of org membership.
+CREATE POLICY "invitations_select_by_token" ON "invitations"
+  FOR SELECT
+  USING (
+    nullif(current_setting('app.org_id', true), '') IS NULL
+    AND "token_hash" = nullif(current_setting('app.lookup_token_hash', true), '')
+  );
+--> statement-breakpoint
+
 ALTER TABLE "projects" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "projects" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "projects_org_isolation" ON "projects"
