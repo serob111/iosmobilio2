@@ -81,6 +81,29 @@ jobs:
     needs: build
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mobilio
+          POSTGRES_PASSWORD: mobilio
+          POSTGRES_DB: mobilio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mobilio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -91,12 +114,27 @@ jobs:
 
       - run: npm ci
 
+      - name: Run database migrations
+        working-directory: packages/db
+        env:
+          POSTGRES_BOOTSTRAP_URL: postgres://mobilio:mobilio@localhost:5432/mobilio
+          MOBILIO_MIGRATOR_PASSWORD: mobilio_migrator_pw
+          MOBILIO_APP_PASSWORD: mobilio_app_pw
+          MIGRATOR_DATABASE_URL: postgres://mobilio_migrator:mobilio_migrator_pw@localhost:5432/mobilio
+        run: npm run db:migrate
+
       - name: Install Playwright browsers
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
 
       - name: Run E2E tests
         working-directory: apps/web
+        env:
+          # auth.spec.ts's webServer starts a real apps/api against these — default
+          # ports match this job's services: containers (CI's native 5432/6379, not
+          # local dev's remapped 5433/6380 — see root .env.example for why those differ).
+          E2E_API_DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@localhost:5432/mobilio
+          E2E_API_REDIS_URL: redis://localhost:6379
         run: npm run test:e2e
 
       - name: Upload Playwright report
