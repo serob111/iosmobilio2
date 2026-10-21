@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { uuidv7 } from 'uuidv7';
 import { createDb } from '../src/client';
-import { runInTenantContext, getTenantDb } from '../src/tenant-context';
+import { runInTenantContext, runInUserContext, getTenantDb } from '../src/tenant-context';
 import { organizations, memberships, users } from '../src/schema';
 
 // Only runs when a real mobilio_app + mobilio_migrator pair is reachable (CI runs
@@ -67,5 +67,26 @@ describe.skipIf(!hasLiveDb)('runInTenantContext (live Postgres, RLS)', () => {
       getTenantDb().select().from(memberships),
     );
     expect(seen).toHaveLength(0);
+  });
+
+  it('runInUserContext sees the user\'s own rows across every org (for "list my orgs")', async () => {
+    const seen = await runInUserContext(app.db, userId, () =>
+      getTenantDb().select({ orgId: memberships.orgId }).from(memberships),
+    );
+    const orgIds = seen.map((row) => row.orgId).sort();
+    expect(orgIds).toEqual([orgAId, orgBId].sort());
+  });
+
+  it('runInUserContext cannot be used to write a membership into another org', async () => {
+    let caught: unknown;
+    try {
+      await runInUserContext(app.db, userId, () =>
+        getTenantDb().insert(memberships).values({ userId, orgId: uuidv7(), role: 'owner' }),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { cause?: Error }).cause?.message).toMatch(/row-level security/i);
   });
 });
