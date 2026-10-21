@@ -34,11 +34,25 @@ jobs:
           --health-retries 10
     env:
       # mobilio_app role, not the services: superuser — matches what apps/api actually
-      # connects as (see packages/db/sql/0000_bootstrap_roles.sql). Created by the
-      # "Run database migrations" step below, which also needs the superuser/migrator
-      # URLs — those stay step-local since nothing else needs them.
+      # connects as (see packages/db/sql/0000_bootstrap_roles.sql).
       DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@localhost:5432/mobilio
       REDIS_URL: redis://localhost:6379
+      # Job-level, not step-local on "Run database migrations" — packages/db's own
+      # integration tests (run later, via test:coverage) also gate on these being
+      # present to decide whether to run for real against live Postgres. Scoping them
+      # to just the migration step left those tests silently skipping in CI, which in
+      # turn failed packages/db's coverage threshold (low coverage from skipped tests,
+      # not a real regression) — found by actually watching this job run, not assumed.
+      POSTGRES_BOOTSTRAP_URL: postgres://mobilio:mobilio@localhost:5432/mobilio
+      MOBILIO_MIGRATOR_PASSWORD: mobilio_migrator_pw
+      MOBILIO_APP_PASSWORD: mobilio_app_pw
+      MIGRATOR_DATABASE_URL: postgres://mobilio_migrator:mobilio_migrator_pw@localhost:5432/mobilio
+      # Same story — apps/api's auth-flow.integration.spec.ts gates on BETTER_AUTH_SECRET
+      # too; without it that test (the one that actually proves magic-link sign-in,
+      # rate limiting, and 404 tenant isolation over real HTTP) silently skipped here.
+      BETTER_AUTH_SECRET: dev-only-not-a-real-secret-but-32-chars
+      WEB_ORIGIN: http://localhost:3000
+      API_BASE_URL: http://localhost:3011
     steps:
       - uses: actions/checkout@v4
 
@@ -55,11 +69,6 @@ jobs:
 
       - name: Run database migrations
         working-directory: packages/db
-        env:
-          POSTGRES_BOOTSTRAP_URL: postgres://mobilio:mobilio@localhost:5432/mobilio
-          MOBILIO_MIGRATOR_PASSWORD: mobilio_migrator_pw
-          MOBILIO_APP_PASSWORD: mobilio_app_pw
-          MIGRATOR_DATABASE_URL: postgres://mobilio_migrator:mobilio_migrator_pw@localhost:5432/mobilio
         run: npm run db:migrate
 
       - run: npm run test:coverage

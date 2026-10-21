@@ -47,29 +47,26 @@ function redisClient(): Redis {
   return new Redis(redisUrl);
 }
 
-// Flushed before every individual sign-in, not just once per test: Better Auth's
-// rate-limit buckets are shared across the whole Redis instance, and this suite's own
-// multi-sign-in test flows accumulate toward them fast enough to trip a limit within a
-// single test otherwise. Safe here specifically because no verification token exists
-// yet at this point — flushing *after* requesting the magic link would wipe the token
-// itself, since Better Auth stores it in the same Redis (secondaryStorage).
-async function resetRateLimitsBeforeRequest(): Promise<void> {
+// Rate-limit buckets are keyed "<client-ip>|<path>" and shared across the whole Redis
+// instance; this suite's own multi-sign-in flows accumulate toward them fast enough to
+// trip a limit within a single test otherwise. The ip prefix isn't fixed — it depends
+// on how the request reaches apps/api (a real browser through a real listening server
+// resolves differently than, say, an in-process test client) — so this matches by
+// suffix rather than hardcoding one. A targeted delete, not flushdb: this same Redis
+// also holds active sessions and in-flight magic-link tokens (Better Auth's
+// secondaryStorage), and a full flush risks wiping a different, still-valid session.
+async function resetRateLimitBuckets(): Promise<void> {
   const redis = redisClient();
-  await redis.flushdb();
-  await redis.quit();
-}
-
-// Verify has its own, separately-keyed rate-limit bucket from sign-in — cleared via a
-// targeted delete (not flushdb) so the magic-link token requested moments ago, which
-// lives in the same Redis, survives.
-async function resetVerifyRateLimit(): Promise<void> {
-  const redis = redisClient();
-  await redis.del('no-trusted-ip|/magic-link/verify');
+  const keys = await redis.keys('*|/sign-in/magic-link');
+  keys.push(...(await redis.keys('*|/magic-link/verify')));
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
   await redis.quit();
 }
 
 async function signInByMagicLink(page: Page, email: string): Promise<void> {
-  await resetRateLimitsBeforeRequest();
+  await resetRateLimitBuckets();
   const sinceLine = readMailLines().length;
 
   await page.goto('/login');
@@ -78,7 +75,7 @@ async function signInByMagicLink(page: Page, email: string): Promise<void> {
   await page.getByText('Проверьте почту').waitFor();
 
   const mail = await waitForMail(email, '/api/auth/magic-link/verify', sinceLine);
-  await resetVerifyRateLimit();
+  await resetRateLimitBuckets();
   await page.goto(extractUrl(mail.body));
   await page.waitForURL('http://localhost:3100/**');
 }
