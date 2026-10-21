@@ -15,6 +15,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
   app.useLogger(app.get(Logger));
   app.useGlobalFilters(new HttpExceptionFilter());
+  // apps/web calls this api directly from the browser (not through Next's server), so
+  // the session cookie Better Auth sets on this origin round-trips correctly —
+  // credentials:true is required for that, and so is a specific (non-wildcard) origin.
+  app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
 
   const authService = app.get(AuthService);
   app.use('/api/auth', toNodeHandler(authService.auth));
