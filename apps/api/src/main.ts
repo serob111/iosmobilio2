@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { AuthService } from './auth/auth.service.js';
+import { HttpExceptionFilter } from './common/http-exception.filter.js';
 
 async function bootstrap() {
   // Better Auth needs the raw, unparsed request body (it parses JSON itself from the
@@ -13,6 +14,7 @@ async function bootstrap() {
   // Nest's own json()/urlencoded() middleware is the documented way to let both coexist.
   const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
   app.useLogger(app.get(Logger));
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   const authService = app.get(AuthService);
   app.use('/api/auth', toNodeHandler(authService.auth));
