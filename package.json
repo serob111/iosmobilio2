@@ -7,15 +7,15 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "npm run build --workspace=@mobilio/config && npm run build --workspace=@mobilio/db",
+    "postinstall": "npm run build --workspace=@mobilio/config && npm run build --workspace=@mobilio/db && npm run build --workspace=@mobilio/storage",
     "build:config": "npm run build --workspace=@mobilio/config",
     "build:db": "npm run build --workspace=@mobilio/db",
     "test:config": "npm test --workspace=@mobilio/config",
     "typecheck:config": "npm run typecheck --workspace=@mobilio/config",
     "typecheck:shell": "npm run typecheck --workspace=mobilio-shell",
     "shell": "npm run start --workspace=mobilio-shell",
-    "dev": "docker compose up -d postgres redis && concurrently -n web,api,worker -c blue,green,yellow \"npm run dev --workspace=mobilio-web\" \"npm run dev --workspace=mobilio-api\" \"npm run dev --workspace=mobilio-worker\"",
-    "dev:infra": "docker compose up -d postgres redis",
+    "dev": "docker compose up -d postgres redis minio && concurrently -n web,api,worker -c blue,green,yellow \"npm run dev --workspace=mobilio-web\" \"npm run dev --workspace=mobilio-api\" \"npm run dev --workspace=mobilio-worker\"",
+    "dev:infra": "docker compose up -d postgres redis minio",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

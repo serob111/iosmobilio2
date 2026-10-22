@@ -32,6 +32,24 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # bitnami/minio, not minio/minio — see docker-compose.yml's minio service comment:
+      # its default CMD already runs server mode, and MINIO_DEFAULT_BUCKETS auto-creates
+      # the bucket on startup. GitHub Actions service containers have no "command:" field
+      # to override the plain minio/minio image's entrypoint with, so this is the image
+      # that actually works here, not just the one used for consistency with local dev.
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: mobilio
+          MINIO_ROOT_PASSWORD: mobilio_minio_pw
+          MINIO_DEFAULT_BUCKETS: mobilio
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       # mobilio_app role, not the services: superuser — matches what apps/api actually
       # connects as (see packages/db/sql/0000_bootstrap_roles.sql).
@@ -53,6 +71,13 @@ jobs:
       BETTER_AUTH_SECRET: dev-only-not-a-real-secret-but-32-chars
       WEB_ORIGIN: http://localhost:3000
       API_BASE_URL: http://localhost:3011
+      # Picked up by packages/storage's and apps/api's live-MinIO integration tests —
+      # same opt-in-via-env-presence pattern as the Postgres/Redis vars above.
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -113,6 +138,19 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: mobilio
+          MINIO_ROOT_PASSWORD: mobilio_minio_pw
+          MINIO_DEFAULT_BUCKETS: mobilio
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -144,6 +182,10 @@ jobs:
           # local dev's remapped 5433/6380 — see root .env.example for why those differ).
           E2E_API_DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@localhost:5432/mobilio
           E2E_API_REDIS_URL: redis://localhost:6379
+          E2E_API_S3_ENDPOINT: http://localhost:9000
+          E2E_API_S3_BUCKET: mobilio
+          E2E_API_S3_ACCESS_KEY_ID: mobilio
+          E2E_API_S3_SECRET_ACCESS_KEY: mobilio_minio_pw
         run: npm run test:e2e
 
       - name: Upload Playwright report

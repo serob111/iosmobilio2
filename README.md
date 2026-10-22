@@ -68,8 +68,8 @@ BUILD_SECRET=тот-же-секрет-что-в-репозитории
 
 ## Локальное окружение (apps/api, apps/worker)
 
-Postgres и Redis поднимаются в Docker, `api`/`worker`/`web` можно гонять нативно (быстрее при
-разработке) или тоже в контейнерах.
+Postgres, Redis и MinIO (объектное хранилище) поднимаются в Docker, `api`/`worker`/`web` можно
+гонять нативно (быстрее при разработке) или тоже в контейнерах.
 
 ### Вариант 1 — инфраструктура в Docker, приложения нативно
 
@@ -93,6 +93,26 @@ docker compose up
 (`depends_on: service_completed_successfully`) — отдельный шаг не нужен.
 
 `GET /health` на `api` проверяет живость Postgres и Redis и отвечает 200/503.
+
+## Хранилище файлов (MinIO / R2)
+
+Иконки проектов и собранные `.ipa` лежат в объектном хранилище, а не на диске — интерфейс
+`ObjectStorage` (`packages/storage`) оборачивает S3-совместимый API. Локально и в CI это MinIO
+(контейнер `minio` в `docker-compose.yml`), в проде — Cloudflare R2 (просто другой `S3_ENDPOINT`,
+без `S3_FORCE_PATH_STYLE`). Ключи объектов: `orgs/<orgId>/projects/<projectId>/icon.png`,
+`.../builds/<buildId>/app.ipa` — см. `packages/storage/src/keys.ts`. Скачивание — только по
+коротким подписанным ссылкам (`ObjectStorage.signedUrl`), объекты не публичны.
+
+MinIO-образ — `cgr.dev/chainguard/minio`, не `minio/minio`/`bitnami/minio` с Docker Hub: оба
+теперь требуют авторизацию даже для анонимного `docker pull` (изменилось в 2025 году), Chainguard
+пока отдаёт `:latest` без логина. Он работает под непривилегированным пользователем, который не
+может писать в `/data` без `user: "0"` в compose (только для dev/CI-инфраструктуры, не для прода —
+в проде это R2, никакого контейнера нет). В образе нет `curl`/`wget`, поэтому healthcheck — просто
+TCP-коннект через `bash`'s `/dev/tcp`, а не HTTP-пробинг.
+
+Бакет MinIO не создаётся сам — ни `minio/mc`, ни `amazon/aws-cli` сейчас не тянутся анонимно, так
+что бакет создаёт одноразовый сервис `createbucket` (`packages/storage/src/scripts/ensure-bucket.ts`),
+который делает это через уже используемый `@aws-sdk/client-s3`, без отдельного CLI-образа.
 
 ## База данных: миграции, роли, RLS
 

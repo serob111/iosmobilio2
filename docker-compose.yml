@@ -32,6 +32,52 @@ services:
       timeout: 5s
       retries: 10
 
+  # cgr.dev/chainguard/minio, not Docker Hub's minio/minio or bitnami/minio — both of
+  # those now require registry auth to pull at all (MinIO Inc. and Bitnami locked their
+  # free images behind login in 2025); Chainguard's build is still anonymously pullable.
+  # It runs as a non-root user by default, which can't write to /data unless the
+  # container itself runs as root — hence `user: "0"` below (dev-only infra, not a prod
+  # concern). There's no accompanying `mc` client image left either (Chainguard's is
+  # gated, MinIO's and Bitnami's aren't pullable) — see the createbucket service, which
+  # creates the bucket via the AWS SDK directly instead.
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    user: '0'
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: mobilio
+      MINIO_ROOT_PASSWORD: mobilio_minio_pw
+    ports:
+      # Same story as postgres/redis above — overridable in case of a local port clash.
+      - '${MINIO_HOST_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_HOST_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # No curl/wget in this image (Chainguard's minio is extremely minimal — see the
+      # comment above) — a bare TCP connect via bash's /dev/tcp is enough to know the
+      # server is accepting connections, which is all this gate needs.
+      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/9000']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the "mobilio" bucket if it doesn't exist yet, via packages/storage's
+  # ensure-bucket script (plain @aws-sdk/client-s3, no mc/aws-cli container needed).
+  createbucket:
+    build:
+      context: .
+      dockerfile: packages/storage/Dockerfile
+    environment:
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
+    depends_on:
+      minio:
+        condition: service_healthy
+
   # One-shot: bootstraps the mobilio_migrator/mobilio_app roles (if missing) and runs
   # Drizzle migrations (tables + RLS policies). api/worker wait for this to finish
   # successfully before starting, since the mobilio_app role they connect as doesn't
@@ -57,6 +103,11 @@ services:
       DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@postgres:5432/mobilio
       REDIS_URL: redis://redis:6379
       PORT: 3000
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
     ports:
       - '3001:3000'
     depends_on:
@@ -64,6 +115,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      createbucket:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
 
@@ -73,9 +126,22 @@ services:
       dockerfile: apps/worker/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@postgres:5432/mobilio
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      createbucket:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:
+  minio-data:
