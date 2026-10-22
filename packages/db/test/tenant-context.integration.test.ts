@@ -115,4 +115,27 @@ describe.skipIf(!hasLiveDb)('runInTenantContext (live Postgres, RLS)', () => {
       await getTenantDb().delete(invitations);
     });
   });
+
+  it('a direct query outside any tenant context sees zero organizations (fail closed)', async () => {
+    const seen = await app.db.select().from(organizations);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("organization B is invisible and unmodifiable while scoped to organization A's tenant context", async () => {
+    const seenFromA = await runInTenantContext(app.db, { orgId: orgAId, userId }, () =>
+      getTenantDb().select().from(organizations),
+    );
+    expect(seenFromA).toHaveLength(1);
+    expect(seenFromA[0]?.id).toBe(orgAId);
+
+    const updateResult = await runInTenantContext(app.db, { orgId: orgAId, userId }, () =>
+      getTenantDb().update(organizations).set({ name: 'Hijacked' }).where(eq(organizations.id, orgBId)).returning(),
+    );
+    expect(updateResult).toHaveLength(0);
+
+    const [orgBRow] = await runInTenantContext(migrator.db, { orgId: orgBId, userId }, () =>
+      getTenantDb().select().from(organizations).where(eq(organizations.id, orgBId)),
+    );
+    expect(orgBRow?.name).toBe('Org B');
+  });
 });
