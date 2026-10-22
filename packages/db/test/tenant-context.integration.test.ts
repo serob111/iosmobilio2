@@ -8,8 +8,13 @@ import { organizations, memberships, invitations, users } from '../src/schema';
 // Only runs when a real mobilio_app + mobilio_migrator pair is reachable (CI runs
 // packages/db's migration pipeline against its services: postgres container first —
 // see .github/workflows/ci.yml). Locally this just skips: plain `npm test` shouldn't
-// require live infrastructure or the role bootstrap having been run.
+// require live infrastructure or the role bootstrap having been run. In CI,
+// REQUIRE_LIVE_SERVICES=true turns a missing env var into a hard failure instead of a
+// silent skip — a misconfigured job should never pass by quietly running 0 tests.
 const hasLiveDb = Boolean(process.env.DATABASE_URL) && Boolean(process.env.MIGRATOR_DATABASE_URL);
+if (!hasLiveDb && process.env.REQUIRE_LIVE_SERVICES === 'true') {
+  throw new Error('REQUIRE_LIVE_SERVICES=true but DATABASE_URL/MIGRATOR_DATABASE_URL are not set');
+}
 
 describe.skipIf(!hasLiveDb)('runInTenantContext (live Postgres, RLS)', () => {
   const migrator = createDb(process.env.MIGRATOR_DATABASE_URL!);

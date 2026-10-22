@@ -3,9 +3,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createObjectStorageFromEnv, S3ObjectStorage, type ObjectStorage } from '../src/object-storage';
 
 // Only runs against a real S3-compatible endpoint (MinIO in docker-compose/CI). Locally
-// this just skips: plain `npm test` shouldn't require live infrastructure.
+// this just skips: plain `npm test` shouldn't require live infrastructure. In CI,
+// REQUIRE_LIVE_SERVICES=true turns a missing env var into a hard failure instead of a
+// silent skip — a misconfigured job should never pass by quietly running 0 tests.
 const hasLiveS3 =
   Boolean(process.env.S3_ENDPOINT) && Boolean(process.env.S3_BUCKET) && Boolean(process.env.S3_ACCESS_KEY_ID);
+if (!hasLiveS3 && process.env.REQUIRE_LIVE_SERVICES === 'true') {
+  throw new Error('REQUIRE_LIVE_SERVICES=true but S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY_ID are not set');
+}
 
 describe.skipIf(!hasLiveS3)('S3ObjectStorage (live MinIO)', () => {
   // Guarded by the same hasLiveS3 check, not just the describe.skipIf above — the

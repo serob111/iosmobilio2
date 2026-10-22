@@ -34,6 +34,11 @@ jobs:
           --health-retries 10
       # No minio service here — see the "Start MinIO" step below for why.
     env:
+      # Every *.integration.* spec gates on its own env vars and throws instead of
+      # silently skipping when this is true (see each file's hasLive* check) — a
+      # misconfigured step below (wrong var name, service not actually up) must fail
+      # the job loudly, not quietly pass having run 0 integration tests.
+      REQUIRE_LIVE_SERVICES: 'true'
       # mobilio_app role, not the services: superuser — matches what apps/api actually
       # connects as (see packages/db/sql/0000_bootstrap_roles.sql).
       DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@localhost:5432/mobilio
