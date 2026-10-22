@@ -261,18 +261,41 @@ DELETE /orgs/:orgId/members/:userId      — удалить участника (
 организаций) и `/login`/`/logout` — страниц для приглашений/управления участниками ещё нет, эти
 действия проверяются через прямые вызовы API (см. `apps/web/e2e/auth.spec.ts`).
 
+## Проекты (apps/api)
+
+Логика анализа сайта (`analyzeSite`) и обработки иконки перенесена из `apps/web` в
+`apps/api/src/projects` — `apps/web` пока держит свою копию (удалится, когда сам `apps/web`
+начнёт звать `api` вместо файлового хранилища, см. план Этапа 2). Эндпоинты — под
+`OrgGuard`/`ProjectGuard`, доступны любому участнику организации (без ограничения по роли):
+
+```
+POST /orgs/:orgId/projects               — { url } → анализ сайта → создание проекта
+GET  /orgs/:orgId/projects               — список проектов организации (без полного config)
+GET  /orgs/:orgId/projects/:projectId    — проект (id, config, configVersion)
+PUT  /orgs/:orgId/projects/:projectId    — полная замена config (валидация как при создании)
+POST /orgs/:orgId/projects/:projectId/icon — загрузка иконки (multipart, поле "icon")
+GET  /orgs/:orgId/projects/:projectId/icon — 302 на подписанную ссылку в object storage
+```
+
+`projects.config` — jsonb, валидируется `@mobilio/config`'s `ProjectConfigSchema` при каждой
+записи; `projects.config_version` фиксирует, под какую версию схемы подогнан конкретный ряд
+(см. `CONFIG_SCHEMA_VERSION` там же) — на случай будущей миграции формы конфига. Таблица `builds`
+(org_id, project_id, status, run_id, run_url, error, template_version, started_at, finished_at,
+ipa_key) с тем же RLS-паттерном уже создана заранее — сам модуль сборки появится позже.
+
 ## Структура репозитория
 
 ```
 apps/shell/   — Expo-оболочка (SDK 57, expo-router)
 apps/web/     — Next.js App Router: сайт, анализ сайтов, API сборки, вход/выход, шапка
-apps/api/     — NestJS: auth (Better Auth), организации, health-check, очередь (BullMQ)
+apps/api/     — NestJS: auth (Better Auth), организации, проекты, health-check, очередь (BullMQ)
 apps/worker/  — BullMQ-воркер — каркас для следующих этапов
 packages/config/   — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
 packages/db/       — Drizzle-схема, миграции, роли/RLS, TenantContext (см. выше)
+packages/storage/  — ObjectStorage-интерфейс + S3/MinIO-адаптер (см. выше)
 packages/repacker/ — пусто, заготовка под будущую логику репака
-data/projects/   — файловое хранилище проектов (в .gitignore)
-docker-compose.yml — Postgres, Redis, migrate (роли+миграции), api, worker
+data/projects/   — файловое хранилище проектов apps/web (в .gitignore; уходит в Этапе 2)
+docker-compose.yml — Postgres, Redis, MinIO, migrate/createbucket (роли+миграции+бакет), api, worker
 .github/workflows/build-ipa.yml — сборка .ipa в GitHub Actions
 .github/workflows/ci.yml        — lint/typecheck/test на push+PR; Playwright E2E (создание .ipa +
                                    полный auth-флоу через реальный api) на PR в main

@@ -8,7 +8,9 @@ import { DbModule } from './db/db.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { OrganizationsModule } from './organizations/organizations.module.js';
+import { ProjectsModule } from './projects/projects.module.js';
 import { QueueModule } from './queue/queue.module.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({
   imports: [
@@ -22,7 +24,9 @@ import { QueueModule } from './queue/queue.module.js';
     }),
     DbModule,
     MailModule,
+    StorageModule,
     OrganizationsModule,
+    ProjectsModule,
     AuthModule,
     HealthModule,
     QueueModule,
