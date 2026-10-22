@@ -22,7 +22,10 @@ function chainTo(result: unknown): unknown {
 
 const { runInTenantContextMock, runInUserContextMock, runInTokenLookupContextMock, getTenantDbMock, insertMock, valuesMock } =
   vi.hoisted(() => {
-    const valuesMock = vi.fn().mockResolvedValue(undefined);
+    // Chainable, not a plain resolved promise: acceptInvitation now calls
+    // .values(...).onConflictDoNothing(...), and chainTo() supports both awaiting
+    // directly and chaining further query-builder methods off the same return value.
+    const valuesMock = vi.fn().mockReturnValue(chainTo(undefined));
     const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
     const getTenantDbMock = vi.fn().mockReturnValue({ insert: insertMock });
     const runInTenantContextMock = vi.fn(async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn());
@@ -233,7 +236,7 @@ describe('OrganizationsService', () => {
 
       getTenantDbMock
         .mockReturnValueOnce(chainTo([invitation])) // token lookup
-        .mockReturnValueOnce({ select: () => chainTo([]), insert: insertMock, delete: deleteMock }); // accept tx
+        .mockReturnValueOnce({ insert: insertMock, delete: deleteMock }); // accept tx
 
       const service = await buildService();
       const result = await service.acceptInvitation('user-1', 'user@example.com', 'token');
@@ -244,7 +247,7 @@ describe('OrganizationsService', () => {
       expect(deleteMock).toHaveBeenCalled();
     });
 
-    it('does not duplicate the membership if one already exists', async () => {
+    it('inserts via ON CONFLICT DO NOTHING rather than a check-then-insert, so a duplicate accept is a safe no-op', async () => {
       const invitation = {
         id: 'inv-1',
         orgId: 'org-1',
@@ -252,16 +255,20 @@ describe('OrganizationsService', () => {
         email: 'user@example.com',
         expiresAt: new Date(Date.now() + 60_000),
       };
+      const onConflictDoNothingMock = vi.fn().mockResolvedValue(undefined);
+      const scopedValuesMock = vi.fn().mockReturnValue({ onConflictDoNothing: onConflictDoNothingMock });
+      const scopedInsertMock = vi.fn().mockReturnValue({ values: scopedValuesMock });
       const deleteMock = vi.fn().mockReturnValue(chainTo(undefined));
 
       getTenantDbMock
         .mockReturnValueOnce(chainTo([invitation]))
-        .mockReturnValueOnce({ select: () => chainTo([{ userId: 'user-1', orgId: 'org-1', role: 'member' }]), insert: insertMock, delete: deleteMock });
+        .mockReturnValueOnce({ insert: scopedInsertMock, delete: deleteMock });
 
       const service = await buildService();
       await service.acceptInvitation('user-1', 'user@example.com', 'token');
 
-      expect(insertMock).not.toHaveBeenCalled();
+      expect(scopedValuesMock).toHaveBeenCalledWith({ userId: 'user-1', orgId: 'org-1', role: 'member' });
+      expect(onConflictDoNothingMock).toHaveBeenCalledTimes(1);
       expect(deleteMock).toHaveBeenCalled();
     });
   });

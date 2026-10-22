@@ -6,6 +6,8 @@ import '../auth/auth.types.js';
 import '../tenant/tenant.types.js';
 import './organizations.types.js';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Confirms the authenticated caller (set by AuthGuard, which must run first) belongs
  * to the org named by the :orgId route param, and attaches request.tenant +
@@ -22,7 +24,10 @@ export class OrgGuard implements CanActivate {
     const orgId = request.params.orgId;
     const userId = request.user?.id;
 
-    if (typeof orgId !== 'string' || !userId) {
+    // Checked before touching the database, not just for a cleaner 404: organizations.id
+    // is a uuid column, so a non-uuid orgId reaching the RLS policy's ::uuid cast would
+    // fail with a raw Postgres error (500), not a clean "not found".
+    if (typeof orgId !== 'string' || !UUID_PATTERN.test(orgId) || !userId) {
       throw new NotFoundException({ code: 'NOT_FOUND', message: 'Organization not found' });
     }
 

@@ -20,6 +20,8 @@ function contextWithRequest(request: Record<string, unknown>): ExecutionContext 
   return { switchToHttp: () => ({ getRequest: () => request }) } as unknown as ExecutionContext;
 }
 
+const VALID_ORG_ID = '01a16033-3d3b-718f-b2f4-9508ec870bab';
+
 describe('OrgGuard', () => {
   const guard = new OrgGuard({ db: {} } as never);
 
@@ -34,11 +36,11 @@ describe('OrgGuard', () => {
       select: () => ({ from: () => ({ where: () => [{ role: 'admin' }] }) }),
     });
 
-    const request: Record<string, unknown> = { params: { orgId: 'org-1' }, user: { id: 'user-1' } };
+    const request: Record<string, unknown> = { params: { orgId: VALID_ORG_ID }, user: { id: 'user-1' } };
     const ctx = contextWithRequest(request);
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(request.tenant).toEqual({ orgId: 'org-1', userId: 'user-1' });
+    expect(request.tenant).toEqual({ orgId: VALID_ORG_ID, userId: 'user-1' });
     expect(request.membership).toEqual({ role: 'admin' });
   });
 
@@ -48,13 +50,13 @@ describe('OrgGuard', () => {
       select: () => ({ from: () => ({ where: () => [] }) }),
     });
 
-    const ctx = contextWithRequest({ params: { orgId: 'org-1' }, user: { id: 'user-1' } });
+    const ctx = contextWithRequest({ params: { orgId: VALID_ORG_ID }, user: { id: 'user-1' } });
 
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('throws NotFoundException (not an auth error) when there is no user on the request', async () => {
-    const ctx = contextWithRequest({ params: { orgId: 'org-1' } });
+    const ctx = contextWithRequest({ params: { orgId: VALID_ORG_ID } });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(NotFoundException);
     expect(runInTenantContextMock).not.toHaveBeenCalled();
   });
@@ -62,5 +64,12 @@ describe('OrgGuard', () => {
   it('throws NotFoundException when orgId is missing from the route', async () => {
     const ctx = contextWithRequest({ params: {}, user: { id: 'user-1' } });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws NotFoundException without querying the database when orgId is not a valid uuid', async () => {
+    const ctx = contextWithRequest({ params: { orgId: 'not-a-uuid' }, user: { id: 'user-1' } });
+
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(NotFoundException);
+    expect(runInTenantContextMock).not.toHaveBeenCalled();
   });
 });

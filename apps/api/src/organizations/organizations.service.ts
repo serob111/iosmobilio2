@@ -7,7 +7,6 @@ import {
   getTenantDb,
   schema,
   eq,
-  and,
 } from '@mobilio/db';
 import { slugify } from '@mobilio/config';
 import { uuidv7 } from 'uuidv7';
@@ -145,13 +144,15 @@ export class OrganizationsService {
     const { orgId, role, id: invitationId } = invitation;
     await runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
       const tx = getTenantDb();
-      const existing = await tx
-        .select()
-        .from(schema.memberships)
-        .where(and(eq(schema.memberships.userId, userId), eq(schema.memberships.orgId, orgId)));
-      if (existing.length === 0) {
-        await tx.insert(schema.memberships).values({ userId, orgId, role });
-      }
+      // ON CONFLICT DO NOTHING, not check-then-insert: two concurrent accepts of the
+      // same invitation (double-click, retried request) would otherwise both pass the
+      // "no existing membership" check before either commits, then race the insert —
+      // one succeeds, the other hits the unique constraint and 500s instead of just
+      // being a no-op. The constraint target matches memberships_user_org_unique.
+      await tx
+        .insert(schema.memberships)
+        .values({ userId, orgId, role })
+        .onConflictDoNothing({ target: [schema.memberships.userId, schema.memberships.orgId] });
       await tx.delete(schema.invitations).where(eq(schema.invitations.id, invitationId));
     });
 
@@ -187,9 +188,19 @@ export class OrganizationsService {
   }
 }
 
-/** Shared by changeRole/removeMember — must run inside the same tenant transaction as the write it guards. */
+/**
+ * Shared by changeRole/removeMember — must run inside the same tenant transaction as
+ * the write it guards, and before that write. FOR UPDATE locks every current owner row;
+ * a second, concurrent demotion/removal targeting a *different* owner of the same org
+ * blocks here until the first commits, then re-evaluates role = 'owner' against the
+ * now-updated rows (standard Postgres SELECT ... FOR UPDATE behavior under READ
+ * COMMITTED) — so it correctly sees one fewer owner and rejects, rather than both
+ * racing transactions reading "2 owners" from their own pre-lock snapshot and leaving
+ * the org with zero. A plain unlocked count can't catch this: two transactions started
+ * before either commits both see the same stale "still safe" count.
+ */
 async function assertNotLastOwner(tx: ReturnType<typeof getTenantDb>): Promise<void> {
-  const owners = await tx.select().from(schema.memberships).where(eq(schema.memberships.role, 'owner'));
+  const owners = await tx.select().from(schema.memberships).where(eq(schema.memberships.role, 'owner')).for('update');
   if (owners.length <= 1) {
     throw new ConflictException({ code: 'LAST_OWNER', message: 'The organization must keep at least one owner' });
   }
