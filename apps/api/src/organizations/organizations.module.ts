@@ -1,0 +1,14 @@
+import { Module } from '@nestjs/common';
+import { OrganizationsService } from './organizations.service.js';
+import { OrganizationsController } from './organizations.controller.js';
+import { MeController } from './me.controller.js';
+import { InvitationsController } from './invitations.controller.js';
+import { OrgGuard } from './org.guard.js';
+import { RoleGuard } from './role.guard.js';
+
+@Module({
+  controllers: [MeController, OrganizationsController, InvitationsController],
+  providers: [OrganizationsService, OrgGuard, RoleGuard],
+  exports: [OrganizationsService],
+})
+export class OrganizationsModule {}

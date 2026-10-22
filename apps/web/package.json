@@ -15,6 +15,7 @@
   "dependencies": {
     "@mobilio/config": "*",
     "@sentry/nextjs": "^11.8.0",
+    "better-auth": "^1.7.12",
     "cheerio": "^1.0.0",
     "next": "16.4.2",
     "react": "19.3.0",
@@ -31,6 +32,7 @@
     "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "ioredis": "^6.0.0",
     "msw": "^3.0.3",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",

@@ -15,7 +15,7 @@ module.exports = tseslint.config(
   },
   ...tseslint.configs.recommended,
   {
-    files: ['packages/config/**/*.ts'],
+    files: ['packages/config/**/*.ts', 'packages/db/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
