@@ -32,13 +32,24 @@ describe('ProjectGuard', () => {
   });
 
   it('attaches request.project and allows the request when the project exists in this org', async () => {
-    runInTenantContextMock.mockImplementation(async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn());
-    const row = { id: VALID_PROJECT_ID, name: 'Acme', sourceUrl: 'https://x', config: { trial: true }, configVersion: 1 };
+    runInTenantContextMock.mockImplementation(
+      async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn(),
+    );
+    const row = {
+      id: VALID_PROJECT_ID,
+      name: 'Acme',
+      sourceUrl: 'https://x',
+      config: { trial: true },
+      configVersion: 1,
+    };
     getTenantDbMock.mockReturnValue({
       select: () => ({ from: () => ({ where: () => [row] }) }),
     });
 
-    const request: Record<string, unknown> = { params: { projectId: VALID_PROJECT_ID }, tenant: TENANT };
+    const request: Record<string, unknown> = {
+      params: { projectId: VALID_PROJECT_ID },
+      tenant: TENANT,
+    };
     const ctx = contextWithRequest(request);
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
@@ -52,7 +63,9 @@ describe('ProjectGuard', () => {
   });
 
   it('throws NotFoundException when no project row matches (wrong id or wrong org)', async () => {
-    runInTenantContextMock.mockImplementation(async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn());
+    runInTenantContextMock.mockImplementation(
+      async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn(),
+    );
     getTenantDbMock.mockReturnValue({
       select: () => ({ from: () => ({ where: () => [] }) }),
     });

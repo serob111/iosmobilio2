@@ -1,8 +1,37 @@
 import * as cheerio from 'cheerio';
 import type { SupportedIcon } from '@mobilio/config';
 import { computeDominantColor, generateLetterAvatar, processIconImage } from './icon.js';
+import { safeFetch, SafeFetchError } from '../net/safe-fetch.js';
 
-class AnalyzeSiteError extends Error {}
+export type AnalyzeSiteErrorCode =
+  | 'INVALID_URL'
+  | 'UNSAFE_URL'
+  | 'SITE_UNREACHABLE'
+  | 'SITE_ERROR_STATUS'
+  | 'NOT_HTML'
+  | 'RESPONSE_TOO_LARGE'
+  | 'TOO_MANY_REDIRECTS';
+
+/**
+ * Carries a stable `code` rather than relying on `message` text — apps/web is meant to
+ * translate by code once it has real i18n, not parse these (English, not localized)
+ * messages.
+ */
+export class AnalyzeSiteError extends Error {
+  constructor(
+    public readonly code: AnalyzeSiteErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AnalyzeSiteError';
+  }
+}
+
+function fromSafeFetchError(error: SafeFetchError): AnalyzeSiteError {
+  const code: AnalyzeSiteErrorCode =
+    error.code === 'UNSUPPORTED_CONTENT_TYPE' ? 'NOT_HTML' : error.code;
+  return new AnalyzeSiteError(code, error.message);
+}
 
 export type SiteTab = { title: string; icon: SupportedIcon; path: string };
 
@@ -135,11 +164,17 @@ function buildTabs(navLinks: NavLink[]): SiteTab[] {
   });
 }
 
+// The icon url comes from the fetched page's own HTML (<link rel="icon">, og:image —
+// content the "site" controls), so it needs the same SSRF protection as the page fetch
+// itself, not just the initial user-typed url.
 async function downloadBytes(url: string): Promise<Buffer | null> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer());
+    const result = await safeFetch(url, {
+      maxBodyBytes: 5 * 1024 * 1024,
+      allowedContentTypePrefixes: ['image/'],
+    });
+    if (result.status < 200 || result.status >= 300) return null;
+    return result.body;
   } catch {
     return null;
   }
@@ -154,23 +189,26 @@ export async function analyzeSite(rawUrl: string): Promise<SiteAnalysis> {
   try {
     parsedUrl = new URL(url);
   } catch {
-    throw new AnalyzeSiteError('Введите корректный адрес сайта');
+    throw new AnalyzeSiteError('INVALID_URL', 'Invalid url');
   }
 
   let html: string;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(10_000), redirect: 'follow' });
-    if (!res.ok) throw new AnalyzeSiteError(`Сайт ответил с ошибкой ${res.status}`);
-    const contentType = res.headers.get('content-type') ?? '';
-    if (!contentType.includes('html')) {
-      throw new AnalyzeSiteError('Адрес не похож на обычную веб-страницу');
+    const result = await safeFetch(url, {
+      maxBodyBytes: 2 * 1024 * 1024,
+      allowedContentTypePrefixes: ['text/html'],
+    });
+    if (result.status < 200 || result.status >= 300) {
+      throw new AnalyzeSiteError(
+        'SITE_ERROR_STATUS',
+        `Site responded with status ${result.status}`,
+      );
     }
-    html = await res.text();
+    html = result.body.toString('utf8');
   } catch (error) {
     if (error instanceof AnalyzeSiteError) throw error;
-    throw new AnalyzeSiteError(
-      'Не удалось загрузить сайт. Проверьте адрес и подключение к интернету.',
-    );
+    if (error instanceof SafeFetchError) throw fromSafeFetchError(error);
+    throw new AnalyzeSiteError('SITE_UNREACHABLE', 'Could not load the site');
   }
 
   const $ = cheerio.load(html);

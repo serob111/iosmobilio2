@@ -17,7 +17,7 @@ import { type ObjectStorage, projectIconKey } from '@mobilio/storage';
 import { uuidv7 } from 'uuidv7';
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
-import { analyzeSite } from './analyze-site.js';
+import { analyzeSite, AnalyzeSiteError } from './analyze-site.js';
 import { processIconImage } from './icon.js';
 
 export type ProjectSummary = {
@@ -41,8 +41,16 @@ export class ProjectsService {
     try {
       analysis = await analyzeSite(url);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Не удалось загрузить сайт';
-      throw new BadRequestException({ code: 'ANALYZE_FAILED', message });
+      // AnalyzeSiteError.code is stable and machine-readable (UNSAFE_URL, NOT_HTML, ...)
+      // — apps/web is meant to translate by code once it has real i18n, not this
+      // (English, not localized) message text.
+      if (error instanceof AnalyzeSiteError) {
+        throw new BadRequestException({ code: error.code, message: error.message });
+      }
+      throw new BadRequestException({
+        code: 'SITE_UNREACHABLE',
+        message: 'Could not load the site',
+      });
     }
 
     const id = uuidv7();

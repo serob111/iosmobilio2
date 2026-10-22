@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { computeDominantColor, generateLetterAvatar, processIconImage } from './icon.js';
 
 async function makeTransparentPng(): Promise<Buffer> {
-  return sharp({ create: { width: 200, height: 300, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 0 } } })
+  return sharp({
+    create: { width: 200, height: 300, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 0 } },
+  })
     .png()
     .toBuffer();
 }
@@ -22,7 +24,9 @@ describe('processIconImage', () => {
 
 describe('computeDominantColor', () => {
   it('returns a hex color for a valid image', async () => {
-    const input = await sharp({ create: { width: 10, height: 10, channels: 3, background: { r: 255, g: 0, b: 0 } } })
+    const input = await sharp({
+      create: { width: 10, height: 10, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    })
       .png()
       .toBuffer();
     const color = await computeDominantColor(input);

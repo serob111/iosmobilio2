@@ -22,7 +22,13 @@ export default defineConfig({
       // Scoped to the modules each stage's spec explicitly mandates a threshold for —
       // health/queue/db predate Этап 1 and aren't part of either stage's coverage
       // mandate, though they're reasonably covered regardless.
-      include: ['src/auth/**/*.ts', 'src/organizations/**/*.ts', 'src/projects/**/*.ts', 'src/storage/**/*.ts'],
+      include: [
+        'src/auth/**/*.ts',
+        'src/organizations/**/*.ts',
+        'src/projects/**/*.ts',
+        'src/storage/**/*.ts',
+        'src/net/**/*.ts',
+      ],
       exclude: ['src/**/*.spec.ts', 'src/**/*.d.ts', 'src/**/*.types.ts'],
       thresholds: {
         lines: 80,

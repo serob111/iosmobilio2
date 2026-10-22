@@ -1,8 +1,15 @@
 import sharp from 'sharp';
 
+// Explicit, not relying on sharp's own default (~268 megapixels) — this buffer is
+// untrusted input (a site's favicon/og:image, or a user-uploaded icon), and a crafted
+// image declaring a much larger pixel count than its compressed size suggests is a
+// classic decompression-bomb DoS. 40 megapixels (6324x6324) is far beyond anything a
+// real favicon/app-icon source would legitimately be.
+const MAX_INPUT_PIXELS = 40_000_000;
+
 /** 1024×1024, no transparency — matches what apps/shell's native build pipeline expects for an app icon. */
 export async function processIconImage(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer)
+  return sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
     .resize(1024, 1024, { fit: 'cover' })
     .flatten({ background: '#FFFFFF' })
     .png()
@@ -11,7 +18,7 @@ export async function processIconImage(buffer: Buffer): Promise<Buffer> {
 
 export async function computeDominantColor(buffer: Buffer): Promise<string | null> {
   try {
-    const { dominant } = await sharp(buffer).stats();
+    const { dominant } = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).stats();
     const toHex = (v: number) => Math.round(v).toString(16).padStart(2, '0');
     return `#${toHex(dominant.r)}${toHex(dominant.g)}${toHex(dominant.b)}`.toUpperCase();
   } catch {

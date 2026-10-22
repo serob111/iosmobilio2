@@ -1,9 +1,17 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../test/mocks/server.js';
-import { analyzeSite } from './analyze-site.js';
+
+const lookupMock = vi.hoisted(() => vi.fn());
+// Full mock, not a passthrough — unlike projects.integration.spec.ts, this file has no
+// live-infra dependency that needs real DNS, so faking every lookup as a public address
+// is simplest. "test.local" (used throughout below) doesn't really resolve; safeFetch's
+// own DNS step would otherwise reject it before MSW ever gets a chance to intercept.
+vi.mock('node:dns/promises', () => ({ lookup: lookupMock }));
+
+const { analyzeSite, AnalyzeSiteError } = await import('./analyze-site.js');
 
 // MSW's lifecycle is scoped to just this file (not apps/api's global vitest setup) —
 // several other spec files in this app drive real HTTP calls against a live NestJS
@@ -11,6 +19,7 @@ import { analyzeSite } from './analyze-site.js';
 // internals supertest uses. Keeping it file-local avoids any risk of those tests'
 // requests being intercepted.
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
+beforeEach(() => lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
@@ -33,11 +42,23 @@ function serveHtml(pathname: string, fixture: string) {
 function serveIcon(pathname: string) {
   server.use(
     http.get(`${BASE}${pathname}`, () =>
-      HttpResponse.arrayBuffer(ICON_BYTES.buffer.slice(ICON_BYTES.byteOffset, ICON_BYTES.byteOffset + ICON_BYTES.byteLength), {
-        headers: { 'content-type': 'image/png' },
-      }),
+      HttpResponse.arrayBuffer(
+        ICON_BYTES.buffer.slice(
+          ICON_BYTES.byteOffset,
+          ICON_BYTES.byteOffset + ICON_BYTES.byteLength,
+        ),
+        {
+          headers: { 'content-type': 'image/png' },
+        },
+      ),
     ),
   );
+}
+
+async function expectAnalyzeSiteError(url: string, code: string): Promise<void> {
+  const error: unknown = await analyzeSite(url).catch((e) => e);
+  expect(error).toBeInstanceOf(AnalyzeSiteError);
+  expect((error as InstanceType<typeof AnalyzeSiteError>).code).toBe(code);
 }
 
 describe('analyzeSite', () => {
@@ -107,24 +128,37 @@ describe('analyzeSite', () => {
     expect(new Set(result.tabs.map((t) => t.icon)).size).toBe(4);
   });
 
-  it('surfaces a clear error for an invalid url', async () => {
-    await expect(analyzeSite('not a url at all://')).rejects.toThrow('Введите корректный адрес сайта');
+  it('surfaces INVALID_URL for an invalid url', async () => {
+    await expectAnalyzeSiteError('not a url at all://', 'INVALID_URL');
   });
 
-  it('surfaces a clear error on a non-2xx response', async () => {
-    server.use(http.get(`${BASE}/`, () => HttpResponse.text('nope', { status: 500 })));
-    await expect(analyzeSite(BASE)).rejects.toThrow('Сайт ответил с ошибкой 500');
-  });
-
-  it('surfaces a clear error for a non-HTML response', async () => {
+  it('surfaces SITE_ERROR_STATUS on a non-2xx response', async () => {
+    // Real servers' error pages are usually served as text/html too — explicit here so
+    // this exercises the status check, not an incidental content-type mismatch.
     server.use(
-      http.get(`${BASE}/`, () => HttpResponse.json({ not: 'html' }, { headers: { 'content-type': 'application/json' } })),
+      http.get(`${BASE}/`, () =>
+        HttpResponse.text('nope', { status: 500, headers: { 'content-type': 'text/html' } }),
+      ),
     );
-    await expect(analyzeSite(BASE)).rejects.toThrow('Адрес не похож на обычную веб-страницу');
+    await expectAnalyzeSiteError(BASE, 'SITE_ERROR_STATUS');
   });
 
-  it('surfaces a friendly error when the fetch itself fails', async () => {
+  it('surfaces NOT_HTML for a non-HTML response', async () => {
+    server.use(
+      http.get(`${BASE}/`, () =>
+        HttpResponse.json({ not: 'html' }, { headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    await expectAnalyzeSiteError(BASE, 'NOT_HTML');
+  });
+
+  it('surfaces SITE_UNREACHABLE when the fetch itself fails', async () => {
     server.use(http.get(`${BASE}/`, () => HttpResponse.error()));
-    await expect(analyzeSite(BASE)).rejects.toThrow('Не удалось загрузить сайт');
+    await expectAnalyzeSiteError(BASE, 'SITE_UNREACHABLE');
+  });
+
+  it('surfaces UNSAFE_URL for a url that resolves to a private address, without ever calling MSW', async () => {
+    lookupMock.mockResolvedValue([{ address: '10.0.0.5', family: 4 }]);
+    await expectAnalyzeSiteError('http://private.example/', 'UNSAFE_URL');
   });
 });

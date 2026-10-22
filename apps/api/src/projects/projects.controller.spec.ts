@@ -2,7 +2,9 @@ import { BadRequestException } from '@nestjs/common';
 import { ProjectsController } from './projects.controller.js';
 import type { ProjectsService } from './projects.service.js';
 
-function fakeService(overrides: Partial<Record<keyof ProjectsService, ReturnType<typeof vi.fn>>> = {}) {
+function fakeService(
+  overrides: Partial<Record<keyof ProjectsService, ReturnType<typeof vi.fn>>> = {},
+) {
   return {
     createProject: vi.fn(),
     listProjects: vi.fn(),
