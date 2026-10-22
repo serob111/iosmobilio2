@@ -32,24 +32,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      # bitnami/minio, not minio/minio — see docker-compose.yml's minio service comment:
-      # its default CMD already runs server mode, and MINIO_DEFAULT_BUCKETS auto-creates
-      # the bucket on startup. GitHub Actions service containers have no "command:" field
-      # to override the plain minio/minio image's entrypoint with, so this is the image
-      # that actually works here, not just the one used for consistency with local dev.
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: mobilio
-          MINIO_ROOT_PASSWORD: mobilio_minio_pw
-          MINIO_DEFAULT_BUCKETS: mobilio
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+      # No minio service here — see the "Start MinIO" step below for why.
     env:
       # mobilio_app role, not the services: superuser — matches what apps/api actually
       # connects as (see packages/db/sql/0000_bootstrap_roles.sql).
@@ -74,6 +57,7 @@ jobs:
       # Picked up by packages/storage's and apps/api's live-MinIO integration tests —
       # same opt-in-via-env-presence pattern as the Postgres/Redis vars above.
       S3_ENDPOINT: http://localhost:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
       S3_BUCKET: mobilio
       S3_ACCESS_KEY_ID: mobilio
       S3_SECRET_ACCESS_KEY: mobilio_minio_pw
@@ -87,6 +71,23 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # Run as a plain step, not a `services:` container — GitHub Actions service
+      # containers have no way to pass a command to the entrypoint, and
+      # cgr.dev/chainguard/minio needs `server /data ...` args to actually start the
+      # server (its bare entrypoint just prints usage and exits). See
+      # docker-compose.yml's minio service comment for why this image specifically, and
+      # why it's pinned by digest.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -u 0 -p 9000:9000 \
+            -e MINIO_ROOT_USER=mobilio -e MINIO_ROOT_PASSWORD=mobilio_minio_pw \
+            cgr.dev/chainguard/minio@sha256:d88920d6a50bd0b088223b688be3b76c63e6205dbe494437f67ba1240ea12880 \
+            server /data --console-address ":9001"
+          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done'
+
+      - name: Create MinIO bucket
+        run: npm run ensure-bucket --workspace=@mobilio/storage
 
       - run: npm run lint
 
@@ -138,19 +139,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: mobilio
-          MINIO_ROOT_PASSWORD: mobilio_minio_pw
-          MINIO_DEFAULT_BUCKETS: mobilio
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+      # No minio service here — see the build job's "Start MinIO" step comment for why.
     steps:
       - uses: actions/checkout@v4
 
@@ -160,6 +149,22 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -u 0 -p 9000:9000 \
+            -e MINIO_ROOT_USER=mobilio -e MINIO_ROOT_PASSWORD=mobilio_minio_pw \
+            cgr.dev/chainguard/minio@sha256:d88920d6a50bd0b088223b688be3b76c63e6205dbe494437f67ba1240ea12880 \
+            server /data --console-address ":9001"
+          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 2; done'
+
+      - name: Create MinIO bucket
+        env:
+          S3_ENDPOINT: http://localhost:9000
+          S3_BUCKET: mobilio
+          S3_ACCESS_KEY_ID: mobilio
+          S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+        run: npm run ensure-bucket --workspace=@mobilio/storage
 
       - name: Run database migrations
         working-directory: packages/db
@@ -183,6 +188,7 @@ jobs:
           E2E_API_DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@localhost:5432/mobilio
           E2E_API_REDIS_URL: redis://localhost:6379
           E2E_API_S3_ENDPOINT: http://localhost:9000
+          E2E_API_S3_PUBLIC_ENDPOINT: http://localhost:9000
           E2E_API_S3_BUCKET: mobilio
           E2E_API_S3_ACCESS_KEY_ID: mobilio
           E2E_API_S3_SECRET_ACCESS_KEY: mobilio_minio_pw

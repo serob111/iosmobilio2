@@ -40,8 +40,13 @@ services:
   # concern). There's no accompanying `mc` client image left either (Chainguard's is
   # gated, MinIO's and Bitnami's aren't pullable) — see the createbucket service, which
   # creates the bucket via the AWS SDK directly instead.
+  #
+  # Pinned by digest, not `:latest` — Chainguard rebuilds `:latest` frequently (it's a
+  # rolling tag), so an unpinned reference here would make `docker compose up` silently
+  # pull a different image every so often. The trade-off is this digest needs a manual
+  # bump to pick up new patches; ci.yml uses the same digest for the same reason.
   minio:
-    image: cgr.dev/chainguard/minio:latest
+    image: cgr.dev/chainguard/minio@sha256:d88920d6a50bd0b088223b688be3b76c63e6205dbe494437f67ba1240ea12880
     user: '0'
     command: ['server', '/data', '--console-address', ':9001']
     environment:
@@ -103,7 +108,11 @@ services:
       DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@postgres:5432/mobilio
       REDIS_URL: redis://redis:6379
       PORT: 3000
+      # S3_ENDPOINT (internal, container-to-container) is not reachable from a browser —
+      # S3_PUBLIC_ENDPOINT is what signed URLs actually point at. Defaults to
+      # MINIO_HOST_PORT's mapping; override if that's been changed in a root .env.
       S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: 'http://localhost:${MINIO_HOST_PORT:-9000}'
       S3_BUCKET: mobilio
       S3_ACCESS_KEY_ID: mobilio
       S3_SECRET_ACCESS_KEY: mobilio_minio_pw
