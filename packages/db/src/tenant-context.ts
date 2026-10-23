@@ -63,6 +63,28 @@ export async function runInTokenLookupContext<T>(db: Db, tokenHash: string, fn: 
 }
 
 /**
+ * For claiming a draft into an org (packages/db/migrations' drafts RLS policy) — the
+ * move (insert into `projects`, delete from `drafts`) has to be one atomic transaction,
+ * and each table's RLS policy reads a different setting (projects: app.org_id; drafts:
+ * app.lookup_token_hash). Setting all three in the same transaction, rather than nesting
+ * two separate `runInTenantContext`/`runInTokenLookupContext` transactions, is what
+ * makes both tables' writes commit-or-rollback together.
+ */
+export async function runInClaimContext<T>(
+  db: Db,
+  params: { orgId: string; userId: string; tokenHash: string },
+  fn: () => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.org_id', ${params.orgId}, true)`);
+    await scoped.execute(sql`select set_config('app.user_id', ${params.userId}, true)`);
+    await scoped.execute(sql`select set_config('app.lookup_token_hash', ${params.tokenHash}, true)`);
+    return storage.run(scoped, fn);
+  });
+}
+
+/**
  * Throws instead of silently falling back to an unscoped connection — a repository
  * calling this outside `runInTenantContext` is a bug, not a case to handle gracefully.
  */

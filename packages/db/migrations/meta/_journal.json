@@ -36,6 +36,20 @@
       "when": 1792699464261,
       "tag": "0004_builds_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792760695273,
+      "tag": "0005_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792760735049,
+      "tag": "0006_drafts_rls",
+      "breakpoints": true
     }
   ]
 }
