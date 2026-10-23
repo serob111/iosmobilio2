@@ -1,0 +1,345 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { DraftsService } from './drafts.service.js';
+import { hashDraftToken } from './draft-token.js';
+import { AnalyzeSiteError } from '../projects/analyze-site.js';
+import { DbService } from '../db/db.service.js';
+import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
+
+/** A query-builder chain stub: any method call returns itself, and awaiting it resolves to `result`. */
+function chainTo(result: unknown): unknown {
+  const target = () => chainTo(result);
+  return new Proxy(target, {
+    get(_t, prop) {
+      if (prop === 'then') {
+        return (resolve: (value: unknown) => void) => resolve(result);
+      }
+      return () => chainTo(result);
+    },
+    apply() {
+      return chainTo(result);
+    },
+  });
+}
+
+const ORG_ID = '01a16033-3d3b-718f-b2f4-9508ec870bab';
+const USER_ID = 'user-1';
+const DRAFT_ID = '01a16033-3d3b-718f-b2f4-9508ec870bac';
+
+const {
+  runInTokenLookupContextMock,
+  runInClaimContextMock,
+  getTenantDbMock,
+  insertMock,
+  valuesMock,
+  updateMock,
+  setMock,
+  whereMock,
+  deleteMock,
+  selectMock,
+} = vi.hoisted(() => {
+  const whereMock = vi.fn().mockReturnValue(chainTo(undefined));
+  const setMock = vi.fn().mockReturnValue({ where: whereMock });
+  const updateMock = vi.fn().mockReturnValue({ set: setMock });
+  const valuesMock = vi.fn().mockReturnValue(chainTo(undefined));
+  const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
+  const deleteMock = vi.fn().mockReturnValue(chainTo(undefined));
+  const selectMock = vi.fn().mockReturnValue({ from: () => ({ where: () => [] }) });
+  const getTenantDbMock = vi.fn().mockReturnValue({
+    insert: insertMock,
+    update: updateMock,
+    delete: deleteMock,
+    select: selectMock,
+  });
+  const runInTokenLookupContextMock = vi.fn(
+    async (_db: unknown, _tokenHash: string, fn: () => Promise<unknown>) => fn(),
+  );
+  const runInClaimContextMock = vi.fn(
+    async (_db: unknown, _params: unknown, fn: () => Promise<unknown>) => fn(),
+  );
+  return {
+    runInTokenLookupContextMock,
+    runInClaimContextMock,
+    getTenantDbMock,
+    insertMock,
+    valuesMock,
+    updateMock,
+    setMock,
+    whereMock,
+    deleteMock,
+    selectMock,
+  };
+});
+
+vi.mock('@mobilio/db', () => ({
+  runInTokenLookupContext: runInTokenLookupContextMock,
+  runInClaimContext: runInClaimContextMock,
+  getTenantDb: getTenantDbMock,
+  schema: { drafts: { id: 'drafts.id', tokenHash: 'drafts.tokenHash' }, projects: { id: 'projects.id' } },
+  eq: vi.fn((_col: unknown, value: unknown) => ({ col: 'id', value })),
+}));
+
+vi.mock('../db/db.service.js', () => ({
+  DbService: class {
+    db = {};
+  },
+}));
+
+const analyzeSiteMock = vi.hoisted(() => vi.fn());
+vi.mock('../projects/analyze-site.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../projects/analyze-site.js')>();
+  return { ...actual, analyzeSite: analyzeSiteMock };
+});
+
+const processIconImageMock = vi.hoisted(() => vi.fn());
+vi.mock('../projects/icon.js', () => ({ processIconImage: processIconImageMock }));
+
+describe('DraftsService', () => {
+  let storagePut: ReturnType<typeof vi.fn>;
+  let storageGet: ReturnType<typeof vi.fn>;
+  let storageDelete: ReturnType<typeof vi.fn>;
+  let storageSignedUrl: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    runInTokenLookupContextMock.mockClear();
+    runInClaimContextMock.mockClear();
+    getTenantDbMock.mockReset().mockReturnValue({
+      insert: insertMock,
+      update: updateMock,
+      delete: deleteMock,
+      select: selectMock,
+    });
+    insertMock.mockClear();
+    valuesMock.mockClear();
+    updateMock.mockClear();
+    setMock.mockClear();
+    whereMock.mockClear();
+    deleteMock.mockClear();
+    selectMock.mockReset().mockReturnValue({ from: () => ({ where: () => [] }) });
+    analyzeSiteMock.mockReset();
+    processIconImageMock.mockReset();
+    storagePut = vi.fn().mockResolvedValue(undefined);
+    storageGet = vi.fn().mockResolvedValue(Buffer.from('icon-bytes'));
+    storageDelete = vi.fn().mockResolvedValue(undefined);
+    storageSignedUrl = vi.fn().mockResolvedValue('https://signed.example/icon.png');
+  });
+
+  async function buildService(): Promise<DraftsService> {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        DraftsService,
+        DbService,
+        {
+          provide: OBJECT_STORAGE,
+          useValue: { put: storagePut, get: storageGet, delete: storageDelete, signedUrl: storageSignedUrl },
+        },
+      ],
+    }).compile();
+    return moduleRef.get(DraftsService);
+  }
+
+  describe('createDraft', () => {
+    const analysis = {
+      name: 'Кофейня Уют',
+      color: '#8B5E3C',
+      iconBuffer: Buffer.from('icon-bytes'),
+      tabs: [{ title: 'Главная', icon: 'home' as const, path: '/' }],
+      hostname: 'cafe.example',
+      url: 'https://cafe.example/',
+    };
+
+    it('analyzes the site, inserts a valid config under a fresh token, and uploads the icon', async () => {
+      analyzeSiteMock.mockResolvedValue(analysis);
+      const service = await buildService();
+
+      const { rawToken } = await service.createDraft('cafe.example');
+
+      expect(rawToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(analyzeSiteMock).toHaveBeenCalledWith('cafe.example');
+      expect(insertMock).toHaveBeenCalled();
+      const inserted = valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(inserted.name).toBe('Кофейня Уют');
+      expect(inserted.sourceUrl).toBe('https://cafe.example/');
+      expect(inserted.configVersion).toBe(1);
+      expect(typeof inserted.tokenHash).toBe('string');
+      expect(inserted.expiresAt).toBeInstanceOf(Date);
+
+      expect(storagePut).toHaveBeenCalledWith(
+        `drafts/${inserted.id}/icon.png`,
+        analysis.iconBuffer,
+        'image/png',
+      );
+      // The insert's WITH CHECK policy requires the row's own token_hash to equal
+      // app.lookup_token_hash for that same transaction — so the context tokenHash and
+      // the inserted tokenHash must be the exact same value.
+      expect(runInTokenLookupContextMock.mock.calls[0]?.[1]).toBe(inserted.tokenHash);
+    });
+
+    it('forwards AnalyzeSiteError.code as the BadRequestException code', async () => {
+      analyzeSiteMock.mockRejectedValue(new AnalyzeSiteError('UNSAFE_URL', 'Host resolves to a disallowed address'));
+      const service = await buildService();
+
+      const error: unknown = await service.createDraft('bad.example').catch((e) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toEqual({
+        code: 'UNSAFE_URL',
+        message: 'Host resolves to a disallowed address',
+      });
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to SITE_UNREACHABLE for a non-AnalyzeSiteError rejection', async () => {
+      analyzeSiteMock.mockRejectedValue(new Error('boom'));
+      const service = await buildService();
+
+      const error: unknown = await service.createDraft('bad.example').catch((e) => e);
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({ code: 'SITE_UNREACHABLE' });
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateDraft', () => {
+    const validConfig = {
+      id: DRAFT_ID,
+      name: 'Updated',
+      slug: 'updated',
+      bundleId: 'com.example.updated',
+      source: { type: 'url' as const, url: 'https://new.example/' },
+      theme: { primary: '#000000', background: '#FFFFFF', statusBar: 'dark' as const },
+      tabs: [{ title: 'Главная', icon: 'home', path: '/' }],
+      features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
+      allowedDomains: ['new.example'],
+      trial: true,
+    };
+
+    it('rejects an invalid config with VALIDATION_ERROR', async () => {
+      const service = await buildService();
+      await expect(service.updateDraft('hash', DRAFT_ID, { not: 'a config' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(updateMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the body id does not match the draft id', async () => {
+      const service = await buildService();
+      await expect(service.updateDraft('hash', 'different-id', validConfig)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(updateMock).not.toHaveBeenCalled();
+    });
+
+    it('updates name/config/configVersion and sourceUrl for a url-type source, scoped by the token hash', async () => {
+      const service = await buildService();
+      await service.updateDraft('the-token-hash', DRAFT_ID, validConfig);
+
+      expect(runInTokenLookupContextMock.mock.calls[0]?.[1]).toBe('the-token-hash');
+      expect(setMock).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Updated', configVersion: 1, sourceUrl: 'https://new.example/' }),
+      );
+    });
+
+    it('leaves sourceUrl untouched for an html-type source', async () => {
+      const htmlConfig = { ...validConfig, source: { type: 'html' as const, entry: 'index.html' } };
+      const service = await buildService();
+      await service.updateDraft('hash', DRAFT_ID, htmlConfig);
+
+      const setArg = setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(setArg).not.toHaveProperty('sourceUrl');
+    });
+  });
+
+  describe('uploadIcon', () => {
+    it('rejects an unsupported mimetype', async () => {
+      const service = await buildService();
+      await expect(
+        service.uploadIcon(DRAFT_ID, { buffer: Buffer.from('x'), mimetype: 'image/gif' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(storagePut).not.toHaveBeenCalled();
+    });
+
+    it('rejects when sharp fails to process the image', async () => {
+      processIconImageMock.mockRejectedValue(new Error('bad image'));
+      const service = await buildService();
+      await expect(
+        service.uploadIcon(DRAFT_ID, { buffer: Buffer.from('x'), mimetype: 'image/png' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('processes and uploads a valid png to the draft icon key', async () => {
+      const processed = Buffer.from('processed');
+      processIconImageMock.mockResolvedValue(processed);
+      const service = await buildService();
+
+      await service.uploadIcon(DRAFT_ID, { buffer: Buffer.from('raw'), mimetype: 'image/png' });
+
+      expect(storagePut).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`, processed, 'image/png');
+    });
+  });
+
+  describe('getIconUrl', () => {
+    it('signs the draft icon key with a filename', async () => {
+      const service = await buildService();
+      const url = await service.getIconUrl(DRAFT_ID);
+
+      expect(url).toBe('https://signed.example/icon.png');
+      expect(storageSignedUrl).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`, 300, 'icon.png');
+    });
+  });
+
+  describe('claimDraft', () => {
+    const draftRow = {
+      id: DRAFT_ID,
+      name: 'Draft',
+      sourceUrl: 'https://x.example/',
+      config: { id: DRAFT_ID, trial: true },
+      configVersion: 1,
+      tokenHash: 'the-hash',
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+
+    it('throws NotFoundException and touches no storage when no draft matches the token', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [] }) });
+      const service = await buildService();
+
+      await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toBeInstanceOf(NotFoundException);
+      expect(insertMock).not.toHaveBeenCalled();
+      expect(storageGet).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for an already-expired draft without inserting a project', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [{ ...draftRow, expiresAt: new Date(Date.now() - 1000) }] }) });
+      const service = await buildService();
+
+      await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toBeInstanceOf(NotFoundException);
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('inserts a project with the draft\'s config (id rewritten), deletes the draft, and moves the icon', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
+      const service = await buildService();
+
+      const { id: projectId } = await service.claimDraft(ORG_ID, USER_ID, 'raw-token');
+
+      expect(insertMock).toHaveBeenCalled();
+      const inserted = valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(inserted.id).toBe(projectId);
+      expect(inserted.orgId).toBe(ORG_ID);
+      expect((inserted.config as { id: string }).id).toBe(projectId);
+      expect(deleteMock).toHaveBeenCalled();
+
+      expect(storageGet).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`);
+      expect(storagePut).toHaveBeenCalledWith(
+        `orgs/${ORG_ID}/projects/${projectId}/icon.png`,
+        Buffer.from('icon-bytes'),
+        'image/png',
+      );
+      expect(storageDelete).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`);
+      expect(runInClaimContextMock.mock.calls[0]?.[1]).toEqual({
+        orgId: ORG_ID,
+        userId: USER_ID,
+        tokenHash: hashDraftToken('raw-token'),
+      });
+    });
+  });
+});

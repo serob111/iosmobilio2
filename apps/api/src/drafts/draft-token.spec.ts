@@ -1,0 +1,94 @@
+import { createHash } from 'node:crypto';
+import type { Request, Response } from 'express';
+import {
+  DRAFT_COOKIE_NAME,
+  clearDraftCookie,
+  generateDraftToken,
+  hashDraftToken,
+  readDraftCookie,
+  setDraftCookie,
+} from './draft-token.js';
+
+describe('generateDraftToken', () => {
+  it('returns a raw token whose sha256 hash matches tokenHash, and a 7-day expiry', () => {
+    const before = Date.now();
+    const { rawToken, tokenHash, expiresAt } = generateDraftToken();
+
+    expect(rawToken).toMatch(/^[0-9a-f]{64}$/);
+    expect(tokenHash).toBe(createHash('sha256').update(rawToken).digest('hex'));
+    expect(expiresAt.getTime()).toBeGreaterThan(before + 6 * 24 * 60 * 60 * 1000);
+    expect(expiresAt.getTime()).toBeLessThan(before + 8 * 24 * 60 * 60 * 1000);
+  });
+
+  it('never repeats a raw token across calls', () => {
+    const a = generateDraftToken();
+    const b = generateDraftToken();
+    expect(a.rawToken).not.toBe(b.rawToken);
+  });
+});
+
+describe('hashDraftToken', () => {
+  it('is a deterministic sha256 hex digest', () => {
+    expect(hashDraftToken('abc')).toBe(createHash('sha256').update('abc').digest('hex'));
+  });
+});
+
+describe('setDraftCookie / clearDraftCookie', () => {
+  function fakeResponse(): Response & { cookie: ReturnType<typeof vi.fn>; clearCookie: ReturnType<typeof vi.fn> } {
+    return { cookie: vi.fn(), clearCookie: vi.fn() } as unknown as Response & {
+      cookie: ReturnType<typeof vi.fn>;
+      clearCookie: ReturnType<typeof vi.fn>;
+    };
+  }
+
+  it('sets an httpOnly, lax-samesite cookie with a 7-day maxAge', () => {
+    const res = fakeResponse();
+    setDraftCookie(res, 'raw-token');
+
+    expect(res.cookie).toHaveBeenCalledWith(
+      DRAFT_COOKIE_NAME,
+      'raw-token',
+      expect.objectContaining({
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      }),
+    );
+  });
+
+  it('clears the cookie at the same path it was set on', () => {
+    const res = fakeResponse();
+    clearDraftCookie(res);
+    expect(res.clearCookie).toHaveBeenCalledWith(DRAFT_COOKIE_NAME, { path: '/' });
+  });
+});
+
+describe('readDraftCookie', () => {
+  function requestWithCookieHeader(header: string | undefined): Request {
+    return { headers: { cookie: header } } as unknown as Request;
+  }
+
+  it('returns undefined when there is no Cookie header at all', () => {
+    expect(readDraftCookie(requestWithCookieHeader(undefined))).toBeUndefined();
+  });
+
+  it('returns undefined when the header exists but has no matching cookie name', () => {
+    expect(readDraftCookie(requestWithCookieHeader('other=value; another=thing'))).toBeUndefined();
+  });
+
+  it('finds the draft cookie among several others, in any position', () => {
+    const header = `other=1; ${DRAFT_COOKIE_NAME}=raw-token-value; another=2`;
+    expect(readDraftCookie(requestWithCookieHeader(header))).toBe('raw-token-value');
+  });
+
+  it('decodes a percent-encoded value', () => {
+    const header = `${DRAFT_COOKIE_NAME}=${encodeURIComponent('a b')}`;
+    expect(readDraftCookie(requestWithCookieHeader(header))).toBe('a b');
+  });
+
+  it('ignores a malformed segment with no "=" rather than throwing', () => {
+    const header = `garbage; ${DRAFT_COOKIE_NAME}=value`;
+    expect(readDraftCookie(requestWithCookieHeader(header))).toBe('value');
+  });
+});

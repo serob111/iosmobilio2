@@ -11,6 +11,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@mobilio/db": "*",
+    "@mobilio/storage": "*",
     "@sentry/node": "^11.8.0",
     "bullmq": "^6.1.0",
     "dotenv": "^18.0.8",

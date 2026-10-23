@@ -5,6 +5,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
 import { DbModule } from './db/db.module.js';
+import { DraftsModule } from './drafts/drafts.module.js';
 import { HealthModule } from './health/health.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { OrganizationsModule } from './organizations/organizations.module.js';
@@ -27,6 +28,7 @@ import { StorageModule } from './storage/storage.module.js';
     StorageModule,
     OrganizationsModule,
     ProjectsModule,
+    DraftsModule,
     AuthModule,
     HealthModule,
     QueueModule,
