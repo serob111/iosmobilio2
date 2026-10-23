@@ -13,6 +13,11 @@ const IPV4_FORBIDDEN_RANGES: Array<[network: string, prefixLength: number]> = [
   ['169.254.0.0', 16], // link-local (includes the 169.254.169.254 cloud metadata endpoint)
   ['100.64.0.0', 10], // shared address space / CGNAT
   ['0.0.0.0', 8], // "this network"
+  ['192.0.0.0', 24], // IETF protocol assignments
+  ['192.0.2.0', 24], // TEST-NET-1
+  ['198.18.0.0', 15], // benchmarking
+  ['198.51.100.0', 24], // TEST-NET-2
+  ['203.0.113.0', 24], // TEST-NET-3
 ];
 
 function isForbiddenIpv4(ip: string): boolean {
@@ -54,13 +59,48 @@ function parseIpv6(address: string): bigint {
   return value;
 }
 
+function bigintToIpv4(value: bigint): string {
+  const v = Number(value & 0xffffffffn);
+  return [(v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff].join('.');
+}
+
+// Prefix constants are derived through parseIpv6 itself, not hand-computed hex/shift
+// arithmetic — a manually computed shift constant for fe80::/10 was wrong in an earlier
+// version (1002 instead of 1018) and only the exhaustive range tests below caught it.
+// Deriving every prefix the same way the real input is parsed removes that whole class
+// of mistake.
+const UNIQUE_LOCAL_PREFIX = parseIpv6('fc00::') >> 121n; // fc00::/7
+const LINK_LOCAL_PREFIX = parseIpv6('fe80::') >> 118n; // fe80::/10
+const IPV4_MAPPED_PREFIX = parseIpv6('::ffff:0:0') >> 32n; // ::ffff:0:0/96
+const MULTICAST_PREFIX = parseIpv6('ff00::') >> 120n; // ff00::/8
+const SITE_LOCAL_PREFIX = parseIpv6('fec0::') >> 118n; // fec0::/10 (deprecated, still routable on-link)
+const TEREDO_PREFIX = parseIpv6('2001::') >> 96n; // 2001::/32
+const DISCARD_PREFIX = parseIpv6('100::') >> 64n; // 100::/64 (RFC 6666)
+const NAT64_PREFIX = parseIpv6('64:ff9b::') >> 32n; // 64:ff9b::/96 — embeds an IPv4 address
+const SIXTOFOUR_PREFIX = parseIpv6('2002::') >> 112n; // 2002::/16 — embeds an IPv4 address
+
 function isForbiddenIpv6(address: string): boolean {
   const value = parseIpv6(address);
-  if (value === 1n) return true; // ::1 (loopback)
-  if (value >> 121n === 126n) return true; // fc00::/7 (unique local)
-  if (value >> 118n === 1018n) return true; // fe80::/10 (link-local)
-  if (value >> 32n === 0xffffn) return true; // ::ffff:0:0/96 (IPv4-mapped) — always forbidden,
-  // regardless of the embedded IPv4, to avoid this encoding being usable as a bypass at all.
+
+  // ::/96 — includes :: itself and the deprecated "IPv4-compatible" form (::a.b.c.d for
+  // any a.b.c.d, including public ones: always forbidden, not range-checked, same
+  // reasoning as the IPv4-mapped case below).
+  if (value >> 32n === 0n) return true;
+  if (value >> 121n === UNIQUE_LOCAL_PREFIX) return true;
+  if (value >> 118n === LINK_LOCAL_PREFIX) return true;
+  if (value >> 118n === SITE_LOCAL_PREFIX) return true;
+  if (value >> 120n === MULTICAST_PREFIX) return true;
+  if (value >> 96n === TEREDO_PREFIX) return true;
+  if (value >> 64n === DISCARD_PREFIX) return true;
+  // ::ffff:0:0/96 (IPv4-mapped) — always forbidden regardless of the embedded IPv4, to
+  // avoid this encoding being usable as a bypass at all.
+  if (value >> 32n === IPV4_MAPPED_PREFIX) return true;
+
+  // NAT64 and 6to4 embed a real IPv4 address — extract it and defer to the IPv4 rules,
+  // rather than either trusting it unconditionally or banning the whole prefix outright.
+  if (value >> 32n === NAT64_PREFIX) return isForbiddenIpv4(bigintToIpv4(value));
+  if (value >> 112n === SIXTOFOUR_PREFIX) return isForbiddenIpv4(bigintToIpv4(value >> 80n));
+
   return false;
 }
 

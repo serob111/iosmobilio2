@@ -22,14 +22,19 @@ const { safeFetch, resolveSafeAddresses, SafeFetchError } = await import('./safe
 
 /** A minimal ReadableStream-like body matching what safeFetch's readLimited() consumes. */
 function fakeBody(chunks: Buffer[]): {
+  cancel: () => Promise<void>;
   getReader: () => {
     read: () => Promise<{ done: boolean; value?: Uint8Array }>;
     cancel: () => Promise<void>;
   };
 } {
   let index = 0;
+  // Both the direct body.cancel() (what safeFetch calls before following a redirect)
+  // and the reader-level cancel() (what readLimited calls on an oversized body) are
+  // spied the same way a real ReadableStream exposes cancel at both levels.
   const cancel = vi.fn().mockResolvedValue(undefined);
   return {
+    cancel,
     getReader: () => ({
       read: async () => {
         if (index >= chunks.length) return { done: true };
@@ -87,6 +92,22 @@ describe('resolveSafeAddresses (DNS-level checks)', () => {
     await expect(resolveSafeAddresses('nowhere.example')).rejects.toMatchObject({
       code: 'SITE_UNREACHABLE',
     });
+  });
+
+  // Exercises the full URL -> hostname -> resolveSafeAddresses path for literal IPv6
+  // urls, using the exact bracketed form WHATWG URL.hostname produces (e.g. "[::]"),
+  // not the bare address ip-policy.spec.ts tests directly — this is what safeFetch
+  // actually sees from `new URL(...).hostname`.
+  it.each([
+    ['http://[::]/', '::/96 (unspecified)'],
+    ['http://[::127.0.0.1]/', 'deprecated IPv4-compatible form embedding loopback'],
+    ['http://[64:ff9b::a9fe:a9fe]/', 'NAT64 embedding the cloud metadata address'],
+    ['http://[2002:7f00:1::]/', '6to4 embedding loopback'],
+    ['http://[ff02::1]/', 'multicast'],
+  ])('rejects the literal IPv6 host in %s (%s)', async (url) => {
+    const hostname = new URL(url).hostname;
+    await expect(resolveSafeAddresses(hostname)).rejects.toMatchObject({ code: 'UNSAFE_URL' });
+    expect(lookupMock).not.toHaveBeenCalled();
   });
 
   it('accepts a public IPv4 literal without calling DNS', async () => {
@@ -161,6 +182,24 @@ describe('safeFetch', () => {
     expect(result.status).toBe(200);
     expect(result.body.toString()).toBe('final');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels the redirect response body before following the next hop', async () => {
+    const redirectBody = fakeBody([Buffer.from('<html>redirecting...</html>')]);
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 302,
+        headers: {
+          get: (name: string) =>
+            name.toLowerCase() === 'location' ? 'https://other-public.example/' : null,
+        },
+        body: redirectBody,
+      })
+      .mockResolvedValueOnce(fakeResponse({ status: 200, body: [Buffer.from('final')] }));
+
+    await safeFetch('https://public.example/', { maxBodyBytes: 1000 });
+
+    expect(redirectBody.cancel).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a redirect from a public address to a literal loopback address', async () => {

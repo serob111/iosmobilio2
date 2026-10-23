@@ -47,6 +47,20 @@ export type SafeFetchOptions = {
   maxRedirects?: number;
   /** If given, the final response's Content-Type must start with one of these (case-insensitive). */
   allowedContentTypePrefixes?: string[];
+  /**
+   * Test-only escape hatch: specific IP literals that bypass the forbidden-range check
+   * even though they'd otherwise be rejected (e.g. a loopback address a local test
+   * server binds to, to prove the real connection-pinning behavior end-to-end). No
+   * production code path sets this — see safe-fetch.binding.spec.ts for the one place
+   * it's actually used.
+   */
+  allowAddressesForTesting?: readonly string[];
+  /**
+   * Test-only escape hatch: skips the port-80/443 check. A real test server can't bind
+   * privileged port 80 without root, so the binding test above needs an ephemeral port —
+   * this does not weaken the address-range check, which still applies independently.
+   */
+  allowAnyPortForTesting?: boolean;
 };
 
 export type SafeFetchResult = {
@@ -56,7 +70,7 @@ export type SafeFetchResult = {
   finalUrl: string;
 };
 
-function validateUrlStructure(url: URL): void {
+function validateUrlStructure(url: URL, allowAnyPort: boolean): void {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new SafeFetchError('UNSAFE_URL', `Protocol not allowed: ${url.protocol}`);
   }
@@ -64,7 +78,7 @@ function validateUrlStructure(url: URL): void {
     throw new SafeFetchError('UNSAFE_URL', 'Credentials in url are not allowed');
   }
   const defaultPort = url.protocol === 'https:' ? '443' : '80';
-  if (url.port && url.port !== defaultPort) {
+  if (!allowAnyPort && url.port && url.port !== defaultPort) {
     throw new SafeFetchError('UNSAFE_URL', `Port not allowed: ${url.port}`);
   }
 }
@@ -81,6 +95,7 @@ function validateUrlStructure(url: URL): void {
 export async function resolveSafeAddresses(
   hostname: string,
   lookup: typeof dnsLookup = dnsLookup,
+  allowAddresses: readonly string[] = [],
 ): Promise<LookupAddress[]> {
   // WHATWG URL.hostname keeps the brackets for an IPv6 literal (e.g. "[::1]") — net.isIP
   // and isForbiddenIp both expect a bare address, so strip them before any literal-IP check.
@@ -88,7 +103,7 @@ export async function resolveSafeAddresses(
     hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
   const literalVersion = net.isIP(bareHost);
   if (literalVersion !== 0) {
-    if (isForbiddenIp(bareHost)) {
+    if (isForbiddenIp(bareHost) && !allowAddresses.includes(bareHost)) {
       throw new SafeFetchError('UNSAFE_URL', `IP address is not allowed: ${bareHost}`);
     }
     return [{ address: bareHost, family: literalVersion }];
@@ -114,7 +129,7 @@ export async function resolveSafeAddresses(
     throw new SafeFetchError('SITE_UNREACHABLE', `Host has no addresses: ${hostname}`);
   }
   for (const record of records) {
-    if (isForbiddenIp(record.address)) {
+    if (isForbiddenIp(record.address) && !allowAddresses.includes(record.address)) {
       throw new SafeFetchError(
         'UNSAFE_URL',
         `Host resolves to a disallowed address: ${record.address}`,
@@ -194,8 +209,12 @@ export async function safeFetch(
 
     let redirectCount = 0;
     while (true) {
-      validateUrlStructure(currentUrl);
-      const addresses = await resolveSafeAddresses(currentUrl.hostname);
+      validateUrlStructure(currentUrl, options.allowAnyPortForTesting ?? false);
+      const addresses = await resolveSafeAddresses(
+        currentUrl.hostname,
+        dnsLookup,
+        options.allowAddressesForTesting,
+      );
       validatedByHost.set(currentUrl.hostname, addresses);
 
       let response: Response;
@@ -212,6 +231,10 @@ export async function safeFetch(
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
+        // Cancel before following — a redirect response can still carry a body (e.g. an
+        // HTML page explaining the redirect), and leaving it unconsumed holds its
+        // connection open instead of releasing it back to the agent.
+        await response.body?.cancel();
         if (!location) {
           throw new SafeFetchError('SITE_UNREACHABLE', 'Redirect response with no Location header');
         }
