@@ -77,7 +77,11 @@ const SITE_LOCAL_PREFIX = parseIpv6('fec0::') >> 118n; // fec0::/10 (deprecated,
 const TEREDO_PREFIX = parseIpv6('2001::') >> 96n; // 2001::/32
 const DISCARD_PREFIX = parseIpv6('100::') >> 64n; // 100::/64 (RFC 6666)
 const NAT64_PREFIX = parseIpv6('64:ff9b::') >> 32n; // 64:ff9b::/96 — embeds an IPv4 address
+const LOCAL_NAT64_PREFIX = parseIpv6('64:ff9b:1::') >> 80n; // 64:ff9b:1::/48 (RFC 8215, local-use) — embeds an IPv4 address
 const SIXTOFOUR_PREFIX = parseIpv6('2002::') >> 112n; // 2002::/16 — embeds an IPv4 address
+const TRANSLATED_PREFIX = parseIpv6('::ffff:0:0:0') >> 32n; // ::ffff:0:0:0/96 ("IPv4-translated") — note the extra
+// zero group vs. ::ffff:0:0/96 (IPv4-mapped): FFFF sits one group earlier, a genuinely
+// different, non-overlapping /96 from IPV4_MAPPED_PREFIX above.
 
 function isForbiddenIpv6(address: string): boolean {
   const value = parseIpv6(address);
@@ -92,13 +96,16 @@ function isForbiddenIpv6(address: string): boolean {
   if (value >> 120n === MULTICAST_PREFIX) return true;
   if (value >> 96n === TEREDO_PREFIX) return true;
   if (value >> 64n === DISCARD_PREFIX) return true;
-  // ::ffff:0:0/96 (IPv4-mapped) — always forbidden regardless of the embedded IPv4, to
-  // avoid this encoding being usable as a bypass at all.
+  // ::ffff:0:0/96 (IPv4-mapped) and ::ffff:0:0:0/96 (IPv4-translated) — always forbidden
+  // regardless of the embedded IPv4, to avoid either encoding being usable as a bypass.
   if (value >> 32n === IPV4_MAPPED_PREFIX) return true;
+  if (value >> 32n === TRANSLATED_PREFIX) return true;
 
-  // NAT64 and 6to4 embed a real IPv4 address — extract it and defer to the IPv4 rules,
-  // rather than either trusting it unconditionally or banning the whole prefix outright.
+  // NAT64 (global and RFC 8215 local-use) and 6to4 embed a real IPv4 address — extract
+  // it and defer to the IPv4 rules, rather than either trusting it unconditionally or
+  // banning the whole prefix outright.
   if (value >> 32n === NAT64_PREFIX) return isForbiddenIpv4(bigintToIpv4(value));
+  if (value >> 80n === LOCAL_NAT64_PREFIX) return isForbiddenIpv4(bigintToIpv4(value));
   if (value >> 112n === SIXTOFOUR_PREFIX) return isForbiddenIpv4(bigintToIpv4(value >> 80n));
 
   return false;

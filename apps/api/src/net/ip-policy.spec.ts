@@ -71,6 +71,8 @@ describe('isForbiddenIp', () => {
       ['64:ff9b::7f00:1', 'NAT64 embedding loopback'],
       ['2002:7f00:1::', '6to4 embedding loopback'],
       ['2002:a9fe:a9fe::', '6to4 embedding the cloud metadata address'],
+      ['::ffff:0:a00:1', 'IPv4-translated (::ffff:0:0:0/96), embedded private address'],
+      ['64:ff9b:1::a00:1', 'RFC 8215 local-use NAT64 (64:ff9b:1::/48), embedded private address'],
     ])('rejects %s (%s)', (ip) => {
       expect(isForbiddenIp(ip)).toBe(true);
     });
@@ -80,6 +82,7 @@ describe('isForbiddenIp', () => {
       ['2606:4700:4700::1111', 'public (Cloudflare DNS)'],
       ['64:ff9b::808:808', 'NAT64 embedding a public address (8.8.8.8) — allowed'],
       ['2002:808:808::', '6to4 embedding a public address (8.8.8.8) — allowed'],
+      ['64:ff9b:1::808:808', 'RFC 8215 local-use NAT64 embedding a public address — allowed'],
     ])('allows %s (%s)', (ip) => {
       expect(isForbiddenIp(ip)).toBe(false);
     });
