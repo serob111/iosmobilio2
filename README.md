@@ -291,6 +291,49 @@ GET  /orgs/:orgId/projects/:projectId/icon — 302 на подписанную �
 (org_id, project_id, status, run_id, run_url, error, template_version, started_at, finished_at,
 ipa_key) с тем же RLS-паттерном уже создана заранее — сам модуль сборки появится позже.
 
+## Черновики (apps/api/src/drafts, apps/worker)
+
+Бесплатное превью без регистрации: анонимный черновик живёт в отдельной таблице `drafts`
+(без `org_id`), доступ к нему — только по claim-токену, не по сессии.
+
+```
+POST /drafts                       — { url } → анализ сайта → создание черновика (rate limit по IP)
+GET  /drafts/me                    — текущий черновик (по cookie)
+PUT  /drafts/me                    — полная замена config
+POST /drafts/me/icon               — загрузка иконки (multipart, поле "icon")
+GET  /drafts/me/icon               — 302 на подписанную ссылку в object storage
+POST /orgs/:orgId/drafts/claim     — переносит черновик в проект организации (после входа)
+```
+
+`POST /drafts` не требует входа (`@Public()`) — сырой токен (32 случайных байта, как у
+`invitations`) уходит только в httpOnly cookie (`mobilio_draft_token`, `sameSite: lax`, 7
+дней), в БД — только его sha256-хеш. `/drafts/me*` защищены `DraftGuard`: он читает cookie,
+резолвит черновик по хешу через `runInTokenLookupContext` и сам же считает уже
+просроченный черновик несуществующим — независимо от того, когда до него доберётся
+воркер. Rate limit на создание — Redis fixed-window (10 за 10 минут на IP, `INCR` +
+`EXPIRE ... NX`), те же цифры, что были у `apps/web`'s in-memory лимитера.
+
+RLS на `drafts` — тем же паттерном, что у `invitations` (доступ по
+`app.lookup_token_hash`), но `FOR ALL`, не только `SELECT`: черновик нужно не только
+читать, но и создавать/править/удалять анонимно. Для фоновой очистки истёкших черновиков
+нужна была отдельная политика: Postgres требует, чтобы строка прошла проверку **и** SELECT/ALL-
+политик, **и** политики конкретной команды (они AND'ятся, а не сливаются в один OR) — так
+что `drafts_delete_expired` (`FOR DELETE`) без зеркальной `drafts_expired_select`
+(`FOR SELECT`, тот же предикат `expires_at < now()`) была фактически бессильна: `A AND (A
+OR B)` схлопывается в `A`. Обе политики на `expires_at < now()` — безопасны без всякого
+`app.*`-контекста, потому что предикат не секретный: «этот черновик уже истёк» — факт, не
+зависящий от того, кто спрашивает.
+
+`POST /orgs/:orgId/drafts/claim` (под `OrgGuard`) берёт claim-токен из той же cookie (не
+из тела запроса) и одной транзакцией (`runInClaimContext`, выставляет `app.org_id`,
+`app.user_id` и `app.lookup_token_hash` сразу) переносит черновик в `projects` и удаляет
+его из `drafts` — коммит/роллбэк атомарно для обеих таблиц. Иконка переносится
+`get`+`put`+`delete` (у `ObjectStorage` нет `copy`).
+
+`apps/worker` раз в час (`queue.upsertJobScheduler`, идемпотентно переживает перезапуски —
+не просто `setInterval`) удаляет все истёкшие черновики и best-effort чистит их иконки в
+object storage.
+
 ## Защита от SSRF (apps/api/src/net)
 
 Черновики (Этап 2) и анализ сайта принимают произвольный url от неавторизованного или
