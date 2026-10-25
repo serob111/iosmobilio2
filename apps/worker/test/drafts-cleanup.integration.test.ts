@@ -41,7 +41,9 @@ describe.skipIf(!hasLiveServices)('drafts cleanup (live Postgres + Redis + MinIO
       sourceUrl: 'https://x.example/',
       config: {},
       tokenHash,
-      expiresAt: new Date(Date.now() - 1_000),
+      // 30s margin, not 1s — comfortably outlasts ordinary host/container clock skew
+      // (e.g. right after a Docker Desktop/WSL2 restart) so this doesn't flake.
+      expiresAt: new Date(Date.now() - 30_000),
     });
   }
 
