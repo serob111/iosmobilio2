@@ -13,18 +13,29 @@ export function generateDraftToken(): { rawToken: string; tokenHash: string; exp
   return { rawToken, tokenHash: hashDraftToken(rawToken), expiresAt: new Date(Date.now() + DRAFT_TTL_MS) };
 }
 
+/**
+ * Defaults to secure (HTTPS-only) — COOKIE_SECURE must be explicitly set to "false" to
+ * opt out, which is only ever correct for local dev over plain http. Getting this
+ * backwards (defaulting to insecure) would mean a forgotten/missing env var silently
+ * ships a cookie that can leak over plain HTTP in prod.
+ */
+function cookieSecure(): boolean {
+  return process.env.COOKIE_SECURE !== 'false';
+}
+
+/** clearDraftCookie must pass the same attributes used to set the cookie — path (and, for
+ * some browsers, secure/sameSite) is part of how a Set-Cookie is matched for deletion;
+ * passing a different set of attributes can leave the original cookie not actually cleared. */
+function cookieOptions(): { httpOnly: true; secure: boolean; sameSite: 'lax'; path: '/' } {
+  return { httpOnly: true, secure: cookieSecure(), sameSite: 'lax', path: '/' };
+}
+
 export function setDraftCookie(res: Response, rawToken: string): void {
-  res.cookie(DRAFT_COOKIE_NAME, rawToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: DRAFT_TTL_MS,
-    path: '/',
-  });
+  res.cookie(DRAFT_COOKIE_NAME, rawToken, { ...cookieOptions(), maxAge: DRAFT_TTL_MS });
 }
 
 export function clearDraftCookie(res: Response): void {
-  res.clearCookie(DRAFT_COOKIE_NAME, { path: '/' });
+  res.clearCookie(DRAFT_COOKIE_NAME, cookieOptions());
 }
 
 /**
@@ -44,7 +55,14 @@ export function readDraftCookie(req: Request): string | undefined {
       continue;
     }
     if (part.slice(0, eqIndex).trim() === DRAFT_COOKIE_NAME) {
-      return decodeURIComponent(part.slice(eqIndex + 1).trim());
+      // A malformed %-escape (e.g. a bare "%" or a truncated "%2") throws from
+      // decodeURIComponent — treated the same as "no cookie" (DraftGuard 404s) rather
+      // than crashing the request with an unhandled error.
+      try {
+        return decodeURIComponent(part.slice(eqIndex + 1).trim());
+      } catch {
+        return undefined;
+      }
     }
   }
   return undefined;

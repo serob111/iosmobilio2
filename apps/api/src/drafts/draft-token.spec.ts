@@ -34,6 +34,16 @@ describe('hashDraftToken', () => {
 });
 
 describe('setDraftCookie / clearDraftCookie', () => {
+  const originalCookieSecure = process.env.COOKIE_SECURE;
+
+  afterEach(() => {
+    if (originalCookieSecure === undefined) {
+      delete process.env.COOKIE_SECURE;
+    } else {
+      process.env.COOKIE_SECURE = originalCookieSecure;
+    }
+  });
+
   function fakeResponse(): Response & { cookie: ReturnType<typeof vi.fn>; clearCookie: ReturnType<typeof vi.fn> } {
     return { cookie: vi.fn(), clearCookie: vi.fn() } as unknown as Response & {
       cookie: ReturnType<typeof vi.fn>;
@@ -57,10 +67,45 @@ describe('setDraftCookie / clearDraftCookie', () => {
     );
   });
 
-  it('clears the cookie at the same path it was set on', () => {
+  it('defaults secure to true when COOKIE_SECURE is unset', () => {
+    delete process.env.COOKIE_SECURE;
     const res = fakeResponse();
+    setDraftCookie(res, 'raw-token');
+    expect(res.cookie).toHaveBeenCalledWith(DRAFT_COOKIE_NAME, 'raw-token', expect.objectContaining({ secure: true }));
+  });
+
+  it('only turns secure off when COOKIE_SECURE is exactly "false"', () => {
+    process.env.COOKIE_SECURE = 'false';
+    const res = fakeResponse();
+    setDraftCookie(res, 'raw-token');
+    expect(res.cookie).toHaveBeenCalledWith(
+      DRAFT_COOKIE_NAME,
+      'raw-token',
+      expect.objectContaining({ secure: false }),
+    );
+  });
+
+  it('treats any other COOKIE_SECURE value as still secure (fail safe, not fail open)', () => {
+    process.env.COOKIE_SECURE = 'nope';
+    const res = fakeResponse();
+    setDraftCookie(res, 'raw-token');
+    expect(res.cookie).toHaveBeenCalledWith(DRAFT_COOKIE_NAME, 'raw-token', expect.objectContaining({ secure: true }));
+  });
+
+  it('clears the cookie with the exact same attributes it was set with', () => {
+    delete process.env.COOKIE_SECURE;
+    const res = fakeResponse();
+    setDraftCookie(res, 'raw-token');
     clearDraftCookie(res);
-    expect(res.clearCookie).toHaveBeenCalledWith(DRAFT_COOKIE_NAME, { path: '/' });
+
+    const [, , setOptions] = res.cookie.mock.calls[0] as [string, string, Record<string, unknown>];
+    const [, clearOptions] = res.clearCookie.mock.calls[0] as [string, Record<string, unknown>];
+    expect(clearOptions).toEqual({
+      httpOnly: setOptions.httpOnly,
+      secure: setOptions.secure,
+      sameSite: setOptions.sameSite,
+      path: setOptions.path,
+    });
   });
 });
 
@@ -90,5 +135,16 @@ describe('readDraftCookie', () => {
   it('ignores a malformed segment with no "=" rather than throwing', () => {
     const header = `garbage; ${DRAFT_COOKIE_NAME}=value`;
     expect(readDraftCookie(requestWithCookieHeader(header))).toBe('value');
+  });
+
+  it('returns undefined (not a thrown error) for a malformed %-escape in the cookie value', () => {
+    const header = `${DRAFT_COOKIE_NAME}=%`;
+    expect(() => readDraftCookie(requestWithCookieHeader(header))).not.toThrow();
+    expect(readDraftCookie(requestWithCookieHeader(header))).toBeUndefined();
+  });
+
+  it('returns undefined for a truncated %-escape sequence', () => {
+    const header = `${DRAFT_COOKIE_NAME}=%2`;
+    expect(readDraftCookie(requestWithCookieHeader(header))).toBeUndefined();
   });
 });

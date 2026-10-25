@@ -35,6 +35,6 @@ describe('DraftClaimController', () => {
 
     expect(result).toEqual({ id: 'project-1' });
     expect(claimDraft).toHaveBeenCalledWith('org-1', 'user-1', 'raw-token');
-    expect(res.clearCookie).toHaveBeenCalledWith(DRAFT_COOKIE_NAME, { path: '/' });
+    expect(res.clearCookie).toHaveBeenCalledWith(DRAFT_COOKIE_NAME, expect.objectContaining({ path: '/' }));
   });
 });
