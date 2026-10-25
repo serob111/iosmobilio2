@@ -8,6 +8,7 @@ const STATUS_CODES: Record<number, string> = {
   403: 'FORBIDDEN',
   404: 'NOT_FOUND',
   409: 'CONFLICT',
+  413: 'FILE_TOO_LARGE',
   429: 'TOO_MANY_REQUESTS',
   500: 'INTERNAL_ERROR',
 };

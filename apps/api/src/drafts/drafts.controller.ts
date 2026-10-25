@@ -17,6 +17,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { Public } from '../auth/public.decorator.js';
+import { ICON_UPLOAD_LIMITS } from '../common/upload-limits.js';
 import { DraftGuard } from './draft.guard.js';
 import { DraftRateLimitService, getClientRateLimitKey } from './draft-rate-limit.js';
 import { DraftsService } from './drafts.service.js';
@@ -62,7 +63,7 @@ export class DraftsController {
   @Post('me/icon')
   @Public()
   @UseGuards(DraftGuard)
-  @UseInterceptors(FileInterceptor('icon'))
+  @UseInterceptors(FileInterceptor('icon', { limits: ICON_UPLOAD_LIMITS }))
   async uploadIcon(@Req() request: Request, @UploadedFile() file?: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Прикрепите файл иконки' });

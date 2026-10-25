@@ -219,6 +219,29 @@ describe.skipIf(!hasLiveServices)(
       expect(meta.height).toBe(1024);
     });
 
+    it('rejects an icon upload over 2MB with 413 FILE_TOO_LARGE', async () => {
+      mockSite();
+      const cookie = await signInByMagicLink(`itest-projects-icon-toobig-${Date.now()}@example.com`);
+      const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+      const orgId = me.body.organizations[0].id as string;
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/orgs/${orgId}/projects`)
+        .set('Cookie', cookie)
+        .send({ url: 'https://projects-itest.example/' })
+        .expect(201);
+      const projectId = createRes.body.id as string;
+
+      const oversized = Buffer.alloc(3 * 1024 * 1024, 1);
+      const res = await request(app.getHttpServer())
+        .post(`/orgs/${orgId}/projects/${projectId}/icon`)
+        .set('Cookie', cookie)
+        .attach('icon', oversized, { filename: 'icon.png', contentType: 'image/png' });
+
+      expect(res.status).toBe(413);
+      expect(res.body.error.code).toBe('FILE_TOO_LARGE');
+    });
+
     it.each(['http://minio:9000', 'http://localhost:3000', 'http://169.254.169.254'])(
       'POST /orgs/:orgId/projects with %s is rejected with 400 UNSAFE_URL and never makes a real request',
       async (unsafeUrl) => {

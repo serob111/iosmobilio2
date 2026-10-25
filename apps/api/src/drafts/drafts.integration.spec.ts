@@ -194,6 +194,24 @@ describe.skipIf(!hasLiveServices)(
       expect(meta.height).toBe(1024);
     });
 
+    it('rejects an icon upload over 2MB with 413 FILE_TOO_LARGE', async () => {
+      mockSite();
+      const createRes = await request(app.getHttpServer())
+        .post('/drafts')
+        .send({ url: 'https://drafts-itest.example/' })
+        .expect(201);
+      const cookie = draftCookieFrom(createRes);
+
+      const oversized = Buffer.alloc(3 * 1024 * 1024, 1);
+      const res = await request(app.getHttpServer())
+        .post('/drafts/me/icon')
+        .set('Cookie', cookie)
+        .attach('icon', oversized, { filename: 'icon.png', contentType: 'image/png' });
+
+      expect(res.status).toBe(413);
+      expect(res.body.error.code).toBe('FILE_TOO_LARGE');
+    });
+
     it('rate-limits POST /drafts by the real connection IP after 10 creations, ignoring a spoofed X-Forwarded-For (TRUST_PROXY_HOPS=0 by default)', async () => {
       mockSite();
 

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
+import { ICON_UPLOAD_LIMITS } from '../common/upload-limits.js';
 import { OrgGuard } from '../organizations/org.guard.js';
 import { ProjectGuard } from './project.guard.js';
 import { ProjectsService } from './projects.service.js';
@@ -62,7 +63,7 @@ export class ProjectsController {
 
   @Post(':projectId/icon')
   @UseGuards(OrgGuard, ProjectGuard)
-  @UseInterceptors(FileInterceptor('icon'))
+  @UseInterceptors(FileInterceptor('icon', { limits: ICON_UPLOAD_LIMITS }))
   async uploadIcon(
     @Req() request: Request,
     @Param('projectId') projectId: string,

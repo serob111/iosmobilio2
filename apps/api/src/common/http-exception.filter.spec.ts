@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException, type ArgumentsHost } from '@nestjs/common';
+import { BadRequestException, NotFoundException, PayloadTooLargeException, type ArgumentsHost } from '@nestjs/common';
 import { HttpExceptionFilter } from './http-exception.filter.js';
 import './request-id.types.js';
 
@@ -50,6 +50,20 @@ describe('HttpExceptionFilter', () => {
     expect(status).toHaveBeenCalledWith(500);
     expect(json).toHaveBeenCalledWith({
       error: { code: 'INTERNAL_ERROR', message: 'Something went wrong', requestId: 'req-4' },
+    });
+  });
+
+  it('maps a 413 (e.g. FileInterceptor\'s own PayloadTooLargeException for a too-large upload) to FILE_TOO_LARGE', () => {
+    // FileInterceptor (@nestjs/platform-express) already converts Multer's raw
+    // LIMIT_FILE_SIZE error into a PayloadTooLargeException itself, before this filter
+    // ever runs — there's no raw MulterError to special-case here, just another status
+    // code to map like any other.
+    const { host, status, json } = makeHost('req-5');
+    filter.catch(new PayloadTooLargeException('File too large'), host);
+
+    expect(status).toHaveBeenCalledWith(413);
+    expect(json).toHaveBeenCalledWith({
+      error: { code: 'FILE_TOO_LARGE', message: 'File too large', requestId: 'req-5' },
     });
   });
 
