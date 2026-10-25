@@ -6,6 +6,7 @@ import request from 'supertest';
 import { http, HttpResponse } from 'msw';
 import sharp from 'sharp';
 import { Redis } from 'ioredis';
+import { createObjectStorageFromEnv, draftIconKey } from '@mobilio/storage';
 import { server } from '../../test/mocks/server.js';
 import { createApp } from '../create-app.js';
 
@@ -331,6 +332,71 @@ describe.skipIf(!hasLiveServices)(
         .post(`/orgs/${orgId}/drafts/claim`)
         .set('Cookie', bothCookies);
       expect(reclaimRes.status).toBe(404);
+    });
+
+    it('claims a draft whose icon object is missing: falls back to a generated avatar, no 500, no orphaned project', async () => {
+      mockSite();
+      const draftRes = await request(app.getHttpServer())
+        .post('/drafts')
+        .send({ url: 'https://drafts-itest.example/' })
+        .expect(201);
+      const draftCookie = draftCookieFrom(draftRes);
+
+      // Simulates storage.get() failing — delete the draft's own icon object (the one
+      // createDraft put during site analysis) before claiming it.
+      const meRes = await request(app.getHttpServer()).get('/drafts/me').set('Cookie', draftCookie).expect(200);
+      const draftId = meRes.body.id as string;
+      const storage = createObjectStorageFromEnv();
+      await storage.delete(draftIconKey(draftId));
+
+      const sessionCookie = await signInByMagicLink(`itest-drafts-noicon-${Date.now()}@example.com`);
+      const me = await request(app.getHttpServer()).get('/me').set('Cookie', sessionCookie).expect(200);
+      const orgId = me.body.organizations[0].id as string;
+
+      const claimRes = await request(app.getHttpServer())
+        .post(`/orgs/${orgId}/drafts/claim`)
+        .set('Cookie', [...sessionCookie, draftCookie]);
+      expect(claimRes.status).toBe(201);
+      const projectId = claimRes.body.id as string;
+
+      const projectIconRes = await request(app.getHttpServer())
+        .get(`/orgs/${orgId}/projects/${projectId}/icon`)
+        .set('Cookie', sessionCookie)
+        .redirects(0);
+      expect(projectIconRes.status).toBe(302);
+      const fetched = await fetch(projectIconRes.headers.location as string);
+      expect(fetched.status).toBe(200);
+    });
+
+    it('claims exactly once under concurrency: 5 simultaneous claims of the same draft yield exactly one success', async () => {
+      mockSite();
+      const draftRes = await request(app.getHttpServer())
+        .post('/drafts')
+        .send({ url: 'https://drafts-itest.example/' })
+        .expect(201);
+      const draftCookie = draftCookieFrom(draftRes);
+
+      const sessionCookie = await signInByMagicLink(`itest-drafts-race-${Date.now()}@example.com`);
+      const me = await request(app.getHttpServer()).get('/me').set('Cookie', sessionCookie).expect(200);
+      const orgId = me.body.organizations[0].id as string;
+      const bothCookies = [...sessionCookie, draftCookie];
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          request(app.getHttpServer()).post(`/orgs/${orgId}/drafts/claim`).set('Cookie', bothCookies),
+        ),
+      );
+
+      const succeeded = results.filter((res) => res.status === 201);
+      const notFound = results.filter((res) => res.status === 404);
+      expect(succeeded).toHaveLength(1);
+      expect(notFound).toHaveLength(4);
+
+      const projectsRes = await request(app.getHttpServer())
+        .get(`/orgs/${orgId}/projects`)
+        .set('Cookie', sessionCookie)
+        .expect(200);
+      expect(projectsRes.body).toHaveLength(1);
     });
 
     it('POST /orgs/:orgId/drafts/claim 404s without a draft cookie', async () => {

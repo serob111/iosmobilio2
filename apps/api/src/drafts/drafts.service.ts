@@ -3,9 +3,10 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { runInTokenLookupContext, runInClaimContext, getTenantDb, schema, eq } from '@mobilio/db';
+import { runInTokenLookupContext, runInClaimContext, getTenantDb, schema, eq, and, gt } from '@mobilio/db';
 import {
   CONFIG_SCHEMA_VERSION,
   deriveBundleId,
@@ -19,11 +20,13 @@ import { uuidv7 } from 'uuidv7';
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
 import { analyzeSite, AnalyzeSiteError } from '../projects/analyze-site.js';
-import { processIconImage } from '../projects/icon.js';
+import { processIconImage, generateLetterAvatar } from '../projects/icon.js';
 import { generateDraftToken, hashDraftToken } from './draft-token.js';
 
 @Injectable()
 export class DraftsService {
+  private readonly logger = new Logger(DraftsService.name);
+
   constructor(
     private readonly dbService: DbService,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
@@ -70,19 +73,26 @@ export class DraftsService {
 
     const { rawToken, tokenHash, expiresAt } = generateDraftToken();
 
-    await runInTokenLookupContext(this.dbService.db, tokenHash, () =>
-      getTenantDb().insert(schema.drafts).values({
-        id,
-        name: parsed.data.name,
-        sourceUrl: analysis.url,
-        config: parsed.data,
-        configVersion: CONFIG_SCHEMA_VERSION,
-        tokenHash,
-        expiresAt,
-      }),
-    );
-
+    // Icon first, insert second: if the insert fails, the draft row never existed, so
+    // the icon object has to be cleaned up too rather than left orphaned under an id
+    // nothing references.
     await this.storage.put(draftIconKey(id), analysis.iconBuffer, 'image/png');
+    try {
+      await runInTokenLookupContext(this.dbService.db, tokenHash, () =>
+        getTenantDb().insert(schema.drafts).values({
+          id,
+          name: parsed.data.name,
+          sourceUrl: analysis.url,
+          config: parsed.data,
+          configVersion: CONFIG_SCHEMA_VERSION,
+          tokenHash,
+          expiresAt,
+        }),
+      );
+    } catch (error) {
+      await this.storage.delete(draftIconKey(id)).catch(() => {});
+      throw error;
+    }
 
     return { rawToken };
   }
@@ -141,41 +151,80 @@ export class DraftsService {
   }
 
   /**
-   * POST /orgs/:orgId/drafts/claim — moves a draft into the org as a new project, in one
-   * transaction (runInClaimContext sets app.org_id/app.user_id/app.lookup_token_hash
-   * together so the projects insert and the drafts delete commit or roll back as a unit).
-   * ObjectStorage has no move/copy primitive, so the icon is relocated via get+put+delete.
+   * POST /orgs/:orgId/drafts/claim — moves a draft into the org as a new project.
+   *
+   * Exactly-once under concurrency: the DELETE ... RETURNING against drafts_token_access
+   * (which already requires expires_at > now()) is the FIRST statement in the claiming
+   * transaction — whichever concurrent call's DELETE actually returns a row is the one
+   * and only winner; every other simultaneous call for the same token gets zero rows
+   * back and 404s, never reaching the INSERT. A SELECT-then-INSERT design would let two
+   * concurrent calls both see the row before either commits, both think it's theirs, and
+   * race the insert into two separate projects.
+   *
+   * The icon is copied to its new project key BEFORE the claiming transaction opens (a
+   * read-only pre-read determines which draft this token currently names, so the key is
+   * known up front) — if the claim then loses the race, or the transaction fails
+   * outright, the speculative copy is deleted again rather than left as an orphan under
+   * a project that was never created. On success, the original draft icon is removed
+   * best-effort: the claim has already committed, so a storage cleanup failure here
+   * shouldn't fail the request, just get logged.
    */
   async claimDraft(orgId: string, userId: string, rawToken: string): Promise<{ id: string }> {
     const tokenHash = hashDraftToken(rawToken);
     const projectId = uuidv7();
 
-    const draft = await runInClaimContext(this.dbService.db, { orgId, userId, tokenHash }, async () => {
-      const tx = getTenantDb();
-      const [row] = await tx.select().from(schema.drafts).where(eq(schema.drafts.tokenHash, tokenHash));
-      if (!row || row.expiresAt < new Date()) {
-        return undefined;
-      }
-
-      await tx.insert(schema.projects).values({
-        id: projectId,
-        orgId,
-        name: row.name,
-        sourceUrl: row.sourceUrl,
-        config: { ...(row.config as ProjectConfig), id: projectId },
-        configVersion: row.configVersion,
-      });
-      await tx.delete(schema.drafts).where(eq(schema.drafts.id, row.id));
+    const preRead = await runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
+      const [row] = await getTenantDb().select().from(schema.drafts).where(eq(schema.drafts.tokenHash, tokenHash));
       return row;
     });
-
-    if (!draft) {
+    if (!preRead) {
       throw new NotFoundException({ code: 'DRAFT_NOT_FOUND', message: 'Draft not found or expired' });
     }
 
-    const iconBuffer = await this.storage.get(draftIconKey(draft.id));
-    await this.storage.put(projectIconKey(orgId, projectId), iconBuffer, 'image/png');
-    await this.storage.delete(draftIconKey(draft.id));
+    let draftIconBuffer: Buffer;
+    try {
+      draftIconBuffer = await this.storage.get(draftIconKey(preRead.id));
+    } catch {
+      const preReadConfig = preRead.config as ProjectConfig;
+      draftIconBuffer = await generateLetterAvatar(preRead.name.charAt(0) || '?', preReadConfig.theme.primary);
+    }
+    await this.storage.put(projectIconKey(orgId, projectId), draftIconBuffer, 'image/png');
+
+    let claimedDraftId: string;
+    try {
+      const claimed = await runInClaimContext(this.dbService.db, { orgId, userId, tokenHash }, async () => {
+        const tx = getTenantDb();
+        const [deletedDraft] = await tx
+          .delete(schema.drafts)
+          .where(and(eq(schema.drafts.tokenHash, tokenHash), gt(schema.drafts.expiresAt, new Date())))
+          .returning();
+        if (!deletedDraft) {
+          return undefined;
+        }
+
+        await tx.insert(schema.projects).values({
+          id: projectId,
+          orgId,
+          name: deletedDraft.name,
+          sourceUrl: deletedDraft.sourceUrl,
+          config: { ...(deletedDraft.config as ProjectConfig), id: projectId },
+          configVersion: deletedDraft.configVersion,
+        });
+        return deletedDraft;
+      });
+
+      if (!claimed) {
+        throw new NotFoundException({ code: 'DRAFT_NOT_FOUND', message: 'Draft not found or expired' });
+      }
+      claimedDraftId = claimed.id;
+    } catch (error) {
+      await this.storage.delete(projectIconKey(orgId, projectId)).catch(() => {});
+      throw error;
+    }
+
+    this.storage.delete(draftIconKey(claimedDraftId)).catch((error: unknown) => {
+      this.logger.error({ err: error, draftId: claimedDraftId }, 'Failed to delete claimed draft icon');
+    });
 
     return { id: projectId };
   }

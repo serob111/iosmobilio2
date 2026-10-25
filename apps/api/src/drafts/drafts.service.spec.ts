@@ -36,6 +36,8 @@ const {
   setMock,
   whereMock,
   deleteMock,
+  deleteWhereMock,
+  deleteReturningMock,
   selectMock,
 } = vi.hoisted(() => {
   const whereMock = vi.fn().mockReturnValue(chainTo(undefined));
@@ -43,7 +45,9 @@ const {
   const updateMock = vi.fn().mockReturnValue({ set: setMock });
   const valuesMock = vi.fn().mockReturnValue(chainTo(undefined));
   const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
-  const deleteMock = vi.fn().mockReturnValue(chainTo(undefined));
+  const deleteReturningMock = vi.fn().mockResolvedValue([]);
+  const deleteWhereMock = vi.fn().mockReturnValue({ returning: deleteReturningMock });
+  const deleteMock = vi.fn().mockReturnValue({ where: deleteWhereMock });
   const selectMock = vi.fn().mockReturnValue({ from: () => ({ where: () => [] }) });
   const getTenantDbMock = vi.fn().mockReturnValue({
     insert: insertMock,
@@ -67,6 +71,8 @@ const {
     setMock,
     whereMock,
     deleteMock,
+    deleteWhereMock,
+    deleteReturningMock,
     selectMock,
   };
 });
@@ -77,6 +83,8 @@ vi.mock('@mobilio/db', () => ({
   getTenantDb: getTenantDbMock,
   schema: { drafts: { id: 'drafts.id', tokenHash: 'drafts.tokenHash' }, projects: { id: 'projects.id' } },
   eq: vi.fn((_col: unknown, value: unknown) => ({ col: 'id', value })),
+  and: vi.fn((...conditions: unknown[]) => ({ and: conditions })),
+  gt: vi.fn((_col: unknown, value: unknown) => ({ col: 'expiresAt', gt: value })),
 }));
 
 vi.mock('../db/db.service.js', () => ({
@@ -92,7 +100,11 @@ vi.mock('../projects/analyze-site.js', async (importOriginal) => {
 });
 
 const processIconImageMock = vi.hoisted(() => vi.fn());
-vi.mock('../projects/icon.js', () => ({ processIconImage: processIconImageMock }));
+const generateLetterAvatarMock = vi.hoisted(() => vi.fn());
+vi.mock('../projects/icon.js', () => ({
+  processIconImage: processIconImageMock,
+  generateLetterAvatar: generateLetterAvatarMock,
+}));
 
 describe('DraftsService', () => {
   let storagePut: ReturnType<typeof vi.fn>;
@@ -110,14 +122,17 @@ describe('DraftsService', () => {
       select: selectMock,
     });
     insertMock.mockClear();
-    valuesMock.mockClear();
+    valuesMock.mockReset().mockReturnValue(chainTo(undefined));
     updateMock.mockClear();
     setMock.mockClear();
     whereMock.mockClear();
     deleteMock.mockClear();
+    deleteWhereMock.mockClear();
+    deleteReturningMock.mockReset().mockResolvedValue([]);
     selectMock.mockReset().mockReturnValue({ from: () => ({ where: () => [] }) });
     analyzeSiteMock.mockReset();
     processIconImageMock.mockReset();
+    generateLetterAvatarMock.mockReset().mockResolvedValue(Buffer.from('avatar-bytes'));
     storagePut = vi.fn().mockResolvedValue(undefined);
     storageGet = vi.fn().mockResolvedValue(Buffer.from('icon-bytes'));
     storageDelete = vi.fn().mockResolvedValue(undefined);
@@ -173,6 +188,34 @@ describe('DraftsService', () => {
       // app.lookup_token_hash for that same transaction — so the context tokenHash and
       // the inserted tokenHash must be the exact same value.
       expect(runInTokenLookupContextMock.mock.calls[0]?.[1]).toBe(inserted.tokenHash);
+    });
+
+    it('puts the icon before inserting the row (icon-first ordering)', async () => {
+      analyzeSiteMock.mockResolvedValue(analysis);
+      const callOrder: string[] = [];
+      storagePut.mockImplementation(async () => {
+        callOrder.push('put');
+      });
+      insertMock.mockImplementation(() => {
+        callOrder.push('insert');
+        return { values: valuesMock };
+      });
+      const service = await buildService();
+
+      await service.createDraft('cafe.example');
+
+      expect(callOrder).toEqual(['put', 'insert']);
+    });
+
+    it('deletes the already-put icon when the insert fails, and rethrows', async () => {
+      analyzeSiteMock.mockResolvedValue(analysis);
+      valuesMock.mockReturnValue(Promise.reject(new Error('db insert failed')));
+      const service = await buildService();
+
+      await expect(service.createDraft('cafe.example')).rejects.toThrow('db insert failed');
+      expect(storageDelete).toHaveBeenCalledTimes(1);
+      const [deletedKey] = storageDelete.mock.calls[0] as [string];
+      expect(deletedKey).toMatch(/^drafts\/.+\/icon\.png$/);
     });
 
     it('forwards AnalyzeSiteError.code as the BadRequestException code', async () => {
@@ -292,54 +335,91 @@ describe('DraftsService', () => {
       id: DRAFT_ID,
       name: 'Draft',
       sourceUrl: 'https://x.example/',
-      config: { id: DRAFT_ID, trial: true },
+      config: { id: DRAFT_ID, trial: true, theme: { primary: '#123456' } },
       configVersion: 1,
       tokenHash: 'the-hash',
       expiresAt: new Date(Date.now() + 60_000),
     };
 
-    it('throws NotFoundException and touches no storage when no draft matches the token', async () => {
+    it('throws NotFoundException and touches no storage when the pre-read finds no draft for the token', async () => {
       selectMock.mockReturnValue({ from: () => ({ where: () => [] }) });
       const service = await buildService();
 
       await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toBeInstanceOf(NotFoundException);
       expect(insertMock).not.toHaveBeenCalled();
       expect(storageGet).not.toHaveBeenCalled();
+      expect(storagePut).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundException for an already-expired draft without inserting a project', async () => {
-      selectMock.mockReturnValue({ from: () => ({ where: () => [{ ...draftRow, expiresAt: new Date(Date.now() - 1000) }] }) });
-      const service = await buildService();
-
-      await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toBeInstanceOf(NotFoundException);
-      expect(insertMock).not.toHaveBeenCalled();
-    });
-
-    it('inserts a project with the draft\'s config (id rewritten), deletes the draft, and moves the icon', async () => {
+    it('copies the icon to the new project key, deletes the draft row via DELETE...RETURNING, inserts the project, and best-effort removes the original icon', async () => {
       selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
+      deleteReturningMock.mockResolvedValue([draftRow]);
       const service = await buildService();
 
       const { id: projectId } = await service.claimDraft(ORG_ID, USER_ID, 'raw-token');
 
-      expect(insertMock).toHaveBeenCalled();
-      const inserted = valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      expect(inserted.id).toBe(projectId);
-      expect(inserted.orgId).toBe(ORG_ID);
-      expect((inserted.config as { id: string }).id).toBe(projectId);
-      expect(deleteMock).toHaveBeenCalled();
-
+      // Icon copied before the claim transaction (deleteMock/insertMock) even runs.
       expect(storageGet).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`);
       expect(storagePut).toHaveBeenCalledWith(
         `orgs/${ORG_ID}/projects/${projectId}/icon.png`,
         Buffer.from('icon-bytes'),
         'image/png',
       );
+
+      expect(deleteMock).toHaveBeenCalled();
+      expect(insertMock).toHaveBeenCalled();
+      const inserted = valuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(inserted.id).toBe(projectId);
+      expect(inserted.orgId).toBe(ORG_ID);
+      expect((inserted.config as { id: string }).id).toBe(projectId);
+
+      await Promise.resolve(); // let the fire-and-forget best-effort delete settle
       expect(storageDelete).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`);
       expect(runInClaimContextMock.mock.calls[0]?.[1]).toEqual({
         orgId: ORG_ID,
         userId: USER_ID,
         tokenHash: hashDraftToken('raw-token'),
       });
+    });
+
+    it('falls back to a generated letter avatar when the draft has no icon object, without 500ing', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
+      deleteReturningMock.mockResolvedValue([draftRow]);
+      storageGet.mockRejectedValue(new Error('NoSuchKey'));
+      const service = await buildService();
+
+      const { id: projectId } = await service.claimDraft(ORG_ID, USER_ID, 'raw-token');
+
+      expect(generateLetterAvatarMock).toHaveBeenCalledWith('D', '#123456');
+      expect(storagePut).toHaveBeenCalledWith(
+        `orgs/${ORG_ID}/projects/${projectId}/icon.png`,
+        Buffer.from('avatar-bytes'),
+        'image/png',
+      );
+    });
+
+    it('404s and deletes the speculatively-copied project icon when the claim transaction finds nothing to delete (lost the race, or expired)', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
+      deleteReturningMock.mockResolvedValue([]);
+      const service = await buildService();
+
+      await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toBeInstanceOf(NotFoundException);
+      expect(insertMock).not.toHaveBeenCalled();
+      // The copy at the project key (made before the transaction) must be cleaned up —
+      // never the original draft's own icon, which is still legitimately someone else's.
+      const deletedKeys = storageDelete.mock.calls.map((call) => call[0] as string);
+      expect(deletedKeys.some((key) => key.includes('/projects/'))).toBe(true);
+      expect(deletedKeys.some((key) => key.startsWith('drafts/'))).toBe(false);
+    });
+
+    it('deletes the speculatively-copied project icon and rethrows when the claim transaction itself throws', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
+      runInClaimContextMock.mockRejectedValueOnce(new Error('db exploded'));
+      const service = await buildService();
+
+      await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toThrow('db exploded');
+      const deletedKeys = storageDelete.mock.calls.map((call) => call[0] as string);
+      expect(deletedKeys.some((key) => key.includes('/projects/'))).toBe(true);
     });
   });
 });
