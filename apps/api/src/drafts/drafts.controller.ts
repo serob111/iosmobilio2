@@ -18,7 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { Public } from '../auth/public.decorator.js';
 import { DraftGuard } from './draft.guard.js';
-import { DraftRateLimitService, getClientIp } from './draft-rate-limit.js';
+import { DraftRateLimitService, getClientRateLimitKey } from './draft-rate-limit.js';
 import { DraftsService } from './drafts.service.js';
 import { setDraftCookie } from './draft-token.js';
 import { requireUrl } from './validation.js';
@@ -34,7 +34,7 @@ export class DraftsController {
   @Post()
   @Public()
   async create(@Req() request: Request, @Res({ passthrough: true }) response: Response, @Body() body: unknown) {
-    const allowed = await this.rateLimit.checkAndIncrement(getClientIp(request));
+    const allowed = await this.rateLimit.checkAndIncrement(getClientRateLimitKey(request));
     if (!allowed) {
       throw new HttpException({ message: 'Слишком много запросов. Попробуйте позже.' }, HttpStatus.TOO_MANY_REQUESTS);
     }

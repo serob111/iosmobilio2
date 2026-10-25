@@ -24,6 +24,12 @@ export async function createApp(): Promise<INestApplication> {
   // credentials:true is required for that, and so is a specific (non-wildcard) origin.
   app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
 
+  // How many reverse-proxy hops to trust X-Forwarded-For through before trusting it as
+  // request.ip — 0 (default) means trust nothing, so a client can't spoof its own IP by
+  // sending an arbitrary X-Forwarded-For header and dodge the drafts rate limit. Prod
+  // behind Caddy: TRUST_PROXY_HOPS=1 (see .env.example/README).
+  app.getHttpAdapter().getInstance().set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 0));
+
   const authService = app.get(AuthService);
   app.use('/api/auth', toNodeHandler(authService.auth));
   app.use(json());

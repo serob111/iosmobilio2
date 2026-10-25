@@ -26,15 +26,26 @@ function fakeResponse() {
 
 const draftStub = { id: 'draft-1' };
 const requestWithDraft = { draft: draftStub, draftTokenHash: 'hash-1', headers: {} } as never;
+const requestWithIp = { headers: {}, ip: '203.0.113.5' } as never;
 
 describe('DraftsController', () => {
   describe('create', () => {
+    it('throws BadRequestException (400) and never calls the rate limiter when request.ip is missing', async () => {
+      const checkAndIncrement = vi.fn();
+      const controller = new DraftsController(fakeService(), { checkAndIncrement } as unknown as DraftRateLimitService);
+
+      await expect(
+        controller.create({ headers: {} } as never, fakeResponse() as never, { url: 'example.com' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(checkAndIncrement).not.toHaveBeenCalled();
+    });
+
     it('429s and never calls the service when the rate limit rejects the request', async () => {
       const createDraft = vi.fn();
       const controller = new DraftsController(fakeService({ createDraft }), fakeRateLimit(false));
 
       const error: unknown = await controller
-        .create({ headers: {} } as never, fakeResponse() as never, { url: 'example.com' })
+        .create(requestWithIp, fakeResponse() as never, { url: 'example.com' })
         .catch((e) => e);
 
       expect(error).toBeInstanceOf(HttpException);
@@ -44,7 +55,7 @@ describe('DraftsController', () => {
 
     it('requires a url', async () => {
       const controller = new DraftsController(fakeService(), fakeRateLimit(true));
-      await expect(controller.create({ headers: {} } as never, fakeResponse() as never, {})).rejects.toBeInstanceOf(
+      await expect(controller.create(requestWithIp, fakeResponse() as never, {})).rejects.toBeInstanceOf(
         BadRequestException,
       );
     });
@@ -54,7 +65,7 @@ describe('DraftsController', () => {
       const controller = new DraftsController(fakeService({ createDraft }), fakeRateLimit(true));
       const res = fakeResponse();
 
-      const result = await controller.create({ headers: {} } as never, res as never, { url: 'example.com' });
+      const result = await controller.create(requestWithIp, res as never, { url: 'example.com' });
 
       expect(result).toEqual({ ok: true });
       expect(createDraft).toHaveBeenCalledWith('example.com');

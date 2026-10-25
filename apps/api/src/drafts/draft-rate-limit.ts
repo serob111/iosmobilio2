@@ -1,16 +1,48 @@
-import { Injectable, type OnModuleDestroy } from '@nestjs/common';
+import { BadRequestException, Injectable, type OnModuleDestroy } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import type { Request } from 'express';
 
 const WINDOW_SECONDS = 10 * 60;
 const LIMIT = 10;
 
-export function getClientIp(request: Request): string {
-  const forwarded = request.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.length > 0) {
-    return forwarded.split(',')[0]!.trim();
+function expandIpv6Groups(ip: string): string[] {
+  const [head, tail] = ip.split('::');
+  const headGroups = head ? head.split(':').filter(Boolean) : [];
+  if (!ip.includes('::')) {
+    return headGroups;
   }
-  return 'unknown';
+  const tailGroups = tail ? tail.split(':').filter(Boolean) : [];
+  const zeroCount = Math.max(8 - headGroups.length - tailGroups.length, 0);
+  return [...headGroups, ...Array(zeroCount).fill('0'), ...tailGroups];
+}
+
+/**
+ * IPv6 clients commonly rotate through many addresses within the same /64 (SLAAC privacy
+ * extensions, or simply a provider-assigned /64 per customer) — keying by the full
+ * address would hand out a fresh rate-limit budget on every request. IPv4 has no such
+ * rotation, so it's keyed by the exact address.
+ */
+function rateLimitKeyForIp(ip: string): string {
+  const ipv4Mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (ipv4Mapped) {
+    return ipv4Mapped[1]!;
+  }
+  if (!ip.includes(':')) {
+    return ip;
+  }
+  return `${expandIpv6Groups(ip).slice(0, 4).join(':')}::/64`;
+}
+
+/**
+ * request.ip is Express's own trust-proxy-aware resolution (see create-app.ts's
+ * app.set('trust proxy', ...)) — never read X-Forwarded-For directly here, or a client
+ * can simply send a different fake value on every request and dodge the limit entirely.
+ */
+export function getClientRateLimitKey(request: Request): string {
+  if (!request.ip) {
+    throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Could not determine client IP' });
+  }
+  return rateLimitKeyForIp(request.ip);
 }
 
 /**
@@ -31,10 +63,10 @@ export class DraftRateLimitService implements OnModuleDestroy {
     maxRetriesPerRequest: null,
   });
 
-  async checkAndIncrement(ip: string): Promise<boolean> {
-    const key = `draft-rate-limit:${ip}`;
-    const count = await this.redis.incr(key);
-    await this.redis.expire(key, WINDOW_SECONDS, 'NX');
+  async checkAndIncrement(key: string): Promise<boolean> {
+    const redisKey = `draft-rate-limit:${key}`;
+    const count = await this.redis.incr(redisKey);
+    await this.redis.expire(redisKey, WINDOW_SECONDS, 'NX');
     return count <= LIMIT;
   }
 

@@ -194,30 +194,66 @@ describe.skipIf(!hasLiveServices)(
       expect(meta.height).toBe(1024);
     });
 
-    it('rate-limits POST /drafts by IP after 10 creations within the window', async () => {
+    it('rate-limits POST /drafts by the real connection IP after 10 creations, ignoring a spoofed X-Forwarded-For (TRUST_PROXY_HOPS=0 by default)', async () => {
       mockSite();
-      const ip = '203.0.113.50';
 
+      // A different spoofed X-Forwarded-For on every request — with no trusted proxy
+      // hop configured, Express's request.ip ignores this header entirely, so every one
+      // of these still resolves to the same real (loopback) connection IP and shares one
+      // bucket. If spoofing worked, none of these would ever hit the limit.
       for (let i = 0; i < 10; i++) {
         await request(app.getHttpServer())
           .post('/drafts')
-          .set('X-Forwarded-For', ip)
+          .set('X-Forwarded-For', `203.0.113.${i}`)
           .send({ url: 'https://drafts-itest.example/' })
           .expect(201);
       }
 
       const blocked = await request(app.getHttpServer())
         .post('/drafts')
-        .set('X-Forwarded-For', ip)
+        .set('X-Forwarded-For', '203.0.113.250')
         .send({ url: 'https://drafts-itest.example/' });
       expect(blocked.status).toBe(429);
       expect(blocked.body.error.code).toBe('TOO_MANY_REQUESTS');
+    });
 
-      const otherIp = await request(app.getHttpServer())
-        .post('/drafts')
-        .set('X-Forwarded-For', '203.0.113.99')
-        .send({ url: 'https://drafts-itest.example/' });
-      expect(otherIp.status).toBe(201);
+    describe('with TRUST_PROXY_HOPS=1 (a trusted reverse proxy in front, as in prod behind Caddy)', () => {
+      let proxyApp: INestApplication;
+
+      beforeAll(async () => {
+        process.env.TRUST_PROXY_HOPS = '1';
+        proxyApp = await createApp();
+        await proxyApp.init();
+      });
+
+      afterAll(async () => {
+        await proxyApp.close();
+        delete process.env.TRUST_PROXY_HOPS;
+      });
+
+      it('shares the limit across different IPv6 addresses in the same /64, but gives a different /64 its own budget', async () => {
+        mockSite();
+
+        for (let i = 1; i <= 10; i++) {
+          await request(proxyApp.getHttpServer())
+            .post('/drafts')
+            .set('X-Forwarded-For', `2001:db8:abcd:1::${i.toString(16)}`)
+            .send({ url: 'https://drafts-itest.example/' })
+            .expect(201);
+        }
+
+        const blocked = await request(proxyApp.getHttpServer())
+          .post('/drafts')
+          .set('X-Forwarded-For', '2001:db8:abcd:1::ff')
+          .send({ url: 'https://drafts-itest.example/' });
+        expect(blocked.status).toBe(429);
+
+        const differentPrefix = await request(proxyApp.getHttpServer())
+          .post('/drafts')
+          .set('X-Forwarded-For', '2001:db8:abcd:2::1')
+          .send({ url: 'https://drafts-itest.example/' });
+        expect(differentPrefix.status).toBe(201);
+      });
     });
 
     it('claims a draft into an org: moves config/icon into a new project and the draft stops existing', async () => {
