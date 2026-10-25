@@ -97,33 +97,47 @@ export class DraftsService {
     return { rawToken };
   }
 
-  /** PUT /drafts/me — same full-config-replace contract as ProjectsService.updateProject. */
+  /**
+   * PUT /drafts/me — full config replace, except id/bundleId/trial: those are
+   * server-owned and always come from the existing row, never from the request body, so
+   * a caller can't quietly change a draft's identity or trial flag by including a
+   * different value in an otherwise-ordinary edit.
+   */
   async updateDraft(tokenHash: string, draftId: string, body: unknown): Promise<ProjectConfig> {
     const parsed = parseProjectConfig(body);
     if (!parsed.success) {
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message: parsed.errors.join('; ') });
     }
-    if (parsed.data.id !== draftId) {
-      throw new BadRequestException({
-        code: 'VALIDATION_ERROR',
-        message: 'Идентификатор черновика не совпадает',
-      });
-    }
 
-    const source = parsed.data.source;
-    await runInTokenLookupContext(this.dbService.db, tokenHash, () =>
-      getTenantDb()
+    return runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
+      const tx = getTenantDb();
+      const [existing] = await tx.select().from(schema.drafts).where(eq(schema.drafts.id, draftId));
+      if (!existing) {
+        throw new NotFoundException({ code: 'DRAFT_NOT_FOUND', message: 'Draft not found or expired' });
+      }
+      const existingConfig = existing.config as ProjectConfig;
+      const finalConfig: ProjectConfig = {
+        ...parsed.data,
+        id: existingConfig.id,
+        bundleId: existingConfig.bundleId,
+        trial: existingConfig.trial,
+      };
+
+      const source = finalConfig.source;
+      await tx
         .update(schema.drafts)
         .set({
-          name: parsed.data.name,
-          config: parsed.data,
+          name: finalConfig.name,
+          config: finalConfig,
           configVersion: CONFIG_SCHEMA_VERSION,
+          // Only a 'url' source carries a URL — an 'html' source leaves the existing
+          // column value as-is rather than writing something meaningless over it.
           ...(source.type === 'url' ? { sourceUrl: source.url } : {}),
         })
-        .where(eq(schema.drafts.id, draftId)),
-    );
+        .where(eq(schema.drafts.id, draftId));
 
-    return parsed.data;
+      return finalConfig;
+    });
   }
 
   /** POST /drafts/me/icon — multipart upload, same sharp pipeline as site analysis/projects. */

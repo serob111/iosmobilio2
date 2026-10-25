@@ -243,17 +243,26 @@ describe('DraftsService', () => {
   });
 
   describe('updateDraft', () => {
-    const validConfig = {
+    const existingRow = {
       id: DRAFT_ID,
+      config: {
+        id: DRAFT_ID,
+        bundleId: 'com.example.original',
+        trial: true,
+      },
+    };
+
+    const validConfig = {
+      id: 'someone-elses-id',
       name: 'Updated',
       slug: 'updated',
-      bundleId: 'com.example.updated',
+      bundleId: 'com.evil.hijack',
       source: { type: 'url' as const, url: 'https://new.example/' },
       theme: { primary: '#000000', background: '#FFFFFF', statusBar: 'dark' as const },
       tabs: [{ title: 'Главная', icon: 'home', path: '/' }],
       features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
       allowedDomains: ['new.example'],
-      trial: true,
+      trial: false,
     };
 
     it('rejects an invalid config with VALIDATION_ERROR', async () => {
@@ -264,25 +273,44 @@ describe('DraftsService', () => {
       expect(updateMock).not.toHaveBeenCalled();
     });
 
-    it('rejects when the body id does not match the draft id', async () => {
+    it('throws NotFoundException when no existing draft row matches draftId', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [] }) });
       const service = await buildService();
-      await expect(service.updateDraft('hash', 'different-id', validConfig)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+
+      await expect(service.updateDraft('hash', DRAFT_ID, validConfig)).rejects.toBeInstanceOf(NotFoundException);
       expect(updateMock).not.toHaveBeenCalled();
     });
 
-    it('updates name/config/configVersion and sourceUrl for a url-type source, scoped by the token hash', async () => {
+    it('overwrites id/bundleId/trial from the existing row, ignoring whatever the body sent', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [existingRow] }) });
       const service = await buildService();
-      await service.updateDraft('the-token-hash', DRAFT_ID, validConfig);
 
+      const result = await service.updateDraft('the-token-hash', DRAFT_ID, validConfig);
+
+      expect(result.id).toBe(DRAFT_ID);
+      expect(result.bundleId).toBe('com.example.original');
+      expect(result.trial).toBe(true);
       expect(runInTokenLookupContextMock.mock.calls[0]?.[1]).toBe('the-token-hash');
+
+      const setArg = setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect((setArg.config as Record<string, unknown>).id).toBe(DRAFT_ID);
+      expect((setArg.config as Record<string, unknown>).bundleId).toBe('com.example.original');
+      expect((setArg.config as Record<string, unknown>).trial).toBe(true);
+    });
+
+    it('updates name/configVersion/sourceUrl for a url-type source', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [existingRow] }) });
+      const service = await buildService();
+
+      await service.updateDraft('hash', DRAFT_ID, validConfig);
+
       expect(setMock).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Updated', configVersion: 1, sourceUrl: 'https://new.example/' }),
       );
     });
 
     it('leaves sourceUrl untouched for an html-type source', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [existingRow] }) });
       const htmlConfig = { ...validConfig, source: { type: 'html' as const, entry: 'index.html' } };
       const service = await buildService();
       await service.updateDraft('hash', DRAFT_ID, htmlConfig);

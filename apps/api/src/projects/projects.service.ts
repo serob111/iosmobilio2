@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { runInTenantContext, getTenantDb, schema, eq } from '@mobilio/db';
 import {
@@ -115,7 +116,9 @@ export class ProjectsService {
   /**
    * PUT /orgs/:orgId/projects/:projectId — full config replace, same contract as the
    * file-storage version this replaces: the whole ProjectConfig is validated and
-   * written, not merged field-by-field.
+   * written, not merged field-by-field. id/bundleId/trial are server-owned, though —
+   * always taken from the existing row, never from the request body, so a caller can't
+   * quietly change a project's identity or trial flag via an otherwise-ordinary edit.
    */
   async updateProject(
     orgId: string,
@@ -130,29 +133,36 @@ export class ProjectsService {
         message: parsed.errors.join('; '),
       });
     }
-    if (parsed.data.id !== projectId) {
-      throw new BadRequestException({
-        code: 'VALIDATION_ERROR',
-        message: 'Идентификатор проекта не совпадает',
-      });
-    }
 
-    const source = parsed.data.source;
-    await runInTenantContext(this.dbService.db, { orgId, userId }, () =>
-      getTenantDb()
+    return runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
+      const tx = getTenantDb();
+      const [existing] = await tx.select().from(schema.projects).where(eq(schema.projects.id, projectId));
+      if (!existing) {
+        throw new NotFoundException({ code: 'NOT_FOUND', message: 'Project not found' });
+      }
+      const existingConfig = existing.config as ProjectConfig;
+      const finalConfig: ProjectConfig = {
+        ...parsed.data,
+        id: existingConfig.id,
+        bundleId: existingConfig.bundleId,
+        trial: existingConfig.trial,
+      };
+
+      const source = finalConfig.source;
+      await tx
         .update(schema.projects)
         .set({
-          name: parsed.data.name,
-          config: parsed.data,
+          name: finalConfig.name,
+          config: finalConfig,
           configVersion: CONFIG_SCHEMA_VERSION,
           // Only a 'url' source carries a URL — an 'html' source leaves the existing
           // column value as-is rather than writing something meaningless over it.
           ...(source.type === 'url' ? { sourceUrl: source.url } : {}),
         })
-        .where(eq(schema.projects.id, projectId)),
-    );
+        .where(eq(schema.projects.id, projectId));
 
-    return parsed.data;
+      return finalConfig;
+    });
   }
 
   /** POST /orgs/:orgId/projects/:projectId/icon — multipart upload, same sharp pipeline as site analysis. */

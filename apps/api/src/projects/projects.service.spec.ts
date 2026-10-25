@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ProjectsService } from './projects.service.js';
 import { AnalyzeSiteError } from './analyze-site.js';
@@ -33,13 +33,15 @@ const {
   updateMock,
   setMock,
   whereMock,
+  selectMock,
 } = vi.hoisted(() => {
   const whereMock = vi.fn().mockReturnValue(chainTo(undefined));
   const setMock = vi.fn().mockReturnValue({ where: whereMock });
   const updateMock = vi.fn().mockReturnValue({ set: setMock });
   const valuesMock = vi.fn().mockReturnValue(chainTo(undefined));
   const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
-  const getTenantDbMock = vi.fn().mockReturnValue({ insert: insertMock, update: updateMock });
+  const selectMock = vi.fn().mockReturnValue({ from: () => ({ where: () => [] }) });
+  const getTenantDbMock = vi.fn().mockReturnValue({ insert: insertMock, update: updateMock, select: selectMock });
   const runInTenantContextMock = vi.fn(
     async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn(),
   );
@@ -51,6 +53,7 @@ const {
     updateMock,
     setMock,
     whereMock,
+    selectMock,
   };
 });
 
@@ -84,12 +87,15 @@ describe('ProjectsService', () => {
 
   beforeEach(() => {
     runInTenantContextMock.mockClear();
-    getTenantDbMock.mockReset().mockReturnValue({ insert: insertMock, update: updateMock });
+    getTenantDbMock
+      .mockReset()
+      .mockReturnValue({ insert: insertMock, update: updateMock, select: selectMock });
     insertMock.mockClear();
     valuesMock.mockClear();
     updateMock.mockClear();
     setMock.mockClear();
     whereMock.mockClear();
+    selectMock.mockReset().mockReturnValue({ from: () => ({ where: () => [] }) });
     analyzeSiteMock.mockReset();
     processIconImageMock.mockReset();
     storagePut = vi.fn().mockResolvedValue(undefined);
@@ -195,17 +201,26 @@ describe('ProjectsService', () => {
   });
 
   describe('updateProject', () => {
-    const validConfig = {
+    const existingRow = {
       id: PROJECT_ID,
+      config: {
+        id: PROJECT_ID,
+        bundleId: 'com.example.original',
+        trial: true,
+      },
+    };
+
+    const validConfig = {
+      id: 'someone-elses-id',
       name: 'Updated',
       slug: 'updated',
-      bundleId: 'com.example.updated',
+      bundleId: 'com.evil.hijack',
       source: { type: 'url' as const, url: 'https://new.example/' },
       theme: { primary: '#000000', background: '#FFFFFF', statusBar: 'dark' as const },
       tabs: [{ title: 'Главная', icon: 'home', path: '/' }],
       features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
       allowedDomains: ['new.example'],
-      trial: true,
+      trial: false,
     };
 
     it('rejects an invalid config with VALIDATION_ERROR', async () => {
@@ -216,15 +231,33 @@ describe('ProjectsService', () => {
       expect(updateMock).not.toHaveBeenCalled();
     });
 
-    it('rejects when the body id does not match the path projectId', async () => {
+    it('throws NotFoundException when no existing project row matches projectId', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [] }) });
       const service = await buildService();
       await expect(
-        service.updateProject(ORG_ID, USER_ID, 'different-id', validConfig),
-      ).rejects.toBeInstanceOf(BadRequestException);
+        service.updateProject(ORG_ID, USER_ID, PROJECT_ID, validConfig),
+      ).rejects.toBeInstanceOf(NotFoundException);
       expect(updateMock).not.toHaveBeenCalled();
     });
 
+    it('overwrites id/bundleId/trial from the existing row, ignoring whatever the body sent', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [existingRow] }) });
+      const service = await buildService();
+
+      const result = await service.updateProject(ORG_ID, USER_ID, PROJECT_ID, validConfig);
+
+      expect(result.id).toBe(PROJECT_ID);
+      expect(result.bundleId).toBe('com.example.original');
+      expect(result.trial).toBe(true);
+
+      const setArg = setMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect((setArg.config as Record<string, unknown>).id).toBe(PROJECT_ID);
+      expect((setArg.config as Record<string, unknown>).bundleId).toBe('com.example.original');
+      expect((setArg.config as Record<string, unknown>).trial).toBe(true);
+    });
+
     it('updates name/config/configVersion and sourceUrl for a url-type source', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [existingRow] }) });
       const service = await buildService();
       await service.updateProject(ORG_ID, USER_ID, PROJECT_ID, validConfig);
 
@@ -238,6 +271,7 @@ describe('ProjectsService', () => {
     });
 
     it('leaves sourceUrl untouched for an html-type source', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [existingRow] }) });
       const htmlConfig = { ...validConfig, source: { type: 'html' as const, entry: 'index.html' } };
       const service = await buildService();
       await service.updateProject(ORG_ID, USER_ID, PROJECT_ID, htmlConfig);
