@@ -8,11 +8,9 @@ import './draft.types.js';
 
 /**
  * Guards the @Public() /drafts/me* routes — identity comes entirely from the claim-token
- * cookie, never a session. Treats an already-expired draft as not found even though
- * drafts_token_access (the RLS policy this runs under) doesn't itself check expiry — only
- * drafts_delete_expired and the worker's hourly sweep do that, on their own schedule. Without
- * this check, a client could keep reading/writing a draft past its stated 7-day lifetime
- * for as long as the sweep happens to be running late.
+ * cookie, never a session. drafts_token_access (the RLS policy this runs under) requires
+ * expires_at > now() itself, so an expired draft simply never comes back from the query
+ * below — there's no separate expiry check to do here.
  */
 @Injectable()
 export class DraftGuard implements CanActivate {
@@ -31,7 +29,7 @@ export class DraftGuard implements CanActivate {
       return row;
     });
 
-    if (!draft || draft.expiresAt < new Date()) {
+    if (!draft) {
       throw new NotFoundException({ code: 'DRAFT_NOT_FOUND', message: 'Draft not found' });
     }
 

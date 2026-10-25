@@ -77,7 +77,7 @@ describe.skipIf(!hasFullEnv)('db:migrate (live Postgres)', () => {
 
     const rls = await migrator.db.execute(
       sql`select relname, relrowsecurity, relforcerowsecurity from pg_class
-          where relname in ('memberships', 'invitations', 'projects')`,
+          where relname in ('memberships', 'invitations', 'projects', 'drafts')`,
     );
     for (const row of rls.rows as Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>) {
       expect(row.relrowsecurity, `${row.relname} should have RLS enabled`).toBe(true);

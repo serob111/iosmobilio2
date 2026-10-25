@@ -7,23 +7,47 @@ import { createObjectStorageFromEnv, draftIconKey } from '@mobilio/storage';
 import { cleanupExpiredDrafts } from '../src/drafts-cleanup';
 
 // Same REQUIRE_LIVE_SERVICES convention as test/integration.redis.test.ts — this file
-// additionally needs a real Postgres (mobilio_app) and MinIO/S3, since the cleanup job
-// touches both.
+// additionally needs a real Postgres (both mobilio_app and mobilio_migrator — an
+// already-expired fixture row can only be inserted by bypassing RLS, see
+// insertExpiredDirectly below) and MinIO/S3, since the cleanup job touches both.
 const hasLiveServices =
   Boolean(process.env.DATABASE_URL) &&
+  Boolean(process.env.MIGRATOR_DATABASE_URL) &&
   Boolean(process.env.REDIS_URL) &&
   Boolean(process.env.S3_ENDPOINT) &&
   Boolean(process.env.S3_BUCKET) &&
   Boolean(process.env.S3_ACCESS_KEY_ID);
 if (!hasLiveServices && process.env.REQUIRE_LIVE_SERVICES === 'true') {
   throw new Error(
-    'REQUIRE_LIVE_SERVICES=true but DATABASE_URL/REDIS_URL/S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY_ID are not all set',
+    'REQUIRE_LIVE_SERVICES=true but DATABASE_URL/MIGRATOR_DATABASE_URL/REDIS_URL/S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY_ID are not all set',
   );
 }
 
 describe.skipIf(!hasLiveServices)('drafts cleanup (live Postgres + Redis + MinIO)', () => {
+  /**
+   * drafts_token_access's WITH CHECK now requires expires_at > now() (see
+   * packages/db/migrations/0007_drafts_rls_fix.sql), so an already-expired row can't be
+   * created through the normal, token-scoped app-role insert path at all — only by
+   * bypassing RLS entirely, which only mobilio_migrator (the table owner) can do.
+   */
+  async function insertExpiredDirectly(
+    migratorDb: ReturnType<typeof createDb>['db'],
+    id: string,
+    tokenHash: string,
+  ): Promise<void> {
+    await migratorDb.insert(schema.drafts).values({
+      id,
+      name: 'Expired',
+      sourceUrl: 'https://x.example/',
+      config: {},
+      tokenHash,
+      expiresAt: new Date(Date.now() - 1_000),
+    });
+  }
+
   it('deletes an expired draft row and its icon object, leaving an unexpired one untouched', async () => {
     const { db, pool } = createDb(process.env.DATABASE_URL!);
+    const migrator = createDb(process.env.MIGRATOR_DATABASE_URL!);
     const storage = createObjectStorageFromEnv();
 
     const expiredId = randomUUID();
@@ -32,16 +56,7 @@ describe.skipIf(!hasLiveServices)('drafts cleanup (live Postgres + Redis + MinIO
     const liveTokenHash = `worker-itest-${randomUUID()}`;
 
     try {
-      await runInTokenLookupContext(db, expiredTokenHash, () =>
-        getTenantDb().insert(schema.drafts).values({
-          id: expiredId,
-          name: 'Expired',
-          sourceUrl: 'https://x.example/',
-          config: {},
-          tokenHash: expiredTokenHash,
-          expiresAt: new Date(Date.now() - 1_000),
-        }),
-      );
+      await insertExpiredDirectly(migrator.db, expiredId, expiredTokenHash);
       await runInTokenLookupContext(db, liveTokenHash, () =>
         getTenantDb().insert(schema.drafts).values({
           id: liveId,
@@ -58,9 +73,7 @@ describe.skipIf(!hasLiveServices)('drafts cleanup (live Postgres + Redis + MinIO
       expect(result.deletedCount).toBeGreaterThanOrEqual(1);
       expect(result.iconDeleteFailures).toBe(0);
 
-      const remainingExpired = await runInTokenLookupContext(db, expiredTokenHash, () =>
-        getTenantDb().select().from(schema.drafts).where(eq(schema.drafts.tokenHash, expiredTokenHash)),
-      );
+      const remainingExpired = await migrator.db.select().from(schema.drafts).where(eq(schema.drafts.id, expiredId));
       expect(remainingExpired).toHaveLength(0);
       await expect(storage.get(draftIconKey(expiredId))).rejects.toThrow();
 
@@ -69,8 +82,9 @@ describe.skipIf(!hasLiveServices)('drafts cleanup (live Postgres + Redis + MinIO
       );
       expect(remainingLive).toHaveLength(1);
     } finally {
-      await runInTokenLookupContext(db, liveTokenHash, () => getTenantDb().delete(schema.drafts)).catch(() => {});
+      await migrator.db.delete(schema.drafts).where(eq(schema.drafts.id, liveId)).catch(() => {});
       await pool.end();
+      await migrator.pool.end();
     }
   });
 

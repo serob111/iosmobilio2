@@ -4,7 +4,7 @@ export * as schema from './schema';
 // eq/and straight from `drizzle-orm` in a consuming app can resolve a structurally
 // identical but nominally different SQL<unknown> type (dual CJS/ESM resolution), which
 // TypeScript then rejects as incompatible wherever it meets `schema`'s column types.
-export { eq, and, or, lt } from 'drizzle-orm';
+export { eq, and, or, lt, gt, sql } from 'drizzle-orm';
 export { createDb } from './client';
 export type { Db } from './client';
 export {

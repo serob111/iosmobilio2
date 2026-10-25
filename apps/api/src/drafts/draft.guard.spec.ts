@@ -67,30 +67,11 @@ describe('DraftGuard', () => {
     expect(runInTokenLookupContextMock.mock.calls[0]?.[1]).toBe(TOKEN_HASH);
   });
 
-  it('throws NotFoundException when no draft row matches the token hash', async () => {
+  it('throws NotFoundException when no draft row matches the token hash (including an expired one — RLS excludes it before the guard ever sees it)', async () => {
     runInTokenLookupContextMock.mockImplementation(
       async (_db: unknown, _tokenHash: string, fn: () => Promise<unknown>) => fn(),
     );
     getTenantDbMock.mockReturnValue({ select: () => ({ from: () => ({ where: () => [] }) }) });
-
-    const ctx = contextWithRequest({ headers: { cookie: `${DRAFT_COOKIE_NAME}=${RAW_TOKEN}` } });
-    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it('throws NotFoundException for a token that matches a row which has already expired', async () => {
-    runInTokenLookupContextMock.mockImplementation(
-      async (_db: unknown, _tokenHash: string, fn: () => Promise<unknown>) => fn(),
-    );
-    const expiredRow = {
-      id: 'draft-1',
-      name: 'Draft',
-      sourceUrl: 'https://x',
-      config: {},
-      configVersion: 1,
-      tokenHash: TOKEN_HASH,
-      expiresAt: new Date(Date.now() - 1_000),
-    };
-    getTenantDbMock.mockReturnValue({ select: () => ({ from: () => ({ where: () => [expiredRow] }) }) });
 
     const ctx = contextWithRequest({ headers: { cookie: `${DRAFT_COOKIE_NAME}=${RAW_TOKEN}` } });
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(NotFoundException);
