@@ -306,33 +306,60 @@ POST /orgs/:orgId/drafts/claim     — переносит черновик в п
 ```
 
 `POST /drafts` не требует входа (`@Public()`) — сырой токен (32 случайных байта, как у
-`invitations`) уходит только в httpOnly cookie (`mobilio_draft_token`, `sameSite: lax`, 7
-дней), в БД — только его sha256-хеш. `/drafts/me*` защищены `DraftGuard`: он читает cookie,
-резолвит черновик по хешу через `runInTokenLookupContext` и сам же считает уже
-просроченный черновик несуществующим — независимо от того, когда до него доберётся
-воркер. Rate limit на создание — Redis fixed-window (10 за 10 минут на IP, `INCR` +
-`EXPIRE ... NX`), те же цифры, что были у `apps/web`'s in-memory лимитера.
+`invitations`) уходит только в httpOnly cookie (`mobilio_draft_token`, `sameSite: lax`,
+`secure` по умолчанию — см. `COOKIE_SECURE` ниже, 7 дней), в БД — только его sha256-хеш.
+`/drafts/me*` защищены `DraftGuard`: он читает cookie и резолвит черновик по хешу через
+`runInTokenLookupContext` — RLS сама отфильтровывает истёкшие черновики (см. ниже), так
+что отдельной проверки на expiry в guard'е не нужно.
+
+Rate limit на создание — Redis fixed-window (10 за 10 минут, `INCR` + `EXPIRE ... NX`),
+по `request.ip`, не по заголовку напрямую: Express сам решает, доверять ли
+`X-Forwarded-For`, через `app.set('trust proxy', TRUST_PROXY_HOPS)` в `create-app.ts`.
+`TRUST_PROXY_HOPS=0` (по умолчанию, локально) — заголовок игнорируется целиком, так что
+подмена `X-Forwarded-For` не даёт свежий лимит. В проде за Caddy — `TRUST_PROXY_HOPS=1`
+(см. `.env.example`). IPv6-клиенты ключуются по префиксу `/64` (провайдер обычно выдаёт
+один `/64` на клиента, а конкретный адрес внутри него может меняться от запроса к
+запросу) — иначе one IPv6 client получал бы свежий лимит на каждый адрес; IPv4 — по
+полному адресу. Если `request.ip` не удалось определить — 400, а не общий ключ.
 
 RLS на `drafts` — тем же паттерном, что у `invitations` (доступ по
-`app.lookup_token_hash`), но `FOR ALL`, не только `SELECT`: черновик нужно не только
-читать, но и создавать/править/удалять анонимно. Для фоновой очистки истёкших черновиков
-нужна была отдельная политика: Postgres требует, чтобы строка прошла проверку **и** SELECT/ALL-
-политик, **и** политики конкретной команды (они AND'ятся, а не сливаются в один OR) — так
-что `drafts_delete_expired` (`FOR DELETE`) без зеркальной `drafts_expired_select`
-(`FOR SELECT`, тот же предикат `expires_at < now()`) была фактически бессильна: `A AND (A
-OR B)` схлопывается в `A`. Обе политики на `expires_at < now()` — безопасны без всякого
-`app.*`-контекста, потому что предикат не секретный: «этот черновик уже истёк» — факт, не
-зависящий от того, кто спрашивает.
+`app.lookup_token_hash`), `FOR ALL`, с дополнительным условием `expires_at > now()` (и в
+`USING`, и в `WITH CHECK`) — истёкший черновик невидим и неизменяем даже по верному
+токену. `FORCE ROW LEVEL SECURITY` остаётся включённым (как на всех RLS-таблицах в этой
+схеме, см. выше) — `mobilio_migrator` не получает освобождения владельца от собственных
+политик. Вместо этого отдельная политика `drafts_cleanup` (`FOR ALL`, `USING (expires_at
+< now())`) выдана `TO mobilio_migrator` — и только ему, не `PUBLIC`, не `mobilio_app`.
+Permissive-политики для одной роли ORятся, так что для `mobilio_migrator` это складывается
+с `drafts_token_access`; на `mobilio_app` политика вообще не действует.
+
+Фоновая очистка — SQL-функция `public.cleanup_expired_drafts(batch)`, `SECURITY DEFINER`
+с владельцем `mobilio_migrator` — выполняется под этой ролью и проходит через
+`drafts_cleanup`. Postgres по умолчанию выдаёт `EXECUTE` на новые функции роли `PUBLIC` —
+явный `REVOKE EXECUTE ... FROM PUBLIC` перед `GRANT ... TO mobilio_app` закрывает это,
+иначе любая роль с доступом к базе могла бы звать функцию напрямую. `SET search_path =
+public` защищает от переопределения search_path вызывающей сессией. `apps/worker` раз в
+час (`queue.upsertJobScheduler`, идемпотентно переживает перезапуски) вызывает её в цикле
+пачками по 500, пока не вернётся меньше 500 строк, и best-effort чистит иконки удалённых
+черновиков.
 
 `POST /orgs/:orgId/drafts/claim` (под `OrgGuard`) берёт claim-токен из той же cookie (не
-из тела запроса) и одной транзакцией (`runInClaimContext`, выставляет `app.org_id`,
-`app.user_id` и `app.lookup_token_hash` сразу) переносит черновик в `projects` и удаляет
-его из `drafts` — коммит/роллбэк атомарно для обеих таблиц. Иконка переносится
-`get`+`put`+`delete` (у `ObjectStorage` нет `copy`).
+из тела запроса). Ровно один клейм при гонке: первой операцией в транзакции идёт
+`DELETE ... WHERE token_hash = $1 AND expires_at > now() RETURNING *` — только тот
+конкурентный вызов, чей `DELETE` реально вернул строку, продолжает до `INSERT` в
+`projects`; остальные получают 0 строк и 404, даже не добравшись до вставки. Иконка
+копируется в `projectIconKey` до открытия транзакции (сначала короткий read-only
+pre-read узнаёт id черновика); если иконки черновика нет — используется сгенерированный
+буквенный аватар (`generateLetterAvatar`), без 500. Если транзакция клейма проигрывает
+гонку или падает — скопированная иконка удаляется, чтобы не остался проект-сирота без
+реального клейма. При успехе иконка самого черновика удаляется best-effort (ошибка
+логируется, но не валит уже закоммиченный запрос).
 
-`apps/worker` раз в час (`queue.upsertJobScheduler`, идемпотентно переживает перезапуски —
-не просто `setInterval`) удаляет все истёкшие черновики и best-effort чистит их иконки в
-object storage.
+И `PUT /drafts/me`, и `PUT /orgs/:orgId/projects/:projectId` всегда перезатирают
+серверные поля конфига (`id`, `bundleId`, `trial`) значением из уже сохранённой строки —
+тело запроса может прислать что угодно в эти поля, оно будет проигнорировано.
+
+Загрузка иконки (`projects`, `drafts`) ограничена 2 МБ (`FileInterceptor`'s `limits`) —
+больше → `413 FILE_TOO_LARGE`.
 
 ## Защита от SSRF (apps/api/src/net)
 
