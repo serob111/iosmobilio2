@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ObjectNotFoundError } from '@mobilio/storage';
 import { DraftsService } from './drafts.service.js';
 import { hashDraftToken } from './draft-token.js';
 import { AnalyzeSiteError } from '../projects/analyze-site.js';
@@ -410,10 +411,10 @@ describe('DraftsService', () => {
       });
     });
 
-    it('falls back to a generated letter avatar when the draft has no icon object, without 500ing', async () => {
+    it('falls back to a generated letter avatar when the draft has no icon object (ObjectNotFoundError), without 500ing', async () => {
       selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
       deleteReturningMock.mockResolvedValue([draftRow]);
-      storageGet.mockRejectedValue(new Error('NoSuchKey'));
+      storageGet.mockRejectedValue(new ObjectNotFoundError(`drafts/${DRAFT_ID}/icon.png`));
       const service = await buildService();
 
       const { id: projectId } = await service.claimDraft(ORG_ID, USER_ID, 'raw-token');
@@ -424,6 +425,17 @@ describe('DraftsService', () => {
         Buffer.from('avatar-bytes'),
         'image/png',
       );
+    });
+
+    it('rethrows a non-NotFound storage.get error instead of falling back to an avatar', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => [draftRow] }) });
+      storageGet.mockRejectedValue(new Error('S3 is down'));
+      const service = await buildService();
+
+      await expect(service.claimDraft(ORG_ID, USER_ID, 'raw-token')).rejects.toThrow('S3 is down');
+      expect(generateLetterAvatarMock).not.toHaveBeenCalled();
+      expect(storagePut).not.toHaveBeenCalled();
+      expect(deleteMock).not.toHaveBeenCalled();
     });
 
     it('404s and deletes the speculatively-copied project icon when the claim transaction finds nothing to delete (lost the race, or expired)', async () => {

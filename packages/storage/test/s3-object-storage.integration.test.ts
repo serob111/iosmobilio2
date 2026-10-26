@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createObjectStorageFromEnv, S3ObjectStorage, type ObjectStorage } from '../src/object-storage';
+import { createObjectStorageFromEnv, ObjectNotFoundError, S3ObjectStorage, type ObjectStorage } from '../src/object-storage';
 
 // Only runs against a real S3-compatible endpoint (MinIO in docker-compose/CI). Locally
 // this just skips: plain `npm test` shouldn't require live infrastructure. In CI,
@@ -34,7 +34,12 @@ describe.skipIf(!hasLiveS3)('S3ObjectStorage (live MinIO)', () => {
     const deleteKey = `test/s3-object-storage-delete-${Date.now()}.txt`;
     await storage.put(deleteKey, Buffer.from('bye'), 'text/plain');
     await storage.delete(deleteKey);
-    await expect(storage.get(deleteKey)).rejects.toThrow();
+    await expect(storage.get(deleteKey)).rejects.toThrow(ObjectNotFoundError);
+  });
+
+  it('get throws ObjectNotFoundError for a key that was never written', async () => {
+    const missingKey = `test/s3-object-storage-missing-${Date.now()}.txt`;
+    await expect(storage.get(missingKey)).rejects.toThrow(ObjectNotFoundError);
   });
 
   it('putStream multipart-uploads a large stream, and the full content round-trips', async () => {

@@ -1,12 +1,26 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
 import type { Readable } from 'node:stream';
+
+/**
+ * Thrown by get() when the key doesn't exist — a stable, implementation-agnostic signal
+ * so callers (e.g. DraftsService.claimDraft's icon fallback) can distinguish "missing
+ * object, fall back" from any other failure (network error, permission denied, ...)
+ * without importing AWS SDK error classes themselves.
+ */
+export class ObjectNotFoundError extends Error {
+  constructor(key: string) {
+    super(`Object not found: ${key}`);
+    this.name = 'ObjectNotFoundError';
+  }
+}
 
 export interface ObjectStorage {
   put(key: string, body: Buffer, contentType?: string): Promise<void>;
@@ -91,7 +105,15 @@ export class S3ObjectStorage implements ObjectStorage {
   }
 
   async get(key: string): Promise<Buffer> {
-    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    let res;
+    try {
+      res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    } catch (error) {
+      if (error instanceof NoSuchKey) {
+        throw new ObjectNotFoundError(key);
+      }
+      throw error;
+    }
     if (!res.Body) {
       throw new Error(`Object has no body: ${key}`);
     }

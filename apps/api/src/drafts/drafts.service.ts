@@ -15,7 +15,7 @@ import {
   type ProjectConfig,
   type ProjectConfigInput,
 } from '@mobilio/config';
-import { type ObjectStorage, draftIconKey, projectIconKey } from '@mobilio/storage';
+import { ObjectNotFoundError, type ObjectStorage, draftIconKey, projectIconKey } from '@mobilio/storage';
 import { uuidv7 } from 'uuidv7';
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
@@ -198,7 +198,13 @@ export class DraftsService {
     let draftIconBuffer: Buffer;
     try {
       draftIconBuffer = await this.storage.get(draftIconKey(preRead.id));
-    } catch {
+    } catch (error) {
+      // Only a genuinely missing object falls back to a generated avatar — any other
+      // failure (network error, permission denied, ...) is a real problem that should
+      // fail the claim, not get silently papered over with a fake icon.
+      if (!(error instanceof ObjectNotFoundError)) {
+        throw error;
+      }
       const preReadConfig = preRead.config as ProjectConfig;
       draftIconBuffer = await generateLetterAvatar(preRead.name.charAt(0) || '?', preReadConfig.theme.primary);
     }
