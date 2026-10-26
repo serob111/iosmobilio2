@@ -27,6 +27,8 @@ export interface ObjectStorage {
   /** Multipart-uploads a stream — for files too large to buffer whole in memory (e.g. .ipa builds). */
   putStream(key: string, body: Readable, contentType?: string): Promise<void>;
   get(key: string): Promise<Buffer>;
+  /** For proxying a potentially-large object through the api without buffering it whole in memory. */
+  getStream(key: string): Promise<Readable>;
   delete(key: string): Promise<void>;
   /**
    * A time-limited GET url — the only way objects are ever downloaded (no public bucket
@@ -119,6 +121,24 @@ export class S3ObjectStorage implements ObjectStorage {
     }
     const bytes = await res.Body.transformToByteArray();
     return Buffer.from(bytes);
+  }
+
+  async getStream(key: string): Promise<Readable> {
+    let res;
+    try {
+      res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    } catch (error) {
+      if (error instanceof NoSuchKey) {
+        throw new ObjectNotFoundError(key);
+      }
+      throw error;
+    }
+    if (!res.Body) {
+      throw new Error(`Object has no body: ${key}`);
+    }
+    // The SDK's Body is a Node Readable under the default Node runtime (NodeHttpHandler)
+    // — not a web ReadableStream, which only shows up under the browser/fetch runtime.
+    return res.Body as Readable;
   }
 
   async delete(key: string): Promise<void> {

@@ -42,6 +42,25 @@ describe.skipIf(!hasLiveS3)('S3ObjectStorage (live MinIO)', () => {
     await expect(storage.get(missingKey)).rejects.toThrow(ObjectNotFoundError);
   });
 
+  it('getStream returns a Readable whose content matches a put buffer', async () => {
+    const streamReadKey = `test/s3-object-storage-getstream-${Date.now()}.txt`;
+    await storage.put(streamReadKey, Buffer.from('streamed content'), 'text/plain');
+
+    const stream = await storage.getStream(streamReadKey);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk as Buffer);
+    }
+    expect(Buffer.concat(chunks).toString('utf8')).toBe('streamed content');
+
+    await storage.delete(streamReadKey);
+  });
+
+  it('getStream throws ObjectNotFoundError for a key that was never written', async () => {
+    const missingKey = `test/s3-object-storage-getstream-missing-${Date.now()}.txt`;
+    await expect(storage.getStream(missingKey)).rejects.toThrow(ObjectNotFoundError);
+  });
+
   it('putStream multipart-uploads a large stream, and the full content round-trips', async () => {
     // Bigger than lib-storage's default 5MB part size, so this genuinely exercises a
     // multipart upload rather than falling back to a single PutObject under the hood.
