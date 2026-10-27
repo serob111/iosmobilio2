@@ -207,7 +207,7 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
     expect(result).toBeUndefined();
   });
 
-  it('WITH CHECK (true) still lets a token-scoped UPDATE clear the token and move to a finished status', async () => {
+  it('the tightened WITH CHECK still lets a token-scoped UPDATE clear the token and move to a finished status', async () => {
     const tokenHash = `test-hash-${uuidv7()}`;
     const buildId = await insertBuild({ tokenHash });
 
@@ -223,6 +223,75 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
     // The same token can no longer find the (now finished, detokenized) build.
     const after = await runInBuildContext(app.db, tokenHash, async () => 'should not run');
     expect(after).toBeUndefined();
+  });
+
+  it('rejects an UPDATE that tries to forge a different token_hash instead of clearing it', async () => {
+    const tokenHash = `test-hash-${uuidv7()}`;
+    const buildId = await insertBuild({ tokenHash });
+
+    let caught: unknown;
+    try {
+      await runInBuildContext(app.db, tokenHash, () =>
+        getTenantDb()
+          .update(builds)
+          .set({ status: 'done', tokenHash: 'someone-elses-hash', finishedAt: new Date() })
+          .where(eq(builds.id, buildId)),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { cause?: Error }).cause?.message).toMatch(/row-level security/i);
+
+    // The build is unaffected — still queued, still reachable by its real token.
+    const stillThere = await runInBuildContext(app.db, tokenHash, async (build) => build.status);
+    expect(stillThere).toBe('queued');
+  });
+
+  it('rejects an UPDATE that tries to move status back to queued', async () => {
+    const tokenHash = `test-hash-${uuidv7()}`;
+    const buildId = await insertBuild({ tokenHash, status: 'building', startedAt: new Date() });
+
+    let caught: unknown;
+    try {
+      await runInBuildContext(app.db, tokenHash, () =>
+        getTenantDb().update(builds).set({ status: 'queued' }).where(eq(builds.id, buildId)),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { cause?: Error }).cause?.message).toMatch(/row-level security/i);
+  });
+
+  it('the immutable-fields trigger rejects an UPDATE that reassigns org_id/project_id, even outside the token policy entirely', async () => {
+    const buildId = await insertBuild();
+    const otherOrgId = uuidv7();
+
+    let caught: unknown;
+    try {
+      // Runs as the migrator in org A's own tenant context — well past the token USING
+      // gate entirely — specifically to prove the trigger is an independent, unconditional
+      // backstop, not something only reachable through the runner's narrow token path.
+      await runInTenantContext(migrator.db, { orgId: orgAId, userId }, () =>
+        getTenantDb().update(builds).set({ orgId: otherOrgId }).where(eq(builds.id, buildId)),
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { cause?: Error }).cause?.message).toMatch(/org_id is immutable/i);
+
+    let caughtProject: unknown;
+    try {
+      await runInTenantContext(migrator.db, { orgId: orgAId, userId }, () =>
+        getTenantDb().update(builds).set({ projectId: uuidv7() }).where(eq(builds.id, buildId)),
+      );
+    } catch (error) {
+      caughtProject = error;
+    }
+    expect(caughtProject).toBeInstanceOf(Error);
+    expect((caughtProject as { cause?: Error }).cause?.message).toMatch(/project_id is immutable/i);
   });
 
   it("org B's tenant context cannot see org A's build", async () => {
