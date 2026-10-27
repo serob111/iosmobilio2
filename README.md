@@ -47,7 +47,19 @@ GitHub → Settings → Developer settings → Fine-grained tokens → Generate 
 
 Это и есть `GITHUB_DISPATCH_TOKEN`.
 
-### 3. Заполни apps/api/.env
+### 3. Сгенерируй BUILD_TOKEN_KEY и добавь его в секреты репозитория
+
+```
+openssl rand -base64 32
+```
+
+Это значение идёт **и** в `apps/api/.env` (`BUILD_TOKEN_KEY`), **и** в секрет репозитория
+`BUILD_TOKEN_KEY` (Settings → Secrets and variables → Actions → New repository secret) —
+один и тот же ключ на обеих сторонах. `api` шифрует одноразовый токен сборки этим ключом
+(AES-256-GCM) перед тем, как он попадёт в workflow_dispatch; воркфлоу расшифровывает его
+тем же ключом на стороне GitHub (см. «Сборки» ниже).
+
+### 4. Заполни apps/api/.env
 
 ```
 BUILD_RUNNER=github
@@ -56,9 +68,10 @@ GITHUB_DISPATCH_TOKEN=github_pat_...
 GITHUB_REPO=serob111/iosmobilio2
 GITHUB_WORKFLOW=build-ipa.yml
 GITHUB_REF=main
+BUILD_TOKEN_KEY=<то же значение, что в секрете репозитория>
 ```
 
-### 4. Создай сборку
+### 5. Создай сборку
 
 Сессионной cookie из обычного входа (см. «Авторизация и организации» ниже) и существующего
 проекта достаточно:
@@ -68,10 +81,20 @@ curl -X POST http://localhost:3011/orgs/<orgId>/projects/<projectId>/builds \
   -H "Cookie: better-auth.session_token=..."
 ```
 
-`api` сам вызовет `workflow_dispatch` с `buildId`/одноразовым `buildToken`/`baseUrl=API_PUBLIC_URL` —
-дальше workflow сам пройдёт `start → config → icon → сборка → upload`, не трогая `apps/web`.
-Статус — `GET /orgs/<orgId>/projects/<projectId>/builds/<buildId>`, готовый файл —
+`api` сам вызовет `workflow_dispatch` с `buildId`/зашифрованным токеном
+(`buildTokenEnc`)/`baseUrl=API_PUBLIC_URL` — дальше workflow сам пройдёт `decrypt → start →
+config → icon → сборка → upload`, не трогая `apps/web`. Статус —
+`GET /orgs/<orgId>/projects/<projectId>/builds/<buildId>`, готовый файл —
 `GET .../builds/<buildId>/ipa` (302 на подписанную ссылку).
+
+### 6. Проверь, что токен не попал в лог открытым текстом
+
+Открой сам run в GitHub Actions UI (Actions → build-ipa → этот run) и разверни каждый шаг,
+особенно «Decrypt build token», «Report build started», «Fetch project config (apps/api)»,
+«Upload .ipa to apps/api» — везде, где видна `Authorization: Bearer ***`, токен должен быть
+замаскирован звёздочками (`::add-mask::` в шаге «Decrypt build token» это гарантирует), а не
+виден как hex-строка. Это нужно проверять вручную один раз после любого изменения
+`build-ipa.yml`, трогающего токен — автоматически (в CI) этот прогон не гоняется.
 
 ### Совет
 
