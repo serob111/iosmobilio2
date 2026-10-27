@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { createDb } from '../src/client';
 import { runInTenantContext, runInBuildContext, getTenantDb } from '../src/tenant-context';
-import { organizations, memberships, users, projects, builds } from '../src/schema';
+import { organizations, memberships, invitations, users, projects, builds } from '../src/schema';
 
 // See packages/db/test/tenant-context.integration.test.ts for why this skips locally
 // but hard-fails in CI when REQUIRE_LIVE_SERVICES=true.
@@ -20,6 +20,7 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
   const orgAId = uuidv7();
   const orgBId = uuidv7();
   let projectAId: string;
+  let projectA2Id: string;
 
   beforeAll(async () => {
     await migrator.db.insert(users).values({ id: userId, name: 'Builds RLS Test', email: `${userId}@example.com` });
@@ -35,6 +36,22 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
         name: 'Project A',
         sourceUrl: 'https://a.example/',
         config: { id: projectAId, name: 'Project A' },
+      });
+      // A second project in the SAME org as the one the runner's build belongs to —
+      // proves app.build_project_id scopes to exactly one project, not the whole org.
+      projectA2Id = uuidv7();
+      await tx.insert(projects).values({
+        id: projectA2Id,
+        orgId: orgAId,
+        name: 'Project A2',
+        sourceUrl: 'https://a2.example/',
+        config: { id: projectA2Id, name: 'Project A2' },
+      });
+      await tx.insert(invitations).values({
+        orgId: orgAId,
+        email: 'invitee@example.com',
+        tokenHash: `invite-hash-${uuidv7()}`,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       });
     });
 
@@ -54,6 +71,7 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
 
   afterAll(async () => {
     await runInTenantContext(migrator.db, { orgId: orgAId, userId }, async () => {
+      await getTenantDb().delete(invitations);
       await getTenantDb().delete(projects);
       await getTenantDb().delete(memberships);
     });
@@ -84,7 +102,7 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
     return id;
   }
 
-  it('runInBuildContext finds a live build by its token and can read its project under the same context (no app.user_id needed)', async () => {
+  it('runInBuildContext finds a live build by its token and can read its project under the same context (no app.user_id/app.org_id needed)', async () => {
     const tokenHash = `test-hash-${uuidv7()}`;
     const buildId = await insertBuild({ tokenHash });
 
@@ -96,6 +114,68 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
     });
 
     expect(result?.id).toBe(projectAId);
+  });
+
+  it("does NOT see another project in the SAME org — app.build_project_id scopes to exactly one project, not the whole org", async () => {
+    const tokenHash = `test-hash-${uuidv7()}`;
+    await insertBuild({ tokenHash });
+
+    const seenOther = await runInBuildContext(app.db, tokenHash, () =>
+      getTenantDb().select().from(projects).where(eq(projects.id, projectA2Id)),
+    );
+    expect(seenOther).toHaveLength(0);
+
+    // Querying without a WHERE at all also proves it: exactly the one project comes back.
+    const seenAll = await runInBuildContext(app.db, tokenHash, () => getTenantDb().select().from(projects));
+    expect(seenAll).toHaveLength(1);
+    expect(seenAll![0]!.id).toBe(projectAId);
+  });
+
+  it('does NOT see memberships or invitations of the same org (app.org_id is never set in this context)', async () => {
+    const tokenHash = `test-hash-${uuidv7()}`;
+    await insertBuild({ tokenHash });
+
+    const seenMemberships = await runInBuildContext(app.db, tokenHash, () => getTenantDb().select().from(memberships));
+    expect(seenMemberships).toHaveLength(0);
+
+    const seenInvitations = await runInBuildContext(app.db, tokenHash, () => getTenantDb().select().from(invitations));
+    expect(seenInvitations).toHaveLength(0);
+  });
+
+  it("does NOT see another build of the same org, and an UPDATE targeting it affects 0 rows", async () => {
+    const tokenHash1 = `test-hash-${uuidv7()}`;
+    await insertBuild({ tokenHash: tokenHash1 });
+    // Can't insert a second queued build for the same project (the partial unique
+    // index) — use a distinct project under the same org so this build coexists.
+    const otherProjectBuildId = await runInTenantContext(migrator.db, { orgId: orgAId, userId }, async () => {
+      const id = uuidv7();
+      await getTenantDb().insert(builds).values({
+        id,
+        orgId: orgAId,
+        projectId: projectA2Id,
+        status: 'queued',
+        tokenHash: `test-hash-${uuidv7()}`,
+        tokenExpiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      });
+      return id;
+    });
+
+    const seenAll = await runInBuildContext(app.db, tokenHash1, () => getTenantDb().select().from(builds));
+    expect(seenAll).toHaveLength(1);
+    expect(seenAll![0]!.tokenHash).toBe(tokenHash1);
+
+    const updated = await runInBuildContext(app.db, tokenHash1, () =>
+      getTenantDb()
+        .update(builds)
+        .set({ status: 'failed', error: 'should not apply', tokenHash: null, tokenExpiresAt: null, finishedAt: new Date() })
+        .where(eq(builds.id, otherProjectBuildId))
+        .returning(),
+    );
+    expect(updated).toHaveLength(0);
+
+    await runInTenantContext(migrator.db, { orgId: orgAId, userId }, () =>
+      getTenantDb().delete(builds).where(eq(builds.id, otherProjectBuildId)),
+    );
   });
 
   it('returns undefined for a token that matches nothing', async () => {

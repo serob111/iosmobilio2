@@ -71,6 +71,13 @@
       "when": 1792997397072,
       "tag": "0009_builds_token_access",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793114748837,
+      "tag": "0010_builds_runner_project_scope",
+      "breakpoints": true
     }
   ]
 }

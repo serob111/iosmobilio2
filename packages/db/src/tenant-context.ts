@@ -89,12 +89,15 @@ export async function runInClaimContext<T>(
  * For the build runner's token-authenticated callbacks (POST /builds/:id/start, GET
  * .../config, GET .../icon, POST .../ipa, POST .../fail) — looks the build up by its
  * token hash first (builds_token_select/update, see 0009_builds_token_access.sql, cover
- * only a live queued/building row), then, once its org is known, sets app.org_id too so
- * the same transaction can also read the build's project (icon/config) under
- * projects_org_isolation. That policy only ever checks org_id, not app.user_id — the
- * runner has no user identity at all, which is fine here since nothing it touches needs
- * one. Returns undefined (instead of throwing) when no row matches, so callers 404
- * uniformly rather than distinguishing "no such token" from "found but already done".
+ * only a live queued/building row), then, once its project is known, sets
+ * app.build_project_id — NOT app.org_id — so the same transaction can also read that one
+ * project (icon/config) under projects_build_runner_select (0010_builds_runner_project_scope.sql).
+ * Deliberately narrower than runInTenantContext: the runner has no user identity and no
+ * legitimate reason to see any OTHER project, build, membership, or invitation in the
+ * same org — setting app.org_id here would have handed it org-wide read access via
+ * projects_org_isolation, far more than it needs. Returns undefined (instead of
+ * throwing) when no row matches, so callers 404 uniformly rather than distinguishing "no
+ * such token" from "found but already done".
  */
 export async function runInBuildContext<T>(
   db: Db,
@@ -108,7 +111,7 @@ export async function runInBuildContext<T>(
     if (!build) {
       return undefined;
     }
-    await scoped.execute(sql`select set_config('app.org_id', ${build.orgId}, true)`);
+    await scoped.execute(sql`select set_config('app.build_project_id', ${build.projectId}, true)`);
     return storage.run(scoped, () => fn(build));
   });
 }
