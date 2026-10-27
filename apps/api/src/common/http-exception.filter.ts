@@ -11,6 +11,7 @@ const STATUS_CODES: Record<number, string> = {
   413: 'FILE_TOO_LARGE',
   429: 'TOO_MANY_REQUESTS',
   500: 'INTERNAL_ERROR',
+  502: 'BAD_GATEWAY',
 };
 
 /** Normalizes every thrown error (Nest's built-ins and our own) into { error: { code, message, requestId } }. */

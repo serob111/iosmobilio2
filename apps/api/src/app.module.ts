@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
 import { AuthGuard } from './auth/auth.guard.js';
+import { BuildsModule } from './builds/builds.module.js';
 import { DbModule } from './db/db.module.js';
 import { DraftsModule } from './drafts/drafts.module.js';
 import { HealthModule } from './health/health.module.js';
@@ -29,6 +30,7 @@ import { StorageModule } from './storage/storage.module.js';
     OrganizationsModule,
     ProjectsModule,
     DraftsModule,
+    BuildsModule,
     AuthModule,
     HealthModule,
     QueueModule,
