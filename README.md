@@ -356,17 +356,22 @@ POST /builds/:id/fail  { error }            — queued/building → failed
 ```
 
 Переходы статуса — только `queued → building → done|failed` и `queued → failed`; любой другой —
-`409 INVALID_BUILD_STATE`. Токен (`sha256`-хеш в БД, сырой — только в workflow-инпуте, никогда
-пользователю) живёт 2 часа, но очищается (`token_hash = NULL`) сразу при переходе в `done`/`failed` —
-раньше истечения TTL. RLS (`builds_token_select`/`builds_token_update`, см.
-`0009_builds_token_access.sql`) пускает по `token_hash` + `token_expires_at > now()` +
-`status IN ('queued','building')` — те же условия в `USING`, но `WITH CHECK (true)`: именно
-разрешённые переходы (`building → done`, очистка токена) двигают строку *вне* того состояния, что
-требует `USING`, так что повторять его в `WITH CHECK` сломало бы ровно те обновления, которые должны
-проходить. У раннера нет пользовательской идентичности вообще — `runInBuildContext`
-(`packages/db/src/tenant-context.ts`) не выставляет `app.user_id`, только `app.lookup_token_hash`
-(для поиска сборки) и затем `app.org_id` из уже найденной строки (в одной транзакции — так читается
-и сам проект под обычной `projects_org_isolation`, без отдельного «только для раннера» исключения).
+`409 INVALID_BUILD_STATE`. Токен (`sha256`-хеш в БД; сырой уходит раннеру только через
+`BuildRunner.dispatch()` — для GitHub Actions он же шифруется AES-256-GCM`'ом перед dispatch, см.
+ниже) живёт 2 часа, но очищается (`token_hash = NULL`) сразу при переходе в `done`/`failed` — раньше
+истечения TTL. RLS (`builds_token_select`/`builds_token_update`, см. `0009_builds_token_access.sql` +
+`0011_builds_token_update_tighten.sql`) пускает по `token_hash` + `token_expires_at > now()` +
+`status IN ('queued','building')` — те же условия в `USING`, а `WITH CHECK` — `status IN
+('building','done','failed') AND (token_hash IS NULL OR token_hash совпадает)`: разрешённые переходы
+двигают строку *вне* состояния, что требует `USING` (копировать его в `WITH CHECK` сломало бы ровно
+эти обновления), но `WITH CHECK` всё равно не безусловный `true` — подделать `token_hash` на чужой
+или откатить статус в `queued` через этот путь нельзя. Отдельный `BEFORE UPDATE`-триггер
+(`builds_immutable_fields`) не даёт поменять `id`/`org_id`/`project_id`/`created_at` вообще никаким
+`UPDATE`, независимо от того, какая RLS-политика его пропустила. У раннера нет пользовательской
+идентичности вообще — `runInBuildContext` (`packages/db/src/tenant-context.ts`) не выставляет
+`app.user_id` и не выставляет `app.org_id` (а значит не даёт раннеру видеть весь органайзер — только
+`app.lookup_token_hash` для поиска сборки, затем `app.build_project_id` из уже найденной строки, так
+что раннер видит/читает ровно один свой проект через `projects_build_runner_select`, не всю org).
 `BuildRunnerGuard` дополнительно сверяет хеши `timingSafeEqual` после самого запроса — защита в
 глубину, на случай если совпадение на стороне БД когда-нибудь ослабнет. Любая проблема с токеном
 (не найден, истёк, не тот статус) — одинаковый `404 BUILD_NOT_FOUND`, без разницы в коде ответа:
@@ -375,10 +380,43 @@ POST /builds/:id/fail  { error }            — queued/building → failed
 Загрузка `.ipa` читает тело запроса как поток (Express не трогает `application/octet-stream`),
 проверяет magic bytes (`PK\x03\x04`) и 300 МБ лимит прямо во время стриминга (не после полной
 буферизации) через собственный `Transform` (`ipa-stream.ts`) — превышение лимита или неверная
-подпись возвращает `413 FILE_TOO_LARGE`/`400 INVALID_IPA` без сохранения в storage. Финальное
-обновление статуса на `done` перечитывает текущий статус сборки в свежей транзакции прямо перед
-записью (а не держит одну транзакцию на всё время долгой загрузки) — если конкурентный вызов уже
-выиграл эту гонку, только что загруженный объект удаляется и ответ — `409 INVALID_BUILD_STATE`.
+подпись возвращает `413 FILE_TOO_LARGE`/`400 INVALID_IPA` без сохранения в storage. У каждой попытки
+загрузки свой объектный ключ (`buildIpaKey(...) + '-' + uuid`) — если два запроса гонятся за один и
+тот же build (повторный вызов раннера, гонка), они никогда не пишут в один и тот же объект; только
+ключ победителя попадает в `ipa_key`. Финальное обновление статуса на `done` перечитывает текущий
+статус сборки в свежей транзакции прямо перед записью (а не держит одну транзакцию на всё время
+долгой загрузки), а сам `UPDATE` требует `status = 'building'` непосредственно в `WHERE` — иначе
+Postgres перепроверяет это условие только на старом снапшоте, и проигравший конкурентный вызов мог
+бы всё равно перезаписать `ipa_key` победителя. Если гонка проиграна — только что загруженный объект
+удаляется и ответ — `409 INVALID_BUILD_STATE`.
+
+Раннер за GitHub Actions шифрует сырой токен AES-256-GCM'ом (`BUILD_TOKEN_KEY`) перед тем, как он
+попадёт в `workflow_dispatch`'s input — тот виден в UI/аудит-логе GitHub, поэтому туда уходит только
+шифротекст (`buildTokenEnc`); воркфлоу расшифровывает его тем же ключом первым шагом после
+`setup-node` и сразу маскирует (`::add-mask::`). `apps/api` отказывается стартовать без
+`API_PUBLIC_URL`(`https://`)/`GITHUB_DISPATCH_TOKEN`/`GITHUB_REPO`/`BUILD_TOKEN_KEY`, когда
+`BUILD_RUNNER` не `fake` (`validateBuildEnv`, вызывается из `createApp()`) — и наоборот, отказывается
+стартовать с `BUILD_RUNNER=fake` при `NODE_ENV=production`.
+
+**Watchdog зависших сборок** (`apps/worker`, раз в 5 минут) — если раннер упал молча (сеть, краш
+воркфлоу) и никогда не позвонит в `/fail`, сборка осталась бы в `queued`/`building` навсегда,
+занимая единственный активный слот проекта (`builds_one_active_per_project`) без возможности собрать
+что-то новое. `public.fail_stuck_builds(batch)` (`0012_builds_watchdog.sql`) — та же схема, что у
+`cleanup_expired_drafts`: `SECURITY DEFINER`, владелец `mobilio_migrator`, `EXECUTE` только у
+`mobilio_app`. Переводит в `failed`/`error='timeout'` `queued`-сборки старше 30 минут (по
+`created_at`) и `building` — старше 60 минут (по `started_at`), пачками по 200
+(`apps/worker/src/builds-watchdog.ts`, та же схема батчинга, что у очистки черновиков). Тайм-ауты —
+константы в самом
+теле функции, не параметры: это осознанное эксплуатационное решение, которое должно проходить через
+миграцию, а не меняться тем, что воркер передаст при вызове.
+
+В отличие от `cleanup_expired_drafts` (`DELETE` — у удалённой строки нет «новой версии», которую
+нужно перепроверять), эта функция делает `UPDATE`, а Postgres требует, чтобы *результат* `UPDATE`
+тоже проходил `USING` политики (не только `WITH CHECK`), заново применённый к новой строке — поэтому
+`builds_watchdog`'s `USING` включает `'failed'` наравне с `'queued'`/`'building'`: функция всегда
+пишет именно `'failed'`, и новая строка должна остаться в этом же множестве, иначе сам `UPDATE` не
+проходит. `'done'` туда никогда не входит — этой политике нельзя видеть/трогать успешно
+завершённые сборки.
 
 ## Черновики (apps/api/src/drafts, apps/worker)
 
