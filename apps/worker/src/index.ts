@@ -7,10 +7,13 @@ import { createDb } from '@mobilio/db';
 import { createObjectStorageFromEnv } from '@mobilio/storage';
 import { processPingJob, type PingJobData } from './processors';
 import { cleanupExpiredDrafts } from './drafts-cleanup';
+import { failStuckBuilds } from './builds-watchdog';
 
 export const QUEUE_NAME = 'mobilio';
 export const DRAFTS_CLEANUP_JOB_NAME = 'cleanup-expired-drafts';
 const DRAFTS_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+export const BUILDS_WATCHDOG_JOB_NAME = 'fail-stuck-builds';
+const BUILDS_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
 
 const logger = pino();
 
@@ -31,6 +34,11 @@ queue
   .then(() => logger.info({ intervalMs: DRAFTS_CLEANUP_INTERVAL_MS }, 'drafts cleanup scheduler registered'))
   .catch((error: unknown) => logger.error({ err: error }, 'failed to register drafts cleanup scheduler'));
 
+queue
+  .upsertJobScheduler(BUILDS_WATCHDOG_JOB_NAME, { every: BUILDS_WATCHDOG_INTERVAL_MS }, { name: BUILDS_WATCHDOG_JOB_NAME })
+  .then(() => logger.info({ intervalMs: BUILDS_WATCHDOG_INTERVAL_MS }, 'builds watchdog scheduler registered'))
+  .catch((error: unknown) => logger.error({ err: error }, 'failed to register builds watchdog scheduler'));
+
 const worker = new Worker(
   QUEUE_NAME,
   async (job: Job) => {
@@ -42,6 +50,11 @@ const worker = new Worker(
     if (job.name === DRAFTS_CLEANUP_JOB_NAME) {
       const result = await cleanupExpiredDrafts(db, storage);
       logger.info({ jobId: job.id, ...result }, 'drafts cleanup job processed');
+      return result;
+    }
+    if (job.name === BUILDS_WATCHDOG_JOB_NAME) {
+      const result = await failStuckBuilds(db);
+      logger.info({ jobId: job.id, ...result }, 'builds watchdog job processed');
       return result;
     }
     logger.warn({ jobId: job.id, jobName: job.name }, 'unknown job name, ignoring');
