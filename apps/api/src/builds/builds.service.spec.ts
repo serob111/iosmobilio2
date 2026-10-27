@@ -1,9 +1,13 @@
 import { BadGatewayException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ObjectNotFoundError } from '@mobilio/storage';
 import { BuildsService } from './builds.service.js';
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
 import { BUILD_RUNNER, type BuildRunner } from './build-runner.js';
+
+const generateLetterAvatarMock = vi.hoisted(() => vi.fn());
+vi.mock('../projects/icon.js', () => ({ generateLetterAvatar: generateLetterAvatarMock }));
 
 /** A query-builder chain stub: any method call returns itself, and awaiting it resolves to `result`. */
 function chainTo(result: unknown): unknown {
@@ -85,6 +89,7 @@ vi.mock('../db/db.service.js', () => ({
 describe('BuildsService', () => {
   let storagePut: ReturnType<typeof vi.fn>;
   let storagePutStream: ReturnType<typeof vi.fn>;
+  let storageGetStream: ReturnType<typeof vi.fn>;
   let storageDelete: ReturnType<typeof vi.fn>;
   let storageSignedUrl: ReturnType<typeof vi.fn>;
   let buildRunner: { dispatch: ReturnType<typeof vi.fn> };
@@ -108,9 +113,11 @@ describe('BuildsService', () => {
         chunks.push(chunk);
       }
     });
+    storageGetStream = vi.fn();
     storageDelete = vi.fn().mockResolvedValue(undefined);
     storageSignedUrl = vi.fn().mockResolvedValue('https://signed.example/app.ipa');
     buildRunner = { dispatch: vi.fn().mockResolvedValue(undefined) };
+    generateLetterAvatarMock.mockReset().mockResolvedValue(Buffer.from('avatar-bytes'));
   });
 
   async function buildService(): Promise<BuildsService> {
@@ -120,7 +127,13 @@ describe('BuildsService', () => {
         DbService,
         {
           provide: OBJECT_STORAGE,
-          useValue: { put: storagePut, putStream: storagePutStream, delete: storageDelete, signedUrl: storageSignedUrl },
+          useValue: {
+            put: storagePut,
+            putStream: storagePutStream,
+            getStream: storageGetStream,
+            delete: storageDelete,
+            signedUrl: storageSignedUrl,
+          },
         },
         { provide: BUILD_RUNNER, useValue: buildRunner as unknown as BuildRunner },
       ],
@@ -249,6 +262,63 @@ describe('BuildsService', () => {
       runInBuildContextMock.mockResolvedValue(undefined);
       const service = await buildService();
       await expect(service.getBuildConfig('hash')).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('getIconStream', () => {
+    const build = { id: BUILD_ID, orgId: ORG_ID, projectId: PROJECT_ID };
+
+    it("streams the project's own icon when it exists, without falling back", async () => {
+      const { Readable } = await import('node:stream');
+      runInBuildContextMock.mockImplementation(async (_db: unknown, _hash: string, fn: (b: typeof build) => unknown) =>
+        fn(build),
+      );
+      const realStream = Readable.from([Buffer.from('real-icon-bytes')]);
+      storageGetStream.mockResolvedValue(realStream);
+
+      const service = await buildService();
+      const result = await service.getIconStream('hash');
+
+      expect(result).toBe(realStream);
+      expect(generateLetterAvatarMock).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a generated letter avatar on ObjectNotFoundError (same as claimDraft)', async () => {
+      runInBuildContextMock.mockImplementation(async (_db: unknown, _hash: string, fn: (b: typeof build) => unknown) =>
+        fn(build),
+      );
+      storageGetStream.mockRejectedValue(new ObjectNotFoundError('some/key'));
+      selectMock.mockReturnValue({
+        from: () => ({ where: () => chainTo([{ config: { name: 'Cafe Uyut', theme: { primary: '#123456' } } }]) }),
+      });
+
+      const service = await buildService();
+      const result = await service.getIconStream('hash');
+
+      expect(generateLetterAvatarMock).toHaveBeenCalledWith('C', '#123456');
+      const chunks: Buffer[] = [];
+      for await (const chunk of result) {
+        chunks.push(chunk as Buffer);
+      }
+      expect(Buffer.concat(chunks).toString()).toBe('avatar-bytes');
+    });
+
+    it('rethrows a non-ObjectNotFoundError storage failure instead of falling back', async () => {
+      runInBuildContextMock.mockImplementation(async (_db: unknown, _hash: string, fn: (b: typeof build) => unknown) =>
+        fn(build),
+      );
+      storageGetStream.mockRejectedValue(new Error('S3 is down'));
+
+      const service = await buildService();
+      await expect(service.getIconStream('hash')).rejects.toThrow('S3 is down');
+      expect(generateLetterAvatarMock).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 BUILD_NOT_FOUND when the token resolves to nothing', async () => {
+      runInBuildContextMock.mockResolvedValue(undefined);
+      const service = await buildService();
+      await expect(service.getIconStream('hash')).rejects.toBeInstanceOf(NotFoundException);
+      expect(storageGetStream).not.toHaveBeenCalled();
     });
   });
 

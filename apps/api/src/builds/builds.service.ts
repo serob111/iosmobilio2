@@ -1,4 +1,4 @@
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import {
   BadGatewayException,
   BadRequestException,
@@ -10,10 +10,11 @@ import {
 } from '@nestjs/common';
 import { runInTenantContext, runInBuildContext, getTenantDb, schema, eq, and, desc } from '@mobilio/db';
 import type { ProjectConfig } from '@mobilio/config';
-import { type ObjectStorage, buildIpaKey, projectIconKey } from '@mobilio/storage';
+import { type ObjectStorage, ObjectNotFoundError, buildIpaKey, projectIconKey } from '@mobilio/storage';
 import { uuidv7 } from 'uuidv7';
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
+import { generateLetterAvatar } from '../projects/icon.js';
 import { BUILD_RUNNER, type BuildRunner } from './build-runner.js';
 import { generateBuildToken } from './build-token.js';
 import { createIpaValidationStream, IpaValidationError } from './ipa-stream.js';
@@ -210,13 +211,32 @@ export class BuildsService {
     return result;
   }
 
-  /** GET /builds/:id/icon — streamed PNG. orgId/projectId already live on the build row, so no extra query is needed. */
+  /**
+   * GET /builds/:id/icon — streamed PNG. orgId/projectId already live on the build row,
+   * so no extra query is needed in the common case. Falls back to a generated letter
+   * avatar — same as DraftsService.claimDraft's icon handling — only on a genuinely
+   * missing object; any other storage failure is a real problem and still fails the
+   * request rather than silently papering over it with a fake icon.
+   */
   async getIconStream(tokenHash: string): Promise<Readable> {
     const build = await runInBuildContext(this.dbService.db, tokenHash, async (row) => row);
     if (!build) {
       throw new NotFoundException({ code: 'BUILD_NOT_FOUND', message: 'Build not found' });
     }
-    return this.storage.getStream(projectIconKey(build.orgId, build.projectId));
+    try {
+      return await this.storage.getStream(projectIconKey(build.orgId, build.projectId));
+    } catch (error) {
+      if (!(error instanceof ObjectNotFoundError)) {
+        throw error;
+      }
+      const project = await runInBuildContext(this.dbService.db, tokenHash, async () => {
+        const [row] = await getTenantDb().select().from(schema.projects).where(eq(schema.projects.id, build.projectId));
+        return row;
+      });
+      const config = project?.config as ProjectConfig | undefined;
+      const avatar = await generateLetterAvatar(config?.name?.charAt(0) || '?', config?.theme?.primary ?? '#336699');
+      return Readable.from(avatar);
+    }
   }
 
   /**
