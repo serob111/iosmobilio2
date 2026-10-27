@@ -144,10 +144,25 @@ export class BuildsService {
     return build;
   }
 
-  /** GET /orgs/:orgId/projects/:projectId/builds/:buildId/ipa — 302 only once the build is done. */
+  /**
+   * GET /orgs/:orgId/projects/:projectId/builds/:buildId/ipa — 302 only once the build is
+   * done. Deliberately queries the full row (not getBuild's narrowed BuildSummary) to get
+   * at ipaKey directly: since uploadIpa now writes every attempt under its own per-attempt
+   * key (see uploadIpa's comment), the real object key is whatever ipaKey the winning
+   * attempt recorded, not a key recomputed from orgId/projectId/buildId alone.
+   */
   async getIpaUrl(orgId: string, userId: string, projectId: string, buildId: string): Promise<string> {
-    const build = await this.getBuild(orgId, userId, projectId, buildId);
-    if (build.status !== 'done') {
+    const build = await runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
+      const [row] = await getTenantDb()
+        .select()
+        .from(schema.builds)
+        .where(and(eq(schema.builds.id, buildId), eq(schema.builds.projectId, projectId)));
+      return row;
+    });
+    if (!build) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Build not found' });
+    }
+    if (build.status !== 'done' || !build.ipaKey) {
       throw new NotFoundException({ code: 'IPA_NOT_READY', message: 'No .ipa available for this build yet' });
     }
 
@@ -157,7 +172,7 @@ export class BuildsService {
     });
     const slug = (project?.config as ProjectConfig | undefined)?.slug ?? 'app';
 
-    return this.storage.signedUrl(buildIpaKey(orgId, projectId, buildId), 300, `${slug}.ipa`);
+    return this.storage.signedUrl(build.ipaKey, 300, `${slug}.ipa`);
   }
 
   // ---------------------------------------------------------------------------------
@@ -204,7 +219,15 @@ export class BuildsService {
     return this.storage.getStream(projectIconKey(build.orgId, build.projectId));
   }
 
-  /** POST /builds/:id/ipa — only from status 'building'; streams straight through to storage. */
+  /**
+   * POST /builds/:id/ipa — only from status 'building'; streams straight through to
+   * storage. Each attempt gets its own object key (a retried runner call, or two
+   * concurrent requests somehow racing) — sharing one static key would let whichever
+   * attempt finishes storage.putStream LAST silently overwrite the other's bytes, even
+   * after the loser's own finalize below correctly loses the DB race. Only the attempt
+   * that wins the DB update gets its key recorded on the build; the loser's cleanup
+   * deletes exactly its own key, never the winner's.
+   */
   async uploadIpa(tokenHash: string, currentBuild: { id: string; orgId: string; projectId: string; status: string }, body: Readable): Promise<void> {
     if (currentBuild.status !== 'building') {
       throw new ConflictException({
@@ -213,7 +236,7 @@ export class BuildsService {
       });
     }
 
-    const key = buildIpaKey(currentBuild.orgId, currentBuild.projectId, currentBuild.id);
+    const key = `${buildIpaKey(currentBuild.orgId, currentBuild.projectId, currentBuild.id)}-${uuidv7()}`;
     const validated = body.pipe(createIpaValidationStream());
     try {
       await this.storage.putStream(key, validated, 'application/octet-stream');
@@ -230,10 +253,18 @@ export class BuildsService {
       if (build.status !== 'building') {
         return undefined;
       }
+      // status = 'building' belongs in the WHERE clause itself, not just the early
+      // check above: two concurrent finalizes can both pass that check against their
+      // own pre-commit snapshot, then one blocks on the other's row lock. Once
+      // unblocked, Postgres re-evaluates this WHERE against the now-committed row
+      // before proceeding (EvalPlanQual) — without this condition here, the second
+      // attempt would still match on id alone and overwrite the first attempt's ipaKey,
+      // and both would report success. With it, the second attempt's WHERE no longer
+      // matches (status is already 'done'), so it updates 0 rows and correctly loses.
       const [row] = await getTenantDb()
         .update(schema.builds)
         .set({ status: 'done', ipaKey: key, finishedAt: new Date(), tokenHash: null, tokenExpiresAt: null })
-        .where(eq(schema.builds.id, build.id))
+        .where(and(eq(schema.builds.id, build.id), eq(schema.builds.status, 'building')))
         .returning();
       return row;
     });

@@ -274,6 +274,41 @@ describe('BuildsService', () => {
       await expect(service.uploadIpa('hash', buildRef, zipStream)).rejects.toBeInstanceOf(ConflictException);
       expect(storageDelete).toHaveBeenCalled();
     });
+
+    it('gives every call its own storage key, even for the exact same build', async () => {
+      const { Readable } = await import('node:stream');
+      runInBuildContextMock.mockImplementation(
+        async (_db: unknown, _hash: string, fn: (b: { status: string }) => unknown) => fn({ status: 'building' }),
+      );
+      whereMock.mockReturnValue(chainTo([{ id: BUILD_ID, status: 'done' }]));
+      const service = await buildService();
+
+      const zip = () => Readable.from([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('rest')]);
+      await service.uploadIpa('hash', buildRef, zip());
+      await service.uploadIpa('hash', buildRef, zip());
+
+      const [firstKey] = storagePutStream.mock.calls[0]!;
+      const [secondKey] = storagePutStream.mock.calls[1]!;
+      expect(firstKey).not.toBe(secondKey);
+      // The build's own ipaKey is set to whichever specific attempt's key won the
+      // database race — never a static key recomputed from org/project/build alone.
+      expect(setMock.mock.calls[0]![0]).toMatchObject({ ipaKey: firstKey });
+      expect(setMock.mock.calls[1]![0]).toMatchObject({ ipaKey: secondKey });
+    });
+
+    it("on a lost race, deletes exactly this attempt's own key, never a shared/static one", async () => {
+      const { Readable } = await import('node:stream');
+      runInBuildContextMock.mockImplementation(
+        async (_db: unknown, _hash: string, fn: (b: { status: string }) => unknown) => fn({ status: 'done' }),
+      );
+      const service = await buildService();
+
+      const zipStream = Readable.from([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('rest')]);
+      await expect(service.uploadIpa('hash', buildRef, zipStream)).rejects.toBeInstanceOf(ConflictException);
+
+      const [uploadedKey] = storagePutStream.mock.calls[0]!;
+      expect(storageDelete).toHaveBeenCalledWith(uploadedKey);
+    });
   });
 
   describe('failBuild', () => {
@@ -306,19 +341,26 @@ describe('BuildsService', () => {
 
   describe('getIpaUrl', () => {
     it('throws 404 IPA_NOT_READY when the build is not done', async () => {
-      selectMock.mockReturnValue({ from: () => ({ where: () => chainTo([{ id: BUILD_ID, status: 'building' }]) }) });
+      selectMock.mockReturnValue({ from: () => ({ where: () => chainTo([{ id: BUILD_ID, status: 'building', ipaKey: null }]) }) });
       const service = await buildService();
       await expect(service.getIpaUrl(ORG_ID, USER_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('returns a signed url named after the project slug once done', async () => {
+    it('throws 404 IPA_NOT_READY when done but somehow has no ipaKey', async () => {
+      selectMock.mockReturnValue({ from: () => ({ where: () => chainTo([{ id: BUILD_ID, status: 'done', ipaKey: null }]) }) });
+      const service = await buildService();
+      await expect(service.getIpaUrl(ORG_ID, USER_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("returns a signed url for the build's own recorded ipaKey (not a recomputed static key), named after the project slug", async () => {
       let call = 0;
+      const winningKey = `orgs/${ORG_ID}/projects/${PROJECT_ID}/builds/${BUILD_ID}/app.ipa-some-attempt-uuid`;
       selectMock.mockImplementation(() => ({
         from: () => ({
           where: () =>
             chainTo(
               call++ === 0
-                ? [{ id: BUILD_ID, status: 'done' }]
+                ? [{ id: BUILD_ID, status: 'done', ipaKey: winningKey }]
                 : [{ config: { slug: 'cafe-uyut' } }],
             ),
         }),
@@ -326,11 +368,7 @@ describe('BuildsService', () => {
       const service = await buildService();
       const url = await service.getIpaUrl(ORG_ID, USER_ID, PROJECT_ID, BUILD_ID);
       expect(url).toBe('https://signed.example/app.ipa');
-      expect(storageSignedUrl).toHaveBeenCalledWith(
-        expect.stringContaining(`${ORG_ID}/projects/${PROJECT_ID}/builds/${BUILD_ID}`),
-        300,
-        'cafe-uyut.ipa',
-      );
+      expect(storageSignedUrl).toHaveBeenCalledWith(winningKey, 300, 'cafe-uyut.ipa');
     });
   });
 });

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { http, HttpResponse } from 'msw';
+import { Redis } from 'ioredis';
 import { server } from '../../test/mocks/server.js';
 import { createApp } from '../create-app.js';
 import { FakeRunner } from './fake-runner.js';
@@ -45,6 +46,7 @@ describe.skipIf(!hasLiveServices)(
     let app: INestApplication;
     let mailLogFile: string;
     let fakeRunner: FakeRunner;
+    let redis: Redis;
 
     beforeAll(async () => {
       mailLogFile = join(tmpdir(), `mobilio-mail-log-builds-${Date.now()}.ndjson`);
@@ -57,12 +59,31 @@ describe.skipIf(!hasLiveServices)(
       await app.init();
       fakeRunner = app.get(FakeRunner);
 
+      redis = new Redis(process.env.REDIS_URL!);
       server.listen({ onUnhandledFrame: 'bypass' });
+    });
+
+    // Each test signs in once via magic-link, and Better Auth's own sign-in rate limit
+    // (5/60s, see auth/build-auth.ts) is shared across every test in this file since
+    // they all hit the same loopback IP — without resetting it, a 6th+ test flakes
+    // depending on how much wall-clock time happened to pass, exactly like
+    // drafts.integration.spec.ts/projects.integration.spec.ts already guard against.
+    async function resetRateLimitBuckets(): Promise<void> {
+      const keys = await redis.keys('*|/sign-in/magic-link');
+      keys.push(...(await redis.keys('*|/magic-link/verify')));
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    }
+
+    beforeEach(async () => {
+      await resetRateLimitBuckets();
     });
 
     afterAll(async () => {
       server.close();
       await app.close();
+      await redis.quit();
       if (existsSync(mailLogFile)) {
         unlinkSync(mailLogFile);
       }
@@ -225,6 +246,55 @@ describe.skipIf(!hasLiveServices)(
         expect(secondBuild.status).toBe(201);
       },
     );
+
+    it('two concurrent .ipa uploads for the same build: exactly one wins, the loser gets 409, and the download is the winner\'s bytes intact (not corrupted/mixed)', async () => {
+      const { cookie, orgId, projectId } = await setupOrgAndProject(`itest-builds-race-${Date.now()}@example.com`);
+      const { buildId, rawToken } = await createBuildAndGetToken(cookie, orgId, projectId);
+
+      await request(app.getHttpServer())
+        .post(`/builds/${buildId}/start`)
+        .set(...bearer(rawToken))
+        .send({ runId: 1, runUrl: 'https://example.com/run/1' })
+        .expect(201);
+
+      const zipA = Buffer.concat([ZIP_HEADER, Buffer.from('attempt A contents')]);
+      const zipB = Buffer.concat([ZIP_HEADER, Buffer.from('attempt B contents, a different length')]);
+
+      const [resA, resB] = await Promise.all([
+        request(app.getHttpServer())
+          .post(`/builds/${buildId}/ipa`)
+          .set(...bearer(rawToken))
+          .set('Content-Type', 'application/octet-stream')
+          .send(zipA),
+        request(app.getHttpServer())
+          .post(`/builds/${buildId}/ipa`)
+          .set(...bearer(rawToken))
+          .set('Content-Type', 'application/octet-stream')
+          .send(zipB),
+      ]);
+
+      const statuses = [resA.status, resB.status].sort();
+      expect(statuses).toEqual([201, 409]);
+      const winningZip = resA.status === 201 ? zipA : zipB;
+
+      const getBuildRes = await request(app.getHttpServer())
+        .get(`/orgs/${orgId}/projects/${projectId}/builds/${buildId}`)
+        .set('Cookie', cookie)
+        .expect(200);
+      expect(getBuildRes.body.status).toBe('done');
+
+      const ipaRedirect = await request(app.getHttpServer())
+        .get(`/orgs/${orgId}/projects/${projectId}/builds/${buildId}/ipa`)
+        .set('Cookie', cookie)
+        .redirects(0);
+      expect(ipaRedirect.status).toBe(302);
+      const fetched = await fetch(ipaRedirect.headers.location as string);
+      expect(fetched.status).toBe(200);
+      const bytes = Buffer.from(await fetched.arrayBuffer());
+      // Exactly the winner's bytes — not the loser's, not some mixture of both (which a
+      // shared static object key could previously produce depending on write ordering).
+      expect(bytes.equals(winningZip)).toBe(true);
+    });
 
     it('fails a build via the runner callback: token is cleared and stops working afterward', async () => {
       const { cookie, orgId, projectId } = await setupOrgAndProject(`itest-builds-fail-${Date.now()}@example.com`);
