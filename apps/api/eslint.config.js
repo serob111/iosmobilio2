@@ -13,11 +13,16 @@ export default tseslint.config(
     // downloads, the preview proxy) is an SSRF hole — safeFetch (src/net/safe-fetch.ts)
     // is the only place allowed to call it, since it validates the target first. Test
     // files are exempt: they legitimately fetch real URLs to assert on, e.g. a signed
-    // storage url returned by the app under test. resend-mail-sender.ts is exempt too —
-    // its one fetch target is a hardcoded, trusted third-party API url, never derived
-    // from user input.
+    // storage url returned by the app under test. resend-mail-sender.ts and
+    // github-actions-runner.ts are exempt too — each has exactly one fetch target, a
+    // hardcoded trusted third-party API url, never derived from user input.
     files: ['src/**/*.ts'],
-    ignores: ['src/net/safe-fetch.ts', '**/*.spec.ts', 'src/mail/resend-mail-sender.ts'],
+    ignores: [
+      'src/net/safe-fetch.ts',
+      '**/*.spec.ts',
+      'src/mail/resend-mail-sender.ts',
+      'src/builds/github-actions-runner.ts',
+    ],
     rules: {
       'no-restricted-globals': [
         'error',
