@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { runInTenantContext, runInBuildContext, getTenantDb, schema, eq, and, desc } from '@mobilio/db';
 import type { ProjectConfig } from '@mobilio/config';
@@ -219,7 +220,7 @@ export class BuildsService {
     } catch (error) {
       if (error instanceof IpaValidationError) {
         throw error.code === 'IPA_TOO_LARGE'
-          ? new BadRequestException({ code: 'FILE_TOO_LARGE', message: error.message })
+          ? new PayloadTooLargeException(error.message)
           : new BadRequestException({ code: 'INVALID_IPA', message: error.message });
       }
       throw error;
