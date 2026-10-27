@@ -6,6 +6,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { AuthService } from './auth/auth.service.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
+import { validateBuildEnv } from './builds/validate-build-env.js';
 
 /**
  * Builds the fully-wired app (not just `new NestFactory` — the Better Auth mount,
@@ -13,6 +14,11 @@ import { HttpExceptionFilter } from './common/http-exception.filter.js';
  * exercise exactly the same bootstrap path rather than a test-only approximation of it.
  */
 export async function createApp(): Promise<INestApplication> {
+  // Fails fast, before Nest even starts wiring modules, rather than booting
+  // successfully and only discovering a missing GITHUB_*/BUILD_TOKEN_KEY secret on the
+  // first real build request.
+  validateBuildEnv();
+
   // Better Auth needs the raw, unparsed request body (it parses JSON itself from the
   // Fetch API Request it builds) — bodyParser:false + mounting its handler before
   // Nest's own json()/urlencoded() middleware is the documented way to let both coexist.

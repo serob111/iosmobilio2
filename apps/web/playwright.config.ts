@@ -47,6 +47,10 @@ export default defineConfig({
         API_BASE_URL: 'http://localhost:3011',
         PORT: '3011',
         MAIL_LOG_FILE,
+        // This suite never exercises the builds feature — "fake" avoids
+        // validateBuildEnv (src/builds/validate-build-env.ts) refusing to boot over
+        // GITHUB_DISPATCH_TOKEN/API_PUBLIC_URL/BUILD_TOKEN_KEY not being configured here.
+        BUILD_RUNNER: 'fake',
       },
     },
   ],

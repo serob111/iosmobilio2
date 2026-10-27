@@ -9,6 +9,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    setupFiles: ['./test/setup.ts'],
     // Vitest runs test files in parallel by default; the live-Postgres/Redis
     // integration specs (auth-flow, organizations-race) share the same Redis rate-limit
     // buckets (Better Auth's secondaryStorage, keyed by path), so two of them running
