@@ -1,15 +1,23 @@
 name: build-ipa
-run-name: build ${{ inputs.projectId }}
+run-name: build ${{ inputs.buildId || 'test' }}
 
 on:
   workflow_dispatch:
     inputs:
-      projectId:
-        description: "Project id (data/projects/<id>). Leave empty when useTestConfig is true."
+      buildId:
+        description: "Build id (apps/api builds row). Leave empty when useTestConfig is true."
+        required: false
+        type: string
+      buildToken:
+        description: "One-off bearer token for this build, issued by apps/api. Leave empty when useTestConfig is true."
+        required: false
+        type: string
+      baseUrl:
+        description: "apps/api base URL this runner calls back into — must start with https://. Leave empty when useTestConfig is true."
         required: false
         type: string
       useTestConfig:
-        description: "Use apps/shell/test/test.config.json instead of fetching from the server"
+        description: "Use apps/shell/test/test.config.json instead of calling apps/api"
         required: false
         type: boolean
         default: true
@@ -18,6 +26,24 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
+      # First step, unconditionally: the token must never appear in plain text in the
+      # log even if a later step fails before reaching a step that would otherwise mask
+      # it (e.g. the validation step below).
+      - name: Mask build token
+        run: echo "::add-mask::${{ inputs.buildToken }}"
+
+      - name: Validate inputs (real build only)
+        if: ${{ inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
+        run: |
+          if [ -z "${{ inputs.buildId }}" ] || [ -z "${{ inputs.buildToken }}" ] || [ -z "${{ inputs.baseUrl }}" ]; then
+            echo "buildId/buildToken/baseUrl are required when useTestConfig is false" >&2
+            exit 1
+          fi
+          case "${{ inputs.baseUrl }}" in
+            https://*) ;;
+            *) echo "baseUrl must start with https://, got: ${{ inputs.baseUrl }}" >&2; exit 1 ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -37,29 +63,42 @@ jobs:
           sudo xcode-select -s "$LATEST_XCODE"
           xcodebuild -version
 
+      - name: Report build started
+        if: ${{ inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
+        env:
+          BUILD_TOKEN: ${{ inputs.buildToken }}
+          BASE_URL: ${{ inputs.baseUrl }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node -e "
+            require('fs').writeFileSync('start-report.json', JSON.stringify({
+              runId: ${{ github.run_id }},
+              runUrl: process.env.RUN_URL,
+            }));
+          "
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $BUILD_TOKEN" -H "Content-Type: application/json" \
+            --data-binary @start-report.json \
+            "$BASE_URL/builds/${{ inputs.buildId }}/start"
+
       - name: Fetch project config (test fixture)
         if: ${{ inputs.useTestConfig == true || inputs.useTestConfig == 'true' }}
         run: |
           cp apps/shell/test/test.config.json apps/shell/project.config.json
           cp apps/shell/test/test-icon.png apps/shell/assets/project-icon.png
 
-      - name: Fetch project config (server)
+      - name: Fetch project config (apps/api)
         if: ${{ inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
         env:
-          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
-          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
-          PROJECT_ID: ${{ inputs.projectId }}
+          BUILD_TOKEN: ${{ inputs.buildToken }}
+          BASE_URL: ${{ inputs.baseUrl }}
         run: |
-          if [ -z "$PROJECT_ID" ]; then
-            echo "projectId is required when useTestConfig is false" >&2
-            exit 1
-          fi
-          curl -fsS -H "x-build-secret: $BUILD_SECRET" \
-            "$PUBLIC_BASE_URL/api/build-config/$PROJECT_ID" -o build-config.json
+          curl -fsS -H "Authorization: Bearer $BUILD_TOKEN" \
+            "$BASE_URL/builds/${{ inputs.buildId }}/config" -o build-config.json
           node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync('build-config.json','utf8')).config))" \
             > apps/shell/project.config.json
-          curl -fsS -H "x-build-secret: $BUILD_SECRET" \
-            "$PUBLIC_BASE_URL/api/build-icon/$PROJECT_ID" -o apps/shell/assets/project-icon.png
+          curl -fsS -H "Authorization: Bearer $BUILD_TOKEN" \
+            "$BASE_URL/builds/${{ inputs.buildId }}/icon" -o apps/shell/assets/project-icon.png
 
       - name: Bake config into the shell
         run: |
@@ -150,29 +189,28 @@ jobs:
             build.log
           retention-days: 14
 
-      - name: Upload .ipa to server
+      - name: Upload .ipa to apps/api
         if: ${{ success() && inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
         env:
-          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
-          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
-          PROJECT_ID: ${{ inputs.projectId }}
+          BUILD_TOKEN: ${{ inputs.buildToken }}
+          BASE_URL: ${{ inputs.baseUrl }}
         run: |
-          curl -fsS -X POST -H "x-build-secret: $BUILD_SECRET" \
-            -F "ipa=@${{ steps.package.outputs.ipa_path }}" \
-            "$PUBLIC_BASE_URL/api/projects/$PROJECT_ID/ipa"
+          curl --fail -X POST \
+            -H "Authorization: Bearer $BUILD_TOKEN" -H "Content-Type: application/octet-stream" \
+            --data-binary "@${{ steps.package.outputs.ipa_path }}" \
+            "$BASE_URL/builds/${{ inputs.buildId }}/ipa"
 
-      - name: Report failure to server
+      - name: Report failure to apps/api
         if: ${{ failure() && inputs.useTestConfig != true && inputs.useTestConfig != 'true' }}
         env:
-          BUILD_SECRET: ${{ secrets.BUILD_SECRET }}
-          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
-          PROJECT_ID: ${{ inputs.projectId }}
+          BUILD_TOKEN: ${{ inputs.buildToken }}
+          BASE_URL: ${{ inputs.baseUrl }}
         run: |
-          LOG_TAIL=$(tail -n 50 build.log 2>/dev/null || echo "no build.log captured")
+          export LOG_TAIL=$(tail -n 50 build.log 2>/dev/null || echo "no build.log captured")
           node -e "
-            const body = JSON.stringify({ log: process.env.LOG_TAIL });
-            require('fs').writeFileSync('failure-report.json', body);
+            require('fs').writeFileSync('failure-report.json', JSON.stringify({ error: process.env.LOG_TAIL }));
           "
-          curl -fsS -X POST -H "x-build-secret: $BUILD_SECRET" -H "Content-Type: application/json" \
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $BUILD_TOKEN" -H "Content-Type: application/json" \
             --data-binary @failure-report.json \
-            "$PUBLIC_BASE_URL/api/projects/$PROJECT_ID/failed"
+            "$BASE_URL/builds/${{ inputs.buildId }}/fail"

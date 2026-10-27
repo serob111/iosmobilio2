@@ -21,20 +21,23 @@ npm run dev
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-## Чтобы кнопка «Собрать .ipa» заработала целиком
+## Чтобы сборка .ipa заработала целиком (Этап 2: через apps/api)
 
-GitHub Actions должен достучаться до твоего локального сервера (скачать конфиг/иконку, загрузить
-`.ipa` обратно), поэтому `localhost` не подходит — нужен публичный туннель.
+Начиная с Этапа 2 сборки создаются и отслеживаются через `apps/api`, а не через `apps/web` —
+GitHub Actions — это просто текущий исполнитель, с которым `api` общается по одноразовому
+токену конкретной сборки (см. «Сборки (apps/api)» ниже). GitHub Actions должен достучаться до
+твоего локального `api` (скачать конфиг/иконку, загрузить `.ipa` обратно), поэтому `localhost`
+не подходит — нужен публичный туннель **до `api`** (не до `web`, как было в Этапе 0/1).
 
-### 1. Запусти cloudflared-туннель
+### 1. Запусти cloudflared-туннель до локального api
 
 ```
-cloudflared tunnel --url http://localhost:3000
+cloudflared tunnel --url http://localhost:3011
 ```
 
 Команда выведет публичный адрес вида `https://random-words.trycloudflare.com` — это и есть
-`PUBLIC_BASE_URL`. **Адрес меняется при каждом перезапуске туннеля** — после перезапуска обнови
-секрет `PUBLIC_BASE_URL` в репозитории (см. ниже) и `PUBLIC_BASE_URL` в `apps/web/.env.local`.
+`API_PUBLIC_URL`. **Адрес меняется при каждом перезапуске туннеля** — после перезапуска обнови
+`API_PUBLIC_URL` в `apps/api/.env`.
 
 ### 2. Создай fine-grained GitHub-токен
 
@@ -42,24 +45,33 @@ GitHub → Settings → Developer settings → Fine-grained tokens → Generate 
 - Repository access: только этот репозиторий (`serob111/iosmobilio2` или твой форк/копия);
 - Permissions → Actions: **Read and write**.
 
-Это и есть `GITHUB_TOKEN`.
+Это и есть `GITHUB_DISPATCH_TOKEN`.
 
-### 3. Настрой секреты репозитория
-
-Settings → Secrets and variables → Actions → Repository secrets:
-- `BUILD_SECRET` — любая случайная строка (например, `openssl rand -hex 32`), одна и та же в
-  секретах репозитория и в `apps/web/.env.local`;
-- `PUBLIC_BASE_URL` — адрес туннеля из шага 1.
-
-### 4. Заполни apps/web/.env.local
+### 3. Заполни apps/api/.env
 
 ```
-PUBLIC_BASE_URL=https://your-tunnel.trycloudflare.com
-GITHUB_TOKEN=github_pat_...
+BUILD_RUNNER=github
+API_PUBLIC_URL=https://your-tunnel.trycloudflare.com
+GITHUB_DISPATCH_TOKEN=github_pat_...
 GITHUB_REPO=serob111/iosmobilio2
+GITHUB_WORKFLOW=build-ipa.yml
 GITHUB_REF=main
-BUILD_SECRET=тот-же-секрет-что-в-репозитории
 ```
+
+### 4. Создай сборку
+
+Сессионной cookie из обычного входа (см. «Авторизация и организации» ниже) и существующего
+проекта достаточно:
+
+```
+curl -X POST http://localhost:3011/orgs/<orgId>/projects/<projectId>/builds \
+  -H "Cookie: better-auth.session_token=..."
+```
+
+`api` сам вызовет `workflow_dispatch` с `buildId`/одноразовым `buildToken`/`baseUrl=API_PUBLIC_URL` —
+дальше workflow сам пройдёт `start → config → icon → сборка → upload`, не трогая `apps/web`.
+Статус — `GET /orgs/<orgId>/projects/<projectId>/builds/<buildId>`, готовый файл —
+`GET .../builds/<buildId>/ipa` (302 на подписанную ссылку).
 
 ### Совет
 
@@ -221,18 +233,13 @@ HTTP-флоу), сами пропускаются локально, если н�
 
 ## Как это работает
 
-1. `/` анализирует сайт (cheerio: название, иконка, цвет, до 4 вкладок из навигации), сохраняет
-   конфиг в `data/projects/<id>/config.json` по zod-схеме (`packages/config`).
-2. `/p/[id]` — правка конфига + кнопка «Собрать .ipa». Кнопка вызывает
-   `POST /api/projects/[id]/build`, который запускает `.github/workflows/build-ipa.yml` через
-   GitHub API (`workflow_dispatch`).
-3. Workflow (на `macos-latest`) скачивает конфиг и иконку с сервера (`/api/build-config`,
-   `/api/build-icon`, защищены заголовком `x-build-secret`), подставляет их в
-   `apps/shell/project.config.json` + `apps/shell/src/config/generated.config.json`, собирает
-   `expo prebuild` → `pod install` → `xcodebuild archive` (без подписи) → `.ipa`, загружает файл
-   обратно (`POST /api/projects/[id]/ipa`) или сообщает об ошибке (`POST /api/projects/[id]/failed`).
-4. `/p/[id]` опрашивает `GET /api/projects/[id]/build` каждые 10 секунд и показывает статус; при
-   готовности — кнопка «Скачать .ipa» (`GET /api/projects/[id]/ipa`).
+Этап 0/1: `/` анализировал сайт и правка шла через `apps/web`'s файловое хранилище
+(`data/projects/<id>/config.json`), а кнопка «Собрать .ipa» сама дёргала GitHub API. С Этапа 2
+анализ сайта и проекты уже живут в `apps/api` (см. «Проекты» ниже), а сборки — тоже через
+`apps/api`, не через `apps/web` (см. «Сборки» ниже): `apps/web`'s старые роуты
+(`/api/projects/[id]/build`, `/api/build-config`, `/api/build-icon`, `/api/projects/[id]/ipa`,
+`/api/projects/[id]/failed`) больше не используются воркфлоу и будут удалены отдельным шагом, когда
+`apps/web`'s фронтенд переключится на вызовы `api` напрямую.
 
 Можно запустить workflow и без сервера — вручную, с тестовым конфигом
 (`apps/shell/test/test.config.json` + `test-icon.png`), не трогая реальный проект:
@@ -287,9 +294,68 @@ GET  /orgs/:orgId/projects/:projectId/icon — 302 на подписанную �
 
 `projects.config` — jsonb, валидируется `@mobilio/config`'s `ProjectConfigSchema` при каждой
 записи; `projects.config_version` фиксирует, под какую версию схемы подогнан конкретный ряд
-(см. `CONFIG_SCHEMA_VERSION` там же) — на случай будущей миграции формы конфига. Таблица `builds`
-(org_id, project_id, status, run_id, run_url, error, template_version, started_at, finished_at,
-ipa_key) с тем же RLS-паттерном уже создана заранее — сам модуль сборки появится позже.
+(см. `CONFIG_SCHEMA_VERSION` там же) — на случай будущей миграции формы конфига.
+
+## Сборки (apps/api/src/builds)
+
+Сборки создаются и отслеживаются через `api`; GitHub Actions — лишь текущий исполнитель, который
+общается с `api` по одноразовому токену конкретной сборки. Позже его заменит перепаковка шаблона
+(`packages/repacker`), поэтому весь код вне `apps/api/src/builds` знает только интерфейс
+`BuildRunner { dispatch(build: {id, token, baseUrl}): Promise<void> }` — не GitHub напрямую.
+`GithubActionsRunner` (REST `workflow_dispatch`) — единственная реальная реализация;
+`FakeRunner` — для тестов/локалки (`BUILD_RUNNER=fake`, см. `.env.example`), просто запоминает
+диспатч вместо реального вызова.
+
+Пользовательские эндпоинты (сессия + `OrgGuard` + `ProjectGuard`):
+
+```
+POST /orgs/:orgId/projects/:projectId/builds          — создать сборку → 201 {id, status:'queued'}
+GET  /orgs/:orgId/projects/:projectId/builds          — последние 20
+GET  /orgs/:orgId/projects/:projectId/builds/:buildId
+GET  /orgs/:orgId/projects/:projectId/builds/:buildId/ipa — 302 на подписанную ссылку (только status=done)
+```
+
+Одна активная (`queued`/`building`) сборка на проект — гарантирует не предварительная проверка, а
+частичный уникальный индекс (`builds_one_active_per_project`); вторая параллельная попытка ловит
+unique-violation от самой Postgres и превращается в `409 BUILD_IN_PROGRESS`. Создание сборки также
+ограничено rate-limit'ом по организации (10 в час, Redis fixed-window). Если `BuildRunner.dispatch`
+упал — сборка сразу помечается `failed`, ответ — `502 BUILD_DISPATCH_FAILED`.
+
+Эндпоинты раннера (`@Public()`, авторизация `Authorization: Bearer <buildToken>` через
+`BuildRunnerGuard`):
+
+```
+POST /builds/:id/start  { runId, runUrl }   — queued → building (повторный вызов идемпотентен)
+GET  /builds/:id/config                     — { config, templateVersion }
+GET  /builds/:id/icon                       — PNG потоком из object storage
+POST /builds/:id/ipa                        — потоковая загрузка .ipa → done, лимит 300 МБ
+POST /builds/:id/fail  { error }            — queued/building → failed
+```
+
+Переходы статуса — только `queued → building → done|failed` и `queued → failed`; любой другой —
+`409 INVALID_BUILD_STATE`. Токен (`sha256`-хеш в БД, сырой — только в workflow-инпуте, никогда
+пользователю) живёт 2 часа, но очищается (`token_hash = NULL`) сразу при переходе в `done`/`failed` —
+раньше истечения TTL. RLS (`builds_token_select`/`builds_token_update`, см.
+`0009_builds_token_access.sql`) пускает по `token_hash` + `token_expires_at > now()` +
+`status IN ('queued','building')` — те же условия в `USING`, но `WITH CHECK (true)`: именно
+разрешённые переходы (`building → done`, очистка токена) двигают строку *вне* того состояния, что
+требует `USING`, так что повторять его в `WITH CHECK` сломало бы ровно те обновления, которые должны
+проходить. У раннера нет пользовательской идентичности вообще — `runInBuildContext`
+(`packages/db/src/tenant-context.ts`) не выставляет `app.user_id`, только `app.lookup_token_hash`
+(для поиска сборки) и затем `app.org_id` из уже найденной строки (в одной транзакции — так читается
+и сам проект под обычной `projects_org_isolation`, без отдельного «только для раннера» исключения).
+`BuildRunnerGuard` дополнительно сверяет хеши `timingSafeEqual` после самого запроса — защита в
+глубину, на случай если совпадение на стороне БД когда-нибудь ослабнет. Любая проблема с токеном
+(не найден, истёк, не тот статус) — одинаковый `404 BUILD_NOT_FOUND`, без разницы в коде ответа:
+раннер не должен уметь отличать «неверный токен» от «сборка уже завершена».
+
+Загрузка `.ipa` читает тело запроса как поток (Express не трогает `application/octet-stream`),
+проверяет magic bytes (`PK\x03\x04`) и 300 МБ лимит прямо во время стриминга (не после полной
+буферизации) через собственный `Transform` (`ipa-stream.ts`) — превышение лимита или неверная
+подпись возвращает `413 FILE_TOO_LARGE`/`400 INVALID_IPA` без сохранения в storage. Финальное
+обновление статуса на `done` перечитывает текущий статус сборки в свежей транзакции прямо перед
+записью (а не держит одну транзакцию на всё время долгой загрузки) — если конкурентный вызов уже
+выиграл эту гонку, только что загруженный объект удаляется и ответ — `409 INVALID_BUILD_STATE`.
 
 ## Черновики (apps/api/src/drafts, apps/worker)
 
@@ -409,7 +475,8 @@ pre-read узнаёт id черновика); если иконки чернов
 ```
 apps/shell/   — Expo-оболочка (SDK 57, expo-router)
 apps/web/     — Next.js App Router: сайт, анализ сайтов, API сборки, вход/выход, шапка
-apps/api/     — NestJS: auth (Better Auth), организации, проекты, health-check, очередь (BullMQ)
+apps/api/     — NestJS: auth (Better Auth), организации, проекты, черновики, сборки (builds),
+                health-check, очередь (BullMQ)
 apps/worker/  — BullMQ-воркер — каркас для следующих этапов
 packages/config/   — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
 packages/db/       — Drizzle-схема, миграции, роли/RLS, TenantContext (см. выше)
