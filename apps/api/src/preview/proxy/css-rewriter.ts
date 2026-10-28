@@ -10,7 +10,6 @@ import { rewriteReferencedUrl } from './rewrite-url.js';
 const CSS_URL_PATTERN = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
 
 export type CssRewriterOptions = {
-  slug: string;
   allowlist: HostAllowlist;
   currentPageUrl: URL;
   primaryHost: string;
@@ -30,13 +29,7 @@ export function rewriteCss(css: string, options: CssRewriterOptions): string {
     if (!trimmed) {
       return match;
     }
-    const rewritten = rewriteReferencedUrl(
-      trimmed,
-      options.currentPageUrl,
-      options.allowlist,
-      options.slug,
-      options.primaryHost,
-    );
+    const rewritten = rewriteReferencedUrl(trimmed, options.currentPageUrl, options.allowlist, options.primaryHost);
     if (rewritten === trimmed) {
       return match;
     }

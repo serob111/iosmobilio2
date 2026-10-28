@@ -1,5 +1,4 @@
 import { json, urlencoded } from 'express';
-import type { Request, Response, NextFunction } from 'express';
 import { toNodeHandler } from 'better-auth/node';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
@@ -10,27 +9,10 @@ import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { validateBuildEnv } from './builds/validate-build-env.js';
 import { validatePreviewEnv } from './preview/validate-preview-env.js';
 import { validateSafeFetchTestEnv } from './net/safe-fetch.js';
-
-/**
- * The preview proxy (/s/:slug/*) answers only on PREVIEW_PROXY_ORIGIN's own host, and
- * every other route answers only on any OTHER host — never both on the same request.
- * This is the actual enforcement of "separate domain" for the proxy: validatePreviewEnv()
- * only checks the two origins are configured to be different, this is what makes that
- * configuration load-bearing at request time (e.g. a request that spoofs the Host header
- * to the proxy's hostname must not reach the authenticated API routes, and vice versa — a
- * request to the proxy host for, say, /orgs/... must 404, not fall through).
- */
-function hostRoutingSplit(proxyHost: string) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const isProxyHost = req.hostname === proxyHost;
-    const isProxyPath = req.path.startsWith('/s/');
-    if (isProxyHost !== isProxyPath) {
-      res.status(404).end();
-      return;
-    }
-    next();
-  };
-}
+import { createPreviewProxyMiddleware } from './preview/proxy/proxy-middleware.js';
+import { PreviewLinkService } from './preview/preview-link.service.js';
+import { ProxyRateLimitService } from './preview/proxy/proxy-rate-limit.js';
+import { ProxyCacheService } from './preview/proxy/proxy-cache.js';
 
 /**
  * Builds the fully-wired app (not just `new NestFactory` — the Better Auth mount,
@@ -62,7 +44,19 @@ export async function createApp(): Promise<INestApplication> {
   // behind Caddy: TRUST_PROXY_HOPS=1 (see .env.example/README).
   app.getHttpAdapter().getInstance().set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 0));
 
-  app.use(hostRoutingSplit(new URL(process.env.PREVIEW_PROXY_ORIGIN!).hostname));
+  // Every preview answers on its own origin, `https://<slug>.<PREVIEW_PROXY_DOMAIN>` — this
+  // one middleware both decides whether a request is "proxy territory" at all (by Host
+  // header, see preview-host.ts) and, if so, handles it completely, mounted ahead of
+  // every other route so a Host-header-spoofed request can never reach an authenticated
+  // api route and vice versa. See proxy-middleware.ts's own comment for why this has to
+  // be a plain Express middleware rather than a Nest controller.
+  app.use(
+    createPreviewProxyMiddleware({
+      previewLinkService: app.get(PreviewLinkService),
+      rateLimit: app.get(ProxyRateLimitService),
+      cache: app.get(ProxyCacheService),
+    }),
+  );
 
   const authService = app.get(AuthService);
   app.use('/api/auth', toNodeHandler(authService.auth));

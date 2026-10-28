@@ -49,12 +49,28 @@ export default defineConfig({
         PORT: '3011',
         MAIL_LOG_FILE,
         // validatePreviewEnv (src/preview/validate-preview-env.ts) refuses to start
-        // without this — a different registrable domain from WEB_ORIGIN above. Nothing
-        // in this e2e suite actually calls the proxy itself (preview.spec.ts mocks
-        // apps/api at the browser network boundary via page.route(), the same way
-        // e2e/server.ts mocks the analyzed site for the legacy flow), so this never
-        // needs to be reachable — it only needs to satisfy startup validation.
-        PREVIEW_PROXY_ORIGIN: 'http://preview.e2e.invalid:3011',
+        // without PREVIEW_PROXY_DOMAIN set to a different registrable domain from
+        // WEB_ORIGIN above. "preview.localhost" (not bare "localhost", which would
+        // collide with WEB_ORIGIN's own hostname) — Chromium (and most modern browsers)
+        // resolve *any* `*.localhost`-suffixed hostname, at any subdomain depth, straight
+        // to loopback with no DNS/hosts-file entry needed, which is exactly what
+        // preview-proxy.spec.ts needs for its own cross-origin isolation test to reach a
+        // real preview subdomain (`<slug>.preview.localhost`) in a sandbox with no
+        // outbound internet access. preview.spec.ts (the shell-page test, mocked at the
+        // browser's network boundary) never needs this to be reachable at all, only to
+        // satisfy startup validation here either way. http, not https — no TLS cert for
+        // *.localhost exists in this environment.
+        PREVIEW_PROXY_DOMAIN: 'preview.localhost',
+        PREVIEW_PROXY_SCHEME: 'http',
+        // This api answers on :3011, not the scheme's default port — without this,
+        // every generated preview link would silently point at :80, where nothing here
+        // is listening. Real deployments (always on 443 behind a reverse proxy) never set this.
+        PREVIEW_PROXY_PORT: '3011',
+        // Lets the real api's safeFetch/proxyFetch calls reach the real local "site"
+        // servers preview-proxy.spec.ts spins up itself — see
+        // net/safe-fetch.ts's getSafeFetchTestOverrides for why this is scoped to
+        // 127.0.0.1/::1 only, and refused outright if NODE_ENV=production.
+        SAFE_FETCH_ALLOW_LOCAL_FOR_TESTING: 'true',
         // StorageModule refuses to start without all four of these (createObjectStorageFromEnv) —
         // this suite never exercises file upload/download itself, so these just need to be set,
         // not correct against a real bucket.

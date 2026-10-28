@@ -8,20 +8,22 @@ import { isUrlHostAllowed, type HostAllowlist } from './host-allowlist.js';
 export const HOST_OVERRIDE_QUERY_KEY = '__mobilio_host';
 
 /**
- * `targetUrl.hostname === primaryHost` → the proxy's bare `/s/:slug/<path>` form (no
- * override needed, that's what a request with no override query param already resolves
- * to). Any other allowed host — a subdomain, the www-variant if source.url omitted it,
- * … — carries HOST_OVERRIDE_QUERY_KEY explicitly, since the proxy path alone can't
- * otherwise distinguish "this project's primary host" from "this project's cdn
- * subdomain": both would otherwise look identical past `/s/:slug/`.
+ * Every preview now has its own real origin (`https://<slug>.<PREVIEW_PROXY_DOMAIN>`),
+ * so a reference to the project's *primary* host (or its www-variant — both fold to the
+ * same `primaryHost` via host-allowlist.ts) rewrites to a bare path-absolute reference:
+ * it already resolves correctly against the current page's own origin, no slug prefix or
+ * `<base>` override needed at all. Any OTHER allowed host — a subdomain, a CDN — still
+ * needs HOST_OVERRIDE_QUERY_KEY, since the bare path alone can't otherwise distinguish
+ * "this preview's primary host" from "this preview's cdn subdomain": both would
+ * otherwise look identical past the shared origin.
  */
-export function buildProxyPath(slug: string, targetUrl: URL, primaryHost: string): string {
+export function buildProxyPath(targetUrl: URL, primaryHost: string): string {
   const suffix = `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
   if (targetUrl.hostname === primaryHost) {
-    return `/s/${slug}${suffix}`;
+    return suffix;
   }
   const separator = targetUrl.search ? '&' : '?';
-  return `/s/${slug}${suffix}${separator}${HOST_OVERRIDE_QUERY_KEY}=${encodeURIComponent(targetUrl.hostname)}`;
+  return `${suffix}${separator}${HOST_OVERRIDE_QUERY_KEY}=${encodeURIComponent(targetUrl.hostname)}`;
 }
 
 /**
@@ -34,13 +36,12 @@ export function buildProxyPath(slug: string, targetUrl: URL, primaryHost: string
  * interceptor script injected by html-rewriter.ts can still find and target=_blank it at
  * runtime, and so a disallowed *resource* reference (rare, but possible) just fails to
  * load exactly as it would without this proxy, rather than being silently redirected
- * somewhere; host allowed → rewritten into the proxy-relative scheme.
+ * somewhere; host allowed → rewritten into the path-absolute, same-origin scheme.
  */
 export function rewriteReferencedUrl(
   raw: string,
   currentPageUrl: URL,
   allowlist: HostAllowlist,
-  slug: string,
   primaryHost: string,
 ): string {
   let absolute: URL;
@@ -55,5 +56,5 @@ export function rewriteReferencedUrl(
   if (!isUrlHostAllowed(absolute, allowlist)) {
     return raw;
   }
-  return buildProxyPath(slug, absolute, primaryHost);
+  return buildProxyPath(absolute, primaryHost);
 }

@@ -3,11 +3,9 @@ import { createHtmlRewriteStream, type HtmlRewriterOptions } from './html-rewrit
 
 function baseOptions(overrides: Partial<HtmlRewriterOptions> = {}): HtmlRewriterOptions {
   return {
-    slug: 'abc123',
     allowlist: { baseHost: 'example.com' },
     currentPageUrl: new URL('https://example.com/page'),
     primaryHost: 'example.com',
-    proxyOrigin: 'https://proxy.mobilio.test',
     ...overrides,
   };
 }
@@ -25,14 +23,14 @@ async function rewriteHtml(html: string, options: HtmlRewriterOptions): Promise<
 }
 
 describe('createHtmlRewriteStream', () => {
-  it('rewrites an allowed-host absolute link into the proxy path', async () => {
+  it('rewrites an allowed-host absolute link into a bare path-absolute reference', async () => {
     const out = await rewriteHtml('<a href="https://example.com/about">About</a>', baseOptions());
-    expect(out).toContain('href="/s/abc123/about"');
+    expect(out).toContain('href="/about"');
   });
 
   it('rewrites an allowed subdomain with the host-override query param', async () => {
     const out = await rewriteHtml('<img src="https://cdn.example.com/logo.png">', baseOptions());
-    expect(out).toContain('src="/s/abc123/logo.png?__mobilio_host=cdn.example.com"');
+    expect(out).toContain('src="/logo.png?__mobilio_host=cdn.example.com"');
   });
 
   it('leaves a disallowed-host link untouched', async () => {
@@ -45,18 +43,22 @@ describe('createHtmlRewriteStream', () => {
     expect(out).toContain('href="mailto:test@example.com"');
   });
 
-  it('resolves a relative href against the current page URL before rewriting', async () => {
+  it('leaves an already path-absolute, same-origin href as-is (resolving+rewriting it is a no-op by construction)', async () => {
     const out = await rewriteHtml('<a href="/pricing">Pricing</a>', baseOptions());
-    expect(out).toContain('href="/s/abc123/pricing"');
+    expect(out).toContain('href="/pricing"');
   });
 
-  it('injects a <base> as the first thing inside <head>', async () => {
+  it('resolves a genuinely relative href against the current page URL', async () => {
+    const out = await rewriteHtml('<a href="../other.html">Other</a>', {
+      ...baseOptions(),
+      currentPageUrl: new URL('https://example.com/dir/page.html'),
+    });
+    expect(out).toContain('href="/other.html"');
+  });
+
+  it('does not insert a <base> tag at all', async () => {
     const out = await rewriteHtml('<html><head><title>T</title></head><body></body></html>', baseOptions());
-    const headIdx = out.indexOf('<head>');
-    const baseIdx = out.indexOf('<base href="https://proxy.mobilio.test/s/abc123/">');
-    const titleIdx = out.indexOf('<title>');
-    expect(baseIdx).toBeGreaterThan(headIdx);
-    expect(baseIdx).toBeLessThan(titleIdx);
+    expect(out).not.toContain('<base');
   });
 
   it('injects the Preview banner and click-interceptor script right after <body>', async () => {
@@ -98,10 +100,10 @@ describe('createHtmlRewriteStream', () => {
       '<video src="https://example.com/v.mp4" poster="https://example.com/p.jpg"></video>' +
       '<audio src="https://example.com/a.mp3"></audio>';
     const out = await rewriteHtml(html, baseOptions());
-    expect(out).toContain('action="/s/abc123/submit"');
-    expect(out).toContain('src="/s/abc123/v.mp4"');
-    expect(out).toContain('poster="/s/abc123/p.jpg"');
-    expect(out).toContain('src="/s/abc123/a.mp3"');
+    expect(out).toContain('action="/submit"');
+    expect(out).toContain('src="/v.mp4"');
+    expect(out).toContain('poster="/p.jpg"');
+    expect(out).toContain('src="/a.mp3"');
   });
 
   it('handles a multi-byte UTF-8 character split across chunk boundaries', async () => {

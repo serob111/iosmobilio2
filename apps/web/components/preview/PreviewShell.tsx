@@ -11,8 +11,10 @@ type Props = {
 };
 
 /**
- * The "app" itself: a status bar, the active tab's content proxied through
- * PREVIEW_PROXY_ORIGIN inside a sandboxed iframe, and a bottom tab bar. One tree, not two
+ * The "app" itself: a status bar, the active tab's content proxied through this
+ * preview's own origin (`dto.proxyBase`, `https://<slug>.<PREVIEW_PROXY_DOMAIN>` —
+ * every preview gets its own origin, so no cookie/localStorage ever leaks between two
+ * different previews) inside a sandboxed iframe, and a bottom tab bar. One tree, not two
  * — an iPhone-shaped frame is layered on at the md: breakpoint via responsive classes on
  * the same elements, rather than rendering a whole separate desktop/mobile subtree (which
  * would mean two live iframes loading the same content at once, and two of everything for

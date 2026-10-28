@@ -14,6 +14,7 @@ import { type ObjectStorage, projectIconKey, draftIconKey } from '@mobilio/stora
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
 import { generatePreviewSlug, hashPreviewSlug } from './preview-slug.js';
+import { previewProxyOrigin } from './validate-preview-env.js';
 
 export type PreviewDto = {
   name: string;
@@ -30,8 +31,7 @@ function previewUrl(rawSlug: string): string {
 }
 
 function proxyBase(rawSlug: string): string {
-  const proxyOrigin = process.env.PREVIEW_PROXY_ORIGIN ?? '';
-  return `${proxyOrigin}/s/${rawSlug}`;
+  return previewProxyOrigin(rawSlug);
 }
 
 @Injectable()
@@ -103,7 +103,7 @@ export class PreviewLinkService {
   }
 
   /**
-   * Used by the proxy (ProxyController) to learn which real site a slug's link actually
+   * Used by the preview proxy middleware to learn which real site a slug's link actually
    * points at. Returns undefined for the same cases getPreviewDto 404s on (unknown/
    * revoked/expired slug, missing project/draft row) *and* for a config whose source
    * isn't `{type:'url'}` — a raw-HTML-upload source has no live site to fetch at all, so

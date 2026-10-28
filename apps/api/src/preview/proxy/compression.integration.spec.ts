@@ -10,15 +10,13 @@ import { createApp } from '../../create-app.js';
 import { DbService } from '../../db/db.service.js';
 import { generatePreviewSlug } from '../preview-slug.js';
 
-// A fixed port, not an ephemeral one from app.listen(0) — the (still-current, pre-item-2)
-// HTML rewriter bakes PREVIEW_PROXY_ORIGIN verbatim into a <base href>, and the browser
-// resolves every absolute-*path* reference on the page against that base's authority
-// (scheme+host+port), not the page's own actual origin. An ephemeral port is only known
-// *after* the server starts listening, but PREVIEW_PROXY_ORIGIN must already be set
-// *before* createApp() runs (validatePreviewEnv reads it at startup) — so this fixes the
-// api's own listen port to match, rather than discovering one after the fact.
-const API_PORT = 34567;
-process.env.PREVIEW_PROXY_ORIGIN = `http://localhost:${API_PORT}`;
+// "localhost" — Chromium (and most modern browsers) resolve *any* `*.localhost`
+// subdomain straight to loopback with no DNS/hosts-file entry needed, which is exactly
+// what lets a real browser navigate to a specific preview's own slug subdomain
+// (`<slug>.localhost`) in a sandbox with no outbound internet access. PREVIEW_PROXY_SCHEME
+// defaults to https, but this test's browser has no TLS cert for *.localhost, so http.
+process.env.PREVIEW_PROXY_DOMAIN = 'localhost';
+process.env.PREVIEW_PROXY_SCHEME = 'http';
 process.env.WEB_ORIGIN = 'http://127.0.0.1:9999';
 // Lets proxyFetch actually reach the real local upstream server this test spins up —
 // see net/safe-fetch.ts's safeFetchTestOverrides for why this is scoped to 127.0.0.1/::1
@@ -66,7 +64,7 @@ function startUpstream(upstreamPort: () => number): Server {
       `</body></html>`
     );
   }
-  const cssFor = (encoding: Encoding) => `#marker { color: rgb(1, 2, 3); }`.replace('ENC', encoding);
+  const cssFor = () => `#marker { color: rgb(1, 2, 3); }`;
   const jsFor = (encoding: Encoding) => `document.getElementById('marker').textContent = 'ok-${encoding}';`;
 
   return createServer((req, res) => {
@@ -82,7 +80,7 @@ function startUpstream(upstreamPort: () => number): Server {
       file === 'page.html'
         ? [pageHtml(encoding), 'text/html; charset=utf-8']
         : file === 'style.css'
-          ? [cssFor(encoding), 'text/css; charset=utf-8']
+          ? [cssFor(), 'text/css; charset=utf-8']
           : [jsFor(encoding), 'application/javascript; charset=utf-8'];
     const compressed = compress(encoding, Buffer.from(body, 'utf8'));
     res.writeHead(200, {
@@ -98,6 +96,7 @@ describe.skipIf(!hasLiveServices)(
   'preview proxy: Content-Encoding / hop-by-hop header stripping (live Postgres + Redis + MinIO + real browser)',
   () => {
     let app: INestApplication;
+    let apiPort: number;
     let upstream: Server;
     let upstreamPort: number;
     let browser: Browser;
@@ -112,7 +111,8 @@ describe.skipIf(!hasLiveServices)(
 
       app = await createApp();
       await app.init();
-      await app.listen(API_PORT, '127.0.0.1');
+      await app.listen(0, '127.0.0.1');
+      apiPort = (app.getHttpServer().address() as AddressInfo).port;
 
       upstream = startUpstream(() => upstreamPort);
       await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve));
@@ -185,7 +185,7 @@ describe.skipIf(!hasLiveServices)(
 
         for (const encoding of ENCODINGS) {
           const page = await browser.newPage();
-          await page.goto(`http://localhost:${API_PORT}/s/${rawSlug}/${encoding}/page.html`);
+          await page.goto(`http://${rawSlug}.localhost:${apiPort}/${encoding}/page.html`);
           await page.waitForFunction(() => document.getElementById('marker')?.textContent !== 'unset');
           const text = await page.textContent('#marker');
           expect(text).toBe(`ok-${encoding}`);

@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
 import type { SupportedIcon } from '@mobilio/config';
 import { computeDominantColor, generateLetterAvatar, processIconImage } from './icon.js';
-import { safeFetch, SafeFetchError } from '../net/safe-fetch.js';
+import { safeFetch, SafeFetchError, getSafeFetchTestOverrides } from '../net/safe-fetch.js';
 
 export type AnalyzeSiteErrorCode =
   | 'INVALID_URL'
@@ -172,6 +172,7 @@ async function downloadBytes(url: string): Promise<Buffer | null> {
     const result = await safeFetch(url, {
       maxBodyBytes: 5 * 1024 * 1024,
       allowedContentTypePrefixes: ['image/'],
+      ...getSafeFetchTestOverrides(),
     });
     if (result.status < 200 || result.status >= 300) return null;
     return result.body;
@@ -197,6 +198,7 @@ export async function analyzeSite(rawUrl: string): Promise<SiteAnalysis> {
     const result = await safeFetch(url, {
       maxBodyBytes: 2 * 1024 * 1024,
       allowedContentTypePrefixes: ['text/html'],
+      ...getSafeFetchTestOverrides(),
     });
     if (result.status < 200 || result.status >= 300) {
       throw new AnalyzeSiteError(

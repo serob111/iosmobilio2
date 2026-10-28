@@ -14,10 +14,6 @@ const URL_ATTRS_BY_TAG: Record<string, string[]> = {
   audio: ['src'],
 };
 
-function escapeAttr(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-}
-
 /**
  * Fixed banner ("Preview · Mobilio") + the external-link click interceptor, injected as
  * the first child of <body>. The interceptor compares the clicked link's *resolved*
@@ -32,12 +28,10 @@ function bannerAndInterceptorHtml(): string {
 }
 
 export type HtmlRewriterOptions = {
-  slug: string;
   allowlist: HostAllowlist;
   /** The real upstream URL this page was actually fetched from — relative URLs in its markup resolve against this, not the proxy's own URL. */
   currentPageUrl: URL;
   primaryHost: string;
-  proxyOrigin: string;
 };
 
 /**
@@ -47,6 +41,11 @@ export type HtmlRewriterOptions = {
  * rather than silently mis-decoding multi-byte characters split across chunk boundaries).
  * Its *output* is also strings, which Node's http response can write directly.
  *
+ * No <base> is inserted — every preview now has its own real origin
+ * (`https://<slug>.<PREVIEW_PROXY_DOMAIN>`), so relative/path-absolute references in the
+ * page's own markup already resolve correctly against it with no override needed; only
+ * ABSOLUTE references to an allowed host go through rewriteReferencedUrl at all.
+ *
  * Only href/src/action/poster attributes on a fixed, known set of tags are touched —
  * never inline event handlers or <script> *contents* (JS is never rewritten at all, see
  * README's "Неподписанный .ipa"-style caveat section for why: a partially-working preview
@@ -54,10 +53,9 @@ export type HtmlRewriterOptions = {
  */
 export function createHtmlRewriteStream(options: HtmlRewriterOptions): RewritingStream {
   const rewriter = new RewritingStream();
-  const proxyRoot = `${options.proxyOrigin}/s/${options.slug}/`;
 
   function rewriteUrl(raw: string): string {
-    return rewriteReferencedUrl(raw, options.currentPageUrl, options.allowlist, options.slug, options.primaryHost);
+    return rewriteReferencedUrl(raw, options.currentPageUrl, options.allowlist, options.primaryHost);
   }
 
   rewriter.on('startTag', (startTag) => {
@@ -70,12 +68,6 @@ export function createHtmlRewriteStream(options: HtmlRewriterOptions): Rewriting
       }
     }
     rewriter.emitStartTag(startTag);
-    // Emitted as the first thing inside <head>, so it's the first <base> in the
-    // document regardless of whether the real page has its own — only the first <base>
-    // with an href is ever honored, so a second one later is a harmless no-op.
-    if (startTag.tagName === 'head') {
-      rewriter.emitRaw(`<base href="${escapeAttr(proxyRoot)}">`);
-    }
     // Emitted right after <body>'s own start tag, so the banner is the first child of
     // <body> (not the last, which emitting on body's *end* tag would produce).
     if (startTag.tagName === 'body') {
