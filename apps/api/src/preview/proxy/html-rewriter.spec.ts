@@ -61,6 +61,45 @@ describe('createHtmlRewriteStream', () => {
     expect(out).not.toContain('<base');
   });
 
+  it('strips a <meta http-equiv="Content-Security-Policy"> tag', async () => {
+    const out = await rewriteHtml(
+      '<html><head><meta http-equiv="Content-Security-Policy" content="script-src \'self\'"><title>T</title></head><body></body></html>',
+      baseOptions(),
+    );
+    expect(out).not.toContain('Content-Security-Policy');
+    expect(out).toContain('<title>T</title>');
+  });
+
+  it('strips a <meta http-equiv="X-Frame-Options"> tag', async () => {
+    const out = await rewriteHtml('<html><head><meta http-equiv="X-Frame-Options" content="DENY"></head><body></body></html>', baseOptions());
+    expect(out).not.toContain('X-Frame-Options');
+  });
+
+  it('is case-insensitive when matching the http-equiv value', async () => {
+    const out = await rewriteHtml('<meta http-equiv="content-security-policy" content="default-src \'none\'">', baseOptions());
+    expect(out).not.toContain('content-security-policy');
+  });
+
+  it('leaves an unrelated <meta http-equiv> tag untouched', async () => {
+    const out = await rewriteHtml('<meta http-equiv="refresh" content="30">', baseOptions());
+    expect(out).toContain('http-equiv="refresh"');
+  });
+
+  it('leaves a <meta> tag with no http-equiv attribute untouched', async () => {
+    const out = await rewriteHtml('<meta charset="utf-8">', baseOptions());
+    expect(out).toContain('charset="utf-8"');
+  });
+
+  it('still injects the banner/click-interceptor on a page with a restrictive meta-CSP (which would otherwise block it)', async () => {
+    const out = await rewriteHtml(
+      '<html><head><meta http-equiv="Content-Security-Policy" content="script-src \'none\'"></head><body><p>hi</p></body></html>',
+      baseOptions(),
+    );
+    expect(out).not.toContain('Content-Security-Policy');
+    expect(out).toContain('Preview · Mobilio');
+    expect(out).toContain('window.open');
+  });
+
   it('injects the Preview banner and click-interceptor script right after <body>', async () => {
     const out = await rewriteHtml('<html><body><p>hi</p></body></html>', baseOptions());
     const bodyIdx = out.indexOf('<body>');

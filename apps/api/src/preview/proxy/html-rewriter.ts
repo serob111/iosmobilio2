@@ -27,6 +27,24 @@ function bannerAndInterceptorHtml(): string {
   return `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#111;color:#fff;font:12px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:4px 8px;pointer-events:none;">Preview · Mobilio</div><script>(function(){document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=a.getAttribute('href');if(!href)return;try{var url=new URL(href,document.baseURI);if(url.origin!==window.location.origin){e.preventDefault();window.open(url.href,'_blank','noopener,noreferrer');}}catch(err){}},true);})();</script>`;
 }
 
+// header-filter.ts already strips the *HTTP-header* forms of these — a page can also
+// declare them via a <meta http-equiv="..."> tag, which headers alone can't touch and
+// which browsers honor exactly like the real header. Left in place, a restrictive
+// meta-CSP (no X-Frame-Options meta equivalent actually exists in the HTML spec, but
+// some sites set it anyway as a defensive no-op; stripped here too, just in case some
+// browser ever did honor it) would block the inline <script> this rewriter injects for
+// the banner/click-interceptor below — the one piece of this proxy's own content that
+// MUST run unconditionally, regardless of what the real page's own policy says.
+const BLOCKED_META_HTTP_EQUIV = new Set(['content-security-policy', 'x-frame-options']);
+
+function isBlockedMetaTag(tagName: string, attrs: { name: string; value: string }[]): boolean {
+  if (tagName !== 'meta') {
+    return false;
+  }
+  const httpEquiv = attrs.find((attr) => attr.name === 'http-equiv');
+  return httpEquiv !== undefined && BLOCKED_META_HTTP_EQUIV.has(httpEquiv.value.toLowerCase());
+}
+
 export type HtmlRewriterOptions = {
   allowlist: HostAllowlist;
   /** The real upstream URL this page was actually fetched from — relative URLs in its markup resolve against this, not the proxy's own URL. */
@@ -59,6 +77,11 @@ export function createHtmlRewriteStream(options: HtmlRewriterOptions): Rewriting
   }
 
   rewriter.on('startTag', (startTag) => {
+    if (isBlockedMetaTag(startTag.tagName, startTag.attrs)) {
+      // Omitted entirely — <meta> is a void element (no end tag, no children), so
+      // simply not emitting this start tag removes it from the output completely.
+      return;
+    }
     const urlAttrs = URL_ATTRS_BY_TAG[startTag.tagName];
     if (urlAttrs) {
       for (const attr of startTag.attrs) {

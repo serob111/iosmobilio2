@@ -192,6 +192,25 @@ describe.skipIf(!hasLiveServices)('preview proxy (<slug>.<PREVIEW_PROXY_DOMAIN>/
     expect(res.text).toContain('window.open');
   });
 
+  it('strips a meta-CSP that forbids inline scripts, so the banner/click-interceptor still runs', async () => {
+    const cookie = await signInByMagicLink(`itest-proxy-metacsp-${Date.now()}@example.com`);
+    const slug = await createPreviewSlug(cookie);
+    server.use(
+      http.get(`https://${FAKE_SITE_HOST}/locked-down`, () =>
+        HttpResponse.text(
+          `<html><head><meta http-equiv="Content-Security-Policy" content="script-src 'none'"></head>` +
+            `<body><p>real content</p></body></html>`,
+          { headers: { 'content-type': 'text/html; charset=utf-8' } },
+        ),
+      ),
+    );
+
+    const res = await proxyGet(slug, '/locked-down').expect(200);
+    expect(res.text).not.toContain('Content-Security-Policy');
+    expect(res.text).toContain('Preview · Mobilio');
+    expect(res.text).toContain('window.open');
+  });
+
   it('returns 405 for a non-GET/HEAD method', async () => {
     const cookie = await signInByMagicLink(`itest-proxy-405-${Date.now()}@example.com`);
     const slug = await createPreviewSlug(cookie);
