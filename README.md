@@ -225,6 +225,7 @@ npm run db:migrate --workspace=@mobilio/db
 BETTER_AUTH_SECRET=...        # обязательна, см. apps/api/.env.example
 API_BASE_URL=http://localhost:3011
 WEB_ORIGIN=http://localhost:3000   # CORS + куда ведут magic-link ссылки
+PREVIEW_PROXY_ORIGIN=http://preview.localtest.me:3011   # другой домен, чем WEB_ORIGIN — см. "Превью" ниже
 
 GOOGLE_CLIENT_ID=             # опционально — без них вход через Google просто выключен
 GOOGLE_CLIENT_SECRET=
@@ -248,7 +249,10 @@ HTTP-флоу), сами пропускаются локально, если н�
 (`npm run dev:infra`), примените миграции (см. «База данных» выше) и экспортируйте переменные из
 `apps/api/.env.example`/`apps/worker/.env.example`/`packages/db/.env.example`, чтобы прогнать их
 по-настоящему. `npm run test:e2e` поднимает настоящий `api` (не мок) — тот же набор переменных нужен
-и ему, через `E2E_API_DATABASE_URL`/`E2E_API_REDIS_URL` (см. `apps/web/playwright.config.ts`).
+и ему, через `E2E_API_DATABASE_URL`/`E2E_API_REDIS_URL`/`E2E_API_S3_ENDPOINT` (см.
+`apps/web/playwright.config.ts`). Превью (`apps/web/e2e/preview.spec.ts`) при этом настоящий `api`
+не вызывает вовсе — мокает apps/api и проксируемый "сайт" на уровне сетевых запросов браузера
+(`page.route`), тем же способом, что `e2e/server.ts` мокает анализируемый сайт для старого флоу.
 
 `.github/workflows/ci.yml` гоняет lint/typecheck/test:coverage на каждый push и PR (с Postgres/Redis
 как `services:` + применением миграций), и Playwright E2E — на PR в `main` (тоже с Postgres/Redis +
@@ -531,13 +535,97 @@ pre-read узнаёт id черновика); если иконки чернов
 `SITE_ERROR_STATUS`, `RESPONSE_TOO_LARGE`, `TOO_MANY_REDIRECTS`), не русский текст в
 `message` — `apps/web` со временем переводит по коду, не парсит текст ошибки.
 
+## Превью (apps/api/src/preview, apps/web/app/preview)
+
+Ссылка на превью — capability URL, как у черновиков: публикуется только `preview_links.slug_hash`
+(sha256 от 22-символьного base64url slug'а, 16 случайных байт); сам slug живёт только в URL,
+восстановить его из БД нельзя. `POST /orgs/:orgId/projects/:projectId/preview-link` (сессия,
+owner/member) и `POST /drafts/me/preview-link` (анонимный claim-token, как и у черновиков)
+создают ссылку — пересоздание сначала отзывает старую (`revoked_at`) в той же транзакции, затем
+вставляет новую; партиционный уникальный индекс (`WHERE revoked_at IS NULL`) — страховка на
+случай двух параллельных пересозданий. Ссылка черновика умирает сама: `expires_at` равен
+`drafts.expires_at` на момент создания, а `preview_links.draft_id REFERENCES drafts.id ON DELETE
+CASCADE` означает, что клейм черновика (`DraftsService.claimDraft`, `DELETE FROM drafts ...`)
+атомически удаляет и его ссылку — отдельного кода отзыва для этого случая не нужно.
+
+RLS на `preview_links` — три независимых пути доступа, под разные личности вызывающего:
+владение проектом (`org_id = app.org_id`, как у любой org-таблицы), владение черновиком (тот же
+`app.lookup_token_hash`, что уже выставляет DraftGuard, через подзапрос к `drafts`), и публичное
+чтение по slug (`app.lookup_slug_hash`, SELECT-only, с проверкой `revoked_at IS NULL`/`expires_at`).
+`GET /preview/:slug` (`@Public()`, лимит 60/мин на IP — не защита от подбора slug'а, у него и так
+128 бит энтропии, а просто подушка) отдаёт `runInPreviewLookupContext` (`packages/db`) — он сам
+находит ссылку по хэшу и выставляет **либо** `app.preview_project_id`, **либо**
+`app.preview_draft_id` (никогда `app.org_id`/`app.lookup_token_hash` — этот вызывающий не член
+организации и не владелец черновика), открывая ровно один проект/черновик через отдельные
+SELECT-политики `projects_preview_select`/`drafts_preview_select`. Ответ — только то, что нужно
+оболочке: `name`, `theme`, `statusBar`, `tabs`, `iconUrl` (подписанный URL, 5 минут), `proxyBase`;
+никаких id организации/проекта/черновика и никакой остальной конфигурации.
+
+### Прокси (apps/api/src/preview/proxy)
+
+`GET/HEAD {PREVIEW_PROXY_ORIGIN}/s/:slug/<путь>` отдаёт содержимое реального сайта проекта/
+черновика так, будто оно открыто внутри приложения. `PREVIEW_PROXY_ORIGIN` обязан быть на
+**другом регистрируемом домене**, не поддомене — `validatePreviewEnv` (через `tldts`, с учётом
+настоящего publicsuffix-списка, а не наивного «последние два лейбла») отказывается стартовать
+иначе, а host-based роутинг в `create-app.ts` отдаёт `/s/:slug/*` только на хосте прокси и 404
+там на всех остальных маршрутах — и наоборот. Это не формальность: cookie/same-site в браузерах
+определяются именно регистрируемым доменом, так что только так куки/фреймы настоящего сайта
+никогда не смешаются с собственной сессией приложения.
+
+Разрешённые хосты для фетча — **только** из `source.url` самого проекта/черновика (сам хост +
+его поддомены + www-вариант), никогда не из `config.allowedDomains`: это поле редактируется
+владельцем проекта (`PUT /orgs/:orgId/projects/:projectId`), и доверие к нему позволило бы
+подставить произвольный третий сайт под свою же ссылку превью. Сам фетч идёт через
+`proxyFetch` (`apps/api/src/preview/proxy/proxy-fetch.ts`) — родственник `safeFetch` (см. выше),
+с тем же резолвом/pinning адресов, но с потоковым (не буферизованным) телом и собственным
+правилом редиректов: хоп за пределы allowlist не фолловится и не считается ошибкой, а
+превращается в `{kind: 'external-redirect'}` — пользователь получает простую страницу со ссылкой
+`target=_blank` на настоящий адрес. Лимиты: 10с таймаут, 10MB на ресурс (обрыв потока, не
+проверка `Content-Length`), допустимые `Content-Type`: html/css/js/json/images/fonts/svg — иначе
+415. Cookie клиента никогда не пересылается реальному сайту (просто не читается из запроса);
+`Set-Cookie`/`X-Frame-Options`/`Content-Security-Policy*`/`Strict-Transport-Security`/
+`Clear-Site-Data` вырезаются из ответа, вместо них ставятся свои (`header-filter.ts`):
+`Content-Security-Policy: frame-ancestors <WEB_ORIGIN>`, `X-Robots-Tag: noindex, nofollow`,
+`Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: cross-origin`.
+
+HTML переписывается потоково (`parse5-html-rewriting-stream`): абсолютные ссылки на
+разрешённые хосты превращаются в путь прокси (`/s/:slug/<путь>`, либо с
+`?__mobilio_host=<поддомен>`, если это не основной хост сайта — иначе путь не отличить от пути
+основного хоста); в `<head>` вставляется `<base>` на корень прокси; в начало `<body>` — баннер
+«Preview · Mobilio» и скрипт-перехватчик кликов по внешним ссылкам (`target=_blank`). CSS —
+те же правила для `url(...)`. **JS не переписывается вообще** — сознательный компромисс:
+частично работающее превью лучше, чем хрупкий переписчик, который сломает чужой скрипт на части
+сайтов. Отсюда два практических ограничения: (1) абсолютные URL, которые сайт строит в
+*собственном* JS (не в HTML/CSS разметке), прокси не увидит и не перепишет — такой запрос уйдёт
+на реальный хост напрямую из браузера и, скорее всего, будет блокирован либо CORS, либо тем, что
+реальный сайт не ожидает чужого `Origin`; (2) вставленный `<base>` указывает на корень прокси
+(`/s/:slug/`), а не на директорию текущей страницы — для сайтов, которые сами резолвят
+относительные пути через `document.baseURI`/`<base>` средствами JS, это может отличаться от
+поведения без прокси. Ответы 5 минут кэшируются в Redis (ключ — slug+путь+query, только статус
+200 и ≤2MB); лимит запросов — по slug и по IP отдельно (у одной загрузки страницы много ресурсов,
+так что лимит заметно мягче, чем у `drafts`/`builds`).
+
+### Веб-оболочка (apps/web/app/preview/[slug], apps/web/app/try)
+
+`/preview/[slug]` — публичная страница-оболочка: статус-бар, нижний таб-бар, активная вкладка —
+`<iframe sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox">`
+на `proxyBase + путь вкладки` (без `allow-forms`/`allow-top-navigation` — проксируемый сайт не
+может ни отправить форму куда-то вовне, ни увести родительский фрейм). На широких экранах —
+в рамке в виде iPhone, на мобильных — на весь экран с safe-area отступами; одно дерево
+разметки, не два отдельных под desktop/mobile. `/try` — минимальная, намеренно не дотягивающая
+до полноценного редактора `/p/[id]` страница: вставить url → черновик (api) → превью тут же,
+inline, в этой же странице, плюс кнопка «Открыть на iPhone» (QR, рисуется на клиенте пакетом
+`qrcode`, + копирование ссылки). Существует только чтобы довести фичу превью до конца и дать
+e2e-тесту (`apps/web/e2e/preview.spec.ts`) реальную страницу для прогона — перенос `/p/[id]` на
+api (Этап 2, пункт 6) этим не затронут и не начат.
+
 ## Структура репозитория
 
 ```
 apps/shell/   — Expo-оболочка (SDK 57, expo-router)
 apps/web/     — Next.js App Router: сайт, анализ сайтов, API сборки, вход/выход, шапка
 apps/api/     — NestJS: auth (Better Auth), организации, проекты, черновики, сборки (builds),
-                health-check, очередь (BullMQ)
+                превью + прокси (preview), health-check, очередь (BullMQ)
 apps/worker/  — BullMQ-воркер — каркас для следующих этапов
 packages/config/   — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
 packages/db/       — Drizzle-схема, миграции, роли/RLS, TenantContext (см. выше)
