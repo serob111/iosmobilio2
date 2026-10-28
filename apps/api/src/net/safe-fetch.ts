@@ -144,8 +144,12 @@ export async function resolveSafeAddresses(
  * addresses already validated for a given hostname, instead of re-resolving it —
  * the actual TCP connection is pinned to what was checked, so a DNS answer that changes
  * between validation and connection (rebinding) can't redirect the request anywhere else.
+ * Exported so other safe-fetch-shaped callers (the preview proxy) that can't reuse
+ * `safeFetch` itself end-to-end — e.g. because they need a streamed body, or their own
+ * redirect-following rules — still get the identical connection-pinning guarantee rather
+ * than a second, divergent copy of this logic.
  */
-function pinnedLookup(validatedByHost: Map<string, LookupAddress[]>): LookupFunction {
+export function pinnedLookup(validatedByHost: Map<string, LookupAddress[]>): LookupFunction {
   return (hostname, options, callback) => {
     const addresses = validatedByHost.get(hostname);
     if (!addresses) {
