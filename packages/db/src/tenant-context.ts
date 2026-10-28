@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { eq, sql } from 'drizzle-orm';
 import type { Db } from './client';
 import { builds } from './schema/builds';
+import { previewLinks } from './schema/preview-links';
 
 export interface TenantIdentity {
   orgId: string;
@@ -113,6 +114,39 @@ export async function runInBuildContext<T>(
     }
     await scoped.execute(sql`select set_config('app.build_project_id', ${build.projectId}, true)`);
     return storage.run(scoped, () => fn(build));
+  });
+}
+
+/**
+ * For the public, unauthenticated GET /preview/:slug reader — no session, no draft
+ * cookie, just the slug's own hash. Looks the link up by slug_hash first
+ * (preview_links_slug_lookup, see 0014_preview_links_rls.sql, covers only a live
+ * not-revoked/not-expired row), then, once its owner is known, sets EITHER
+ * app.preview_project_id OR app.preview_draft_id — never app.org_id or
+ * app.lookup_token_hash, since this caller was never a member or a draft owner — so the
+ * same transaction can also read that one project or draft under
+ * projects_preview_select/drafts_preview_select. Returns undefined when no row matches,
+ * so the controller 404s uniformly rather than distinguishing "no such slug" from
+ * "revoked" from "expired".
+ */
+export async function runInPreviewLookupContext<T>(
+  db: Db,
+  slugHash: string,
+  fn: (link: typeof previewLinks.$inferSelect) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.lookup_slug_hash', ${slugHash}, true)`);
+    const [link] = await scoped.select().from(previewLinks).where(eq(previewLinks.slugHash, slugHash));
+    if (!link) {
+      return undefined;
+    }
+    if (link.projectId) {
+      await scoped.execute(sql`select set_config('app.preview_project_id', ${link.projectId}, true)`);
+    } else {
+      await scoped.execute(sql`select set_config('app.preview_draft_id', ${link.draftId}, true)`);
+    }
+    return storage.run(scoped, () => fn(link));
   });
 }
 

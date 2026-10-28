@@ -13,6 +13,7 @@ export {
   runInTokenLookupContext,
   runInClaimContext,
   runInBuildContext,
+  runInPreviewLookupContext,
   getTenantDb,
 } from './tenant-context';
 export type { TenantIdentity } from './tenant-context';
