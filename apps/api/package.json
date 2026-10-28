@@ -36,6 +36,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.33.5",
+    "tldts": "^7.4.19",
     "undici": "6.21.2",
     "uuidv7": "^1.2.1"
   },

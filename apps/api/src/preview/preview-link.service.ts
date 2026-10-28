@@ -91,21 +91,47 @@ export class PreviewLinkService {
   async getPreviewDto(rawSlug: string): Promise<PreviewDto> {
     const slugHash = hashPreviewSlug(rawSlug);
     const dto = await runInPreviewLookupContext(this.dbService.db, slugHash, async (link) => {
-      if (link.projectId) {
-        const [project] = await getTenantDb().select().from(schema.projects).where(eq(schema.projects.id, link.projectId));
-        if (!project) return undefined;
-        const iconUrl = await this.storage.signedUrl(projectIconKey(project.orgId, project.id), 300, 'icon.png');
-        return this.toDto(project.config as ProjectConfig, iconUrl, rawSlug);
-      }
-      const [draft] = await getTenantDb().select().from(schema.drafts).where(eq(schema.drafts.id, link.draftId!));
-      if (!draft) return undefined;
-      const iconUrl = await this.storage.signedUrl(draftIconKey(draft.id), 300, 'icon.png');
-      return this.toDto(draft.config as ProjectConfig, iconUrl, rawSlug);
+      const target = await this.loadLinkTarget(link);
+      if (!target) return undefined;
+      const iconUrl = await this.storage.signedUrl(target.iconKey, 300, 'icon.png');
+      return this.toDto(target.config, iconUrl, rawSlug);
     });
     if (!dto) {
       throw new NotFoundException({ code: 'PREVIEW_NOT_FOUND', message: 'Preview not found' });
     }
     return dto;
+  }
+
+  /**
+   * Used by the proxy (ProxyController) to learn which real site a slug's link actually
+   * points at. Returns undefined for the same cases getPreviewDto 404s on (unknown/
+   * revoked/expired slug, missing project/draft row) *and* for a config whose source
+   * isn't `{type:'url'}` — a raw-HTML-upload source has no live site to fetch at all, so
+   * there's nothing this proxy can meaningfully do with it. Every project/draft actually
+   * reachable through this api's own `POST /drafts` (DraftsService) always writes a
+   * `{type:'url'}` source — the `html` variant exists in the schema for a different,
+   * legacy upload path that this proxy was never asked to support.
+   */
+  async resolveProxySource(rawSlug: string): Promise<{ sourceUrl: string } | undefined> {
+    const slugHash = hashPreviewSlug(rawSlug);
+    return runInPreviewLookupContext(this.dbService.db, slugHash, async (link) => {
+      const target = await this.loadLinkTarget(link);
+      if (!target || target.config.source.type !== 'url') return undefined;
+      return { sourceUrl: target.config.source.url };
+    });
+  }
+
+  private async loadLinkTarget(
+    link: typeof schema.previewLinks.$inferSelect,
+  ): Promise<{ config: ProjectConfig; iconKey: string } | undefined> {
+    if (link.projectId) {
+      const [project] = await getTenantDb().select().from(schema.projects).where(eq(schema.projects.id, link.projectId));
+      if (!project) return undefined;
+      return { config: project.config as ProjectConfig, iconKey: projectIconKey(project.orgId, project.id) };
+    }
+    const [draft] = await getTenantDb().select().from(schema.drafts).where(eq(schema.drafts.id, link.draftId!));
+    if (!draft) return undefined;
+    return { config: draft.config as ProjectConfig, iconKey: draftIconKey(draft.id) };
   }
 
   private toDto(config: ProjectConfig, iconUrl: string, rawSlug: string): PreviewDto {
