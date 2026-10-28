@@ -239,6 +239,47 @@ describe.skipIf(!hasLiveServices)('preview proxy (<slug>.<PREVIEW_PROXY_DOMAIN>/
     await proxyGet(slug, `/?__mobilio_host=${PRIVATE_SUBDOMAIN_HOST}`).expect(502);
   });
 
+  it('decodes a windows-1251-encoded page to UTF-8 and fixes the Content-Type charset, still rewriting it normally', async () => {
+    const cookie = await signInByMagicLink(`itest-proxy-charset-${Date.now()}@example.com`);
+    const slug = await createPreviewSlug(cookie);
+    // "Привет, мир!" encoded as windows-1251 — independently verified via
+    // `iconv-lite`'s encode(text, 'win1251'), see charset.spec.ts's own fixture comment.
+    const windows1251Bytes = Buffer.concat([
+      Buffer.from('<html><body><p>', 'ascii'),
+      Buffer.from([207, 240, 232, 226, 229, 242, 44, 32, 236, 232, 240, 33]),
+      Buffer.from('</p></body></html>', 'ascii'),
+    ]);
+    server.use(
+      http.get(`https://${FAKE_SITE_HOST}/ru`, () =>
+        new HttpResponse(windows1251Bytes, { headers: { 'content-type': 'text/html; charset=windows-1251' } }),
+      ),
+    );
+
+    const res = await proxyGet(slug, '/ru').expect(200);
+    expect(res.headers['content-type']).toBe('text/html; charset=utf-8');
+    expect(res.text).toContain('Привет, мир!');
+    // Rewriting (the banner) still ran — decoding happens before, not instead of, it.
+    expect(res.text).toContain('Preview · Mobilio');
+  });
+
+  it('serves the original bytes untouched when the declared charset is unrecognized', async () => {
+    const cookie = await signInByMagicLink(`itest-proxy-charset-unknown-${Date.now()}@example.com`);
+    const slug = await createPreviewSlug(cookie);
+    const body = '<html><body><p>hello</p></body></html>';
+    server.use(
+      http.get(`https://${FAKE_SITE_HOST}/weird-charset`, () =>
+        new HttpResponse(body, { headers: { 'content-type': 'text/html; charset=totally-bogus-label' } }),
+      ),
+    );
+
+    const res = await proxyGet(slug, '/weird-charset').expect(200);
+    // Content-Type is left exactly as the upstream declared it — not "fixed" to utf-8,
+    // since this proxy never actually decoded/re-encoded the body at all.
+    expect(res.headers['content-type']).toBe('text/html; charset=totally-bogus-label');
+    expect(res.text).toBe(body);
+    expect(res.text).not.toContain('Preview · Mobilio');
+  });
+
   it('caches a 200 response for repeat requests to the same slug+path+query', async () => {
     const cookie = await signInByMagicLink(`itest-proxy-cache-${Date.now()}@example.com`);
     const slug = await createPreviewSlug(cookie);

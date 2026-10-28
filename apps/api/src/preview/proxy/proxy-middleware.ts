@@ -16,6 +16,7 @@ import { rewriteCss } from './css-rewriter.js';
 import { renderExternalLinkPage } from './external-link-page.js';
 import { HOST_OVERRIDE_QUERY_KEY } from './rewrite-url.js';
 import { extractPreviewSlugFromHost, isWithinPreviewProxyDomain } from './preview-host.js';
+import { detectCharset, decodeToUtf8, withCharset } from './charset.js';
 
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
 const TIMEOUT_MS = 10_000;
@@ -203,13 +204,33 @@ export function createPreviewProxyMiddleware(deps: PreviewProxyMiddlewareDeps) {
 
     const contentType = (result.headers.get('content-type') ?? '').toLowerCase();
     const currentPageUrl = new URL(result.finalUrl);
+    // Headers from fetch()'s own Response are read-only (undici throws "immutable" on
+    // .set()) — a fresh Headers copy is the only way to override Content-Type below.
+    let upstreamHeaders = result.headers;
     if (contentType.startsWith('text/html')) {
-      body = await rewriteHtmlBuffer(body, allowlist, currentPageUrl);
+      const charsetLabel = detectCharset(result.headers.get('content-type'), body);
+      if (charsetLabel === null || charsetLabel === 'utf-8' || charsetLabel === 'utf8') {
+        // No declared charset at all defaults to "assume UTF-8" (the modern default,
+        // and this proxy's own longstanding behavior), same as an explicit utf-8 label.
+        body = await rewriteHtmlBuffer(body, allowlist, currentPageUrl);
+      } else {
+        const decoded = decodeToUtf8(body, charsetLabel);
+        if (decoded === null) {
+          // An unrecognized label — running a UTF-8-only HTML parser over bytes that
+          // were never declared (and can't now be proven) to be UTF-8 could corrupt the
+          // page worse than leaving it alone, so this skips rewriting entirely and
+          // serves the original bytes untouched, including the original content-type.
+        } else {
+          body = await rewriteHtmlBuffer(decoded, allowlist, currentPageUrl);
+          upstreamHeaders = new Headers(result.headers);
+          upstreamHeaders.set('content-type', withCharset(result.headers.get('content-type') ?? 'text/html', 'utf-8'));
+        }
+      }
     } else if (contentType.startsWith('text/css')) {
       body = Buffer.from(rewriteCss(body.toString('utf8'), { allowlist, currentPageUrl, primaryHost: allowlist.baseHost }), 'utf8');
     }
 
-    const responseHeaders = buildProxyResponseHeaders(result.headers, webOrigin());
+    const responseHeaders = buildProxyResponseHeaders(upstreamHeaders, webOrigin());
     response.status(result.status);
     for (const [name, value] of responseHeaders.entries()) {
       response.setHeader(name, value);
