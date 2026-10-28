@@ -1,0 +1,121 @@
+import { Readable } from 'node:stream';
+import { createHtmlRewriteStream, type HtmlRewriterOptions } from './html-rewriter.js';
+
+function baseOptions(overrides: Partial<HtmlRewriterOptions> = {}): HtmlRewriterOptions {
+  return {
+    slug: 'abc123',
+    allowlist: { baseHost: 'example.com' },
+    currentPageUrl: new URL('https://example.com/page'),
+    primaryHost: 'example.com',
+    proxyOrigin: 'https://proxy.mobilio.test',
+    ...overrides,
+  };
+}
+
+async function rewriteHtml(html: string, options: HtmlRewriterOptions): Promise<string> {
+  const source = Readable.from([html]);
+  source.setEncoding('utf8');
+  const rewriter = createHtmlRewriteStream(options);
+  source.pipe(rewriter);
+  const chunks: string[] = [];
+  for await (const chunk of rewriter) {
+    chunks.push(chunk as string);
+  }
+  return chunks.join('');
+}
+
+describe('createHtmlRewriteStream', () => {
+  it('rewrites an allowed-host absolute link into the proxy path', async () => {
+    const out = await rewriteHtml('<a href="https://example.com/about">About</a>', baseOptions());
+    expect(out).toContain('href="/s/abc123/about"');
+  });
+
+  it('rewrites an allowed subdomain with the host-override query param', async () => {
+    const out = await rewriteHtml('<img src="https://cdn.example.com/logo.png">', baseOptions());
+    expect(out).toContain('src="/s/abc123/logo.png?__mobilio_host=cdn.example.com"');
+  });
+
+  it('leaves a disallowed-host link untouched', async () => {
+    const out = await rewriteHtml('<a href="https://evil.com/x">x</a>', baseOptions());
+    expect(out).toContain('href="https://evil.com/x"');
+  });
+
+  it('leaves non-http(s) schemes untouched', async () => {
+    const out = await rewriteHtml('<a href="mailto:test@example.com">mail</a>', baseOptions());
+    expect(out).toContain('href="mailto:test@example.com"');
+  });
+
+  it('resolves a relative href against the current page URL before rewriting', async () => {
+    const out = await rewriteHtml('<a href="/pricing">Pricing</a>', baseOptions());
+    expect(out).toContain('href="/s/abc123/pricing"');
+  });
+
+  it('injects a <base> as the first thing inside <head>', async () => {
+    const out = await rewriteHtml('<html><head><title>T</title></head><body></body></html>', baseOptions());
+    const headIdx = out.indexOf('<head>');
+    const baseIdx = out.indexOf('<base href="https://proxy.mobilio.test/s/abc123/">');
+    const titleIdx = out.indexOf('<title>');
+    expect(baseIdx).toBeGreaterThan(headIdx);
+    expect(baseIdx).toBeLessThan(titleIdx);
+  });
+
+  it('injects the Preview banner and click-interceptor script right after <body>', async () => {
+    const out = await rewriteHtml('<html><body><p>hi</p></body></html>', baseOptions());
+    const bodyIdx = out.indexOf('<body>');
+    const bannerIdx = out.indexOf('Preview · Mobilio');
+    const pIdx = out.indexOf('<p>hi</p>');
+    expect(bannerIdx).toBeGreaterThan(bodyIdx);
+    expect(bannerIdx).toBeLessThan(pIdx);
+    expect(out).toContain('window.open');
+  });
+
+  it('does not rewrite inline <script> contents (JS is never rewritten)', async () => {
+    const js = 'fetch("https://example.com/api/data").then(x=>x);';
+    const out = await rewriteHtml(`<script>${js}</script>`, baseOptions());
+    expect(out).toContain(js);
+  });
+
+  it('does not touch attributes outside the known url-attribute set', async () => {
+    const out = await rewriteHtml('<div data-href="https://example.com/x">d</div>', baseOptions());
+    expect(out).toContain('data-href="https://example.com/x"');
+  });
+
+  it('preserves attributes and text content of untouched tags (re-serialized, not byte-identical)', async () => {
+    // parse5-html-rewriting-stream re-serializes any tag whose event has a listener
+    // (startTag/endTag here), normalizing quote style and attribute spacing even when
+    // the tag itself isn't modified — only events with NO listener (text, comments,
+    // doctype) pass through using their raw source. So this asserts the content survives,
+    // not literal byte-for-byte formatting.
+    const html = '<p class="x y"   id=\'z\'>Hello &amp; world</p>';
+    const out = await rewriteHtml(html, baseOptions());
+    expect(out).toContain('<p class="x y" id="z">');
+    expect(out).toContain('Hello &amp; world</p>');
+  });
+
+  it('rewrites form action, video src/poster, and audio src', async () => {
+    const html =
+      '<form action="https://example.com/submit"></form>' +
+      '<video src="https://example.com/v.mp4" poster="https://example.com/p.jpg"></video>' +
+      '<audio src="https://example.com/a.mp3"></audio>';
+    const out = await rewriteHtml(html, baseOptions());
+    expect(out).toContain('action="/s/abc123/submit"');
+    expect(out).toContain('src="/s/abc123/v.mp4"');
+    expect(out).toContain('poster="/s/abc123/p.jpg"');
+    expect(out).toContain('src="/s/abc123/a.mp3"');
+  });
+
+  it('handles a multi-byte UTF-8 character split across chunk boundaries', async () => {
+    const html = '<p>café 😀</p>';
+    const bytes = Buffer.from(html, 'utf8');
+    const mid = Math.floor(bytes.length / 2);
+    const source = Readable.from([bytes.subarray(0, mid), bytes.subarray(mid)]);
+    source.setEncoding('utf8');
+    const rewriter = createHtmlRewriteStream(baseOptions());
+    source.pipe(rewriter);
+    const chunks: string[] = [];
+    for await (const chunk of rewriter) {
+      chunks.push(chunk as string);
+    }
+    expect(chunks.join('')).toContain('café 😀');
+  });
+});
