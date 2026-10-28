@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Request } from 'express';
-import { getClientRateLimitKey } from './draft-rate-limit.js';
+import { getClientRateLimitKey } from './rate-limit-key.js';
 
 function requestWithIp(ip: string | undefined): Request {
   return { ip } as unknown as Request;

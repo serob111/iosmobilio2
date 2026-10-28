@@ -10,5 +10,9 @@ import { DraftRateLimitService } from './draft-rate-limit.js';
   imports: [OrganizationsModule],
   controllers: [DraftsController, DraftClaimController],
   providers: [DraftsService, DraftGuard, DraftRateLimitService],
+  // DraftGuard is exported so other modules whose routes nest under /drafts/me (like
+  // PreviewModule) can reuse it via @UseGuards(DraftGuard) instead of re-implementing
+  // the same claim-token lookup.
+  exports: [DraftGuard],
 })
 export class DraftsModule {}
