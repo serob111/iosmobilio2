@@ -5,6 +5,42 @@ import type { LookupAddress } from 'node:dns';
 import { Agent } from 'undici';
 import { isForbiddenIp } from './ip-policy.js';
 
+// Opt-in, env-gated escape hatch for tests that need safeFetch/proxyFetch to reach a
+// REAL local server (e.g. to prove gzip/br/deflate actually round-trips through a real
+// undici fetch, not a mocked one) — a real external test site isn't an option (no
+// outbound internet access in CI/sandboxes), and MSW can't exercise real transport-level
+// compression at all (nothing is really compressed when the network layer is mocked).
+// Scoped to exactly 127.0.0.1/::1, not a blanket "allow all private" — the SSRF
+// allowlist/DNS-pinning defenses stay fully in effect for everything else.
+//
+// Deliberately read fresh on every call (never captured into a module-level const) —
+// a test that sets this env var at its own module's top level runs that assignment
+// *after* all of its imports have already been evaluated (ESM import hoisting), so a
+// frozen-at-import-time value here would silently see the pre-assignment default and
+// never pick up the override at all.
+function allowLocalForTesting(): boolean {
+  return process.env.SAFE_FETCH_ALLOW_LOCAL_FOR_TESTING === 'true';
+}
+
+export function getSafeFetchTestOverrides(): {
+  allowAddressesForTesting: readonly string[];
+  allowAnyPortForTesting: boolean;
+} {
+  return allowLocalForTesting()
+    ? { allowAddressesForTesting: ['127.0.0.1', '::1'], allowAnyPortForTesting: true }
+    : { allowAddressesForTesting: [], allowAnyPortForTesting: false };
+}
+
+/**
+ * Called once at app bootstrap, same timing/rationale as validateBuildEnv() — refuses to
+ * start if this escape hatch is enabled in production, exactly like BUILD_RUNNER=fake.
+ */
+export function validateSafeFetchTestEnv(): void {
+  if (allowLocalForTesting() && process.env.NODE_ENV === 'production') {
+    throw new Error('SAFE_FETCH_ALLOW_LOCAL_FOR_TESTING=true is not allowed when NODE_ENV=production');
+  }
+}
+
 // The global `fetch` (undici-backed) is used deliberately, not undici's own exported
 // `fetch` — MSW's node FetchInterceptor patches `globalThis.fetch` specifically, and
 // explicitly says it does NOT see requests made through undici's own client/fetch

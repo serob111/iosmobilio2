@@ -9,6 +9,7 @@ import { AuthService } from './auth/auth.service.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { validateBuildEnv } from './builds/validate-build-env.js';
 import { validatePreviewEnv } from './preview/validate-preview-env.js';
+import { validateSafeFetchTestEnv } from './net/safe-fetch.js';
 
 /**
  * The preview proxy (/s/:slug/*) answers only on PREVIEW_PROXY_ORIGIN's own host, and
@@ -42,6 +43,7 @@ export async function createApp(): Promise<INestApplication> {
   // first real build request.
   validateBuildEnv();
   validatePreviewEnv();
+  validateSafeFetchTestEnv();
 
   // Better Auth needs the raw, unparsed request body (it parses JSON itself from the
   // Fetch API Request it builds) — bodyParser:false + mounting its handler before

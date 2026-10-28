@@ -1,4 +1,31 @@
-const STRIPPED_RESPONSE_HEADER_NAMES = new Set(['set-cookie', 'x-frame-options', 'strict-transport-security', 'clear-site-data']);
+const STRIPPED_RESPONSE_HEADER_NAMES = new Set([
+  'set-cookie',
+  'x-frame-options',
+  'strict-transport-security',
+  'clear-site-data',
+  // `fetch()` (undici) transparently decompresses gzip/br/deflate bodies, but leaves
+  // Content-Encoding and Content-Length on the Headers object exactly as the upstream
+  // sent them — i.e. describing the *compressed* bytes, which is no longer what's
+  // actually being sent (proxy.controller.ts always forwards the already-decoded body).
+  // Passing either through verbatim would make the browser try to gunzip/brotli-decode
+  // plain text a second time (broken/garbled page) or mismatch the real body length.
+  'content-encoding',
+  'content-length',
+  // Hop-by-hop headers (RFC 7230 §6.1) — meaningful only for the single connection
+  // between this proxy and the upstream site, never for the one between the browser and
+  // this proxy. Forwarding them verbatim is a protocol-correctness bug independent of
+  // the Content-Encoding one above (e.g. a stray `Connection: close` or
+  // `Transfer-Encoding: chunked` from the upstream hop has no business reaching the
+  // browser, which has its own, unrelated connection to *this* proxy).
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'te',
+  'trailer',
+  'upgrade',
+  'proxy-authenticate',
+  'proxy-authorization',
+]);
 
 /** Prefix match for Content-Security-Policy, not an exact set — also catches Content-Security-Policy-Report-Only and any future directive variant. */
 function shouldStripResponseHeader(name: string): boolean {

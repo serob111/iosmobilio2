@@ -8,6 +8,7 @@ import { ProxyRateLimitService } from './proxy-rate-limit.js';
 import { ProxyCacheService } from './proxy-cache.js';
 import { deriveHostAllowlist, isHostAllowed, type HostAllowlist } from './host-allowlist.js';
 import { proxyFetch, ProxyFetchError } from './proxy-fetch.js';
+import { getSafeFetchTestOverrides } from '../../net/safe-fetch.js';
 import { ResponseTooLargeError } from './response-size-limit.js';
 import { buildProxyResponseHeaders } from './header-filter.js';
 import { createHtmlRewriteStream } from './html-rewriter.js';
@@ -164,13 +165,22 @@ export class ProxyController {
       }
     }
 
-    const scheme = new URL(source.sourceUrl).protocol;
+    const sourceUrlObj = new URL(source.sourceUrl);
+    const scheme = sourceUrlObj.protocol;
+    // .port is '' for the scheme's default port — source.url only ever carries a
+    // non-default port when SAFE_FETCH_ALLOW_LOCAL_FOR_TESTING bypassed analyze-site's
+    // own default-port-only check at creation time (real sites always analyze as
+    // port-free/default), but dropping it unconditionally here would silently point the
+    // fetch at the wrong port whenever that ever isn't true. Assumed shared across the
+    // primary host and any allowed override subdomain — this proxy has no way to learn a
+    // *different* port per subdomain, and real sites don't split traffic that way.
     const targetHost =
       hostOverrideRaw && isHostAllowed(hostOverrideRaw, allowlist) ? hostOverrideRaw.toLowerCase() : allowlist.baseHost;
+    const targetAuthority = sourceUrlObj.port ? `${targetHost}:${sourceUrlObj.port}` : targetHost;
     const upstreamQuery = new URLSearchParams(incomingUrl.search);
     upstreamQuery.delete(HOST_OVERRIDE_QUERY_KEY);
     const upstreamQueryString = upstreamQuery.toString();
-    const targetUrl = `${scheme}//${targetHost}${path}${upstreamQueryString ? `?${upstreamQueryString}` : ''}`;
+    const targetUrl = `${scheme}//${targetAuthority}${path}${upstreamQueryString ? `?${upstreamQueryString}` : ''}`;
 
     let outcome;
     try {
@@ -180,6 +190,7 @@ export class ProxyController {
         maxBodyBytes: MAX_BODY_BYTES,
         timeoutMs: TIMEOUT_MS,
         allowedContentTypePrefixes: ALLOWED_CONTENT_TYPE_PREFIXES,
+        ...getSafeFetchTestOverrides(),
       });
     } catch (error) {
       this.sendFetchError(response, error);
@@ -219,7 +230,6 @@ export class ProxyController {
     }
 
     const responseHeaders = buildProxyResponseHeaders(result.headers, webOrigin());
-    responseHeaders.delete('content-length');
     response.status(result.status);
     for (const [name, value] of responseHeaders.entries()) {
       response.setHeader(name, value);

@@ -39,6 +39,50 @@ describe('buildProxyResponseHeaders', () => {
     expect(result.has('clear-site-data')).toBe(false);
   });
 
+  it('strips Content-Encoding and Content-Length (fetch() already decompressed the body — these describe the compressed bytes, not what is actually being sent)', () => {
+    const upstream = new Headers({
+      'content-type': 'text/html',
+      'content-encoding': 'gzip',
+      'content-length': '1234',
+    });
+    const result = buildProxyResponseHeaders(upstream, WEB_ORIGIN);
+    expect(result.has('content-encoding')).toBe(false);
+    expect(result.has('content-length')).toBe(false);
+    expect(result.get('content-type')).toBe('text/html');
+  });
+
+  it.each(['br', 'deflate'])('strips Content-Encoding: %s the same way as gzip', (encoding) => {
+    const upstream = new Headers({ 'content-encoding': encoding });
+    const result = buildProxyResponseHeaders(upstream, WEB_ORIGIN);
+    expect(result.has('content-encoding')).toBe(false);
+  });
+
+  it('strips hop-by-hop headers (Connection, Keep-Alive, Transfer-Encoding, TE, Trailer, Upgrade, Proxy-Authenticate, Proxy-Authorization)', () => {
+    const upstream = new Headers({
+      connection: 'close',
+      'keep-alive': 'timeout=5',
+      'transfer-encoding': 'chunked',
+      te: 'trailers',
+      trailer: 'Expires',
+      upgrade: 'h2c',
+      'proxy-authenticate': 'Basic',
+      'proxy-authorization': 'Basic abc',
+    });
+    const result = buildProxyResponseHeaders(upstream, WEB_ORIGIN);
+    for (const name of [
+      'connection',
+      'keep-alive',
+      'transfer-encoding',
+      'te',
+      'trailer',
+      'upgrade',
+      'proxy-authenticate',
+      'proxy-authorization',
+    ]) {
+      expect(result.has(name)).toBe(false);
+    }
+  });
+
   it('always sets our own CSP/X-Robots-Tag/Referrer-Policy/Cross-Origin-Resource-Policy, even when upstream set none', () => {
     const result = buildProxyResponseHeaders(new Headers(), WEB_ORIGIN);
     expect(result.get('content-security-policy')).toBe(`frame-ancestors ${WEB_ORIGIN}`);
