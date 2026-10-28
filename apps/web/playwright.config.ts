@@ -5,6 +5,7 @@ import { MAIL_LOG_FILE } from './e2e/mailLog';
 // CI's e2e job overrides these to match its services: containers (see ci.yml).
 const apiDatabaseUrl = process.env.E2E_API_DATABASE_URL ?? 'postgres://mobilio_app:mobilio_app_pw@localhost:5433/mobilio';
 const apiRedisUrl = process.env.E2E_API_REDIS_URL ?? 'redis://localhost:6380';
+const apiS3Endpoint = process.env.E2E_API_S3_ENDPOINT ?? 'http://localhost:9000';
 
 export default defineConfig({
   testDir: './e2e',
@@ -47,6 +48,21 @@ export default defineConfig({
         API_BASE_URL: 'http://localhost:3011',
         PORT: '3011',
         MAIL_LOG_FILE,
+        // validatePreviewEnv (src/preview/validate-preview-env.ts) refuses to start
+        // without this — a different registrable domain from WEB_ORIGIN above. Nothing
+        // in this e2e suite actually calls the proxy itself (preview.spec.ts mocks
+        // apps/api at the browser network boundary via page.route(), the same way
+        // e2e/server.ts mocks the analyzed site for the legacy flow), so this never
+        // needs to be reachable — it only needs to satisfy startup validation.
+        PREVIEW_PROXY_ORIGIN: 'http://preview.e2e.invalid:3011',
+        // StorageModule refuses to start without all four of these (createObjectStorageFromEnv) —
+        // this suite never exercises file upload/download itself, so these just need to be set,
+        // not correct against a real bucket.
+        S3_ENDPOINT: apiS3Endpoint,
+        S3_BUCKET: 'mobilio',
+        S3_ACCESS_KEY_ID: 'mobilio',
+        S3_SECRET_ACCESS_KEY: 'mobilio_minio_pw',
+        S3_FORCE_PATH_STYLE: 'true',
         // This suite never exercises the builds feature — "fake" avoids
         // validateBuildEnv (src/builds/validate-build-env.ts) refusing to boot over
         // GITHUB_DISPATCH_TOKEN/API_PUBLIC_URL/BUILD_TOKEN_KEY not being configured here.
