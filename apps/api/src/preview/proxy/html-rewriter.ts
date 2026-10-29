@@ -15,16 +15,30 @@ const URL_ATTRS_BY_TAG: Record<string, string[]> = {
 };
 
 /**
- * Fixed banner ("Preview · Mobilio") + the external-link click interceptor, injected as
- * the first child of <body>. The interceptor compares the clicked link's *resolved*
- * origin against window.location.origin rather than re-deriving the allowlist client-side
- * — every link this rewriter already decided was allowed is now proxy-relative (same
- * origin as the page itself); every link it left untouched is a real, different-origin
- * absolute URL. That's already exactly "internal vs external", with no need to duplicate
+ * Fixed banner ("Preview · Mobilio") + the external-link click interceptor + a
+ * document.cookie setter override, injected as the first child of <body>.
+ *
+ * The click interceptor compares the clicked link's *resolved* origin against
+ * window.location.origin rather than re-deriving the allowlist client-side — every link
+ * this rewriter already decided was allowed is now proxy-relative (same origin as the
+ * page itself); every link it left untouched is a real, different-origin absolute URL.
+ * That's already exactly "internal vs external", with no need to duplicate
  * host-allowlist.ts's logic in a client-side script.
+ *
+ * The cookie override strips any `Domain=...` attribute from cookies the real site's own
+ * JS sets. Each preview already has its own slug subdomain for the scoping that matters
+ * (a <slug>.<PREVIEW_PROXY_DOMAIN>-scoped cookie can't be read by a different slug's
+ * origin) — but an explicit `Domain=<PREVIEW_PROXY_DOMAIN>` (or any of its parent
+ * domains) widens that scope to every OTHER preview sharing the same
+ * PREVIEW_PROXY_DOMAIN, defeating the whole point. Server-side `Set-Cookie` is already
+ * fully stripped (header-filter.ts), but a cookie set dynamically via `document.cookie =`
+ * in the page's own JS never goes through an HTTP response header at all, so it has to be
+ * caught here instead. Overridden on `Document.prototype` (not the `document` instance)
+ * so it still applies even to a page that reassigns `document.cookie` before this script
+ * manages to run on some OTHER document reference — there is only one prototype.
  */
 function bannerAndInterceptorHtml(): string {
-  return `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#111;color:#fff;font:12px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:4px 8px;pointer-events:none;">Preview · Mobilio</div><script>(function(){document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=a.getAttribute('href');if(!href)return;try{var url=new URL(href,document.baseURI);if(url.origin!==window.location.origin){e.preventDefault();window.open(url.href,'_blank','noopener,noreferrer');}}catch(err){}},true);})();</script>`;
+  return `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#111;color:#fff;font:12px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:4px 8px;pointer-events:none;">Preview · Mobilio</div><script>(function(){var d=Object.getOwnPropertyDescriptor(Document.prototype,'cookie');if(d&&d.set){Object.defineProperty(Document.prototype,'cookie',{configurable:true,get:function(){return d.get.call(this);},set:function(v){d.set.call(this,String(v).replace(/;\\s*domain\\s*=[^;]*/gi,''));}});}document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=a.getAttribute('href');if(!href)return;try{var url=new URL(href,document.baseURI);if(url.origin!==window.location.origin){e.preventDefault();window.open(url.href,'_blank','noopener,noreferrer');}}catch(err){}},true);})();</script>`;
 }
 
 // header-filter.ts already strips the *HTTP-header* forms of these — a page can also

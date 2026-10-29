@@ -48,6 +48,29 @@ function startSite(name: string): Promise<Site> {
   });
 }
 
+/**
+ * A site that tries to widen its own cookie's scope to the whole PREVIEW_PROXY_DOMAIN
+ * (not just its own slug subdomain) via an explicit `Domain=` attribute — exactly the
+ * attack the injected cookie-setter override (html-rewriter.ts) exists to defuse. Without
+ * that override, per RFC 6265's domain-matching rules a browser accepts `Domain=` set to
+ * the current host's own domain or any parent of it (PREVIEW_PROXY_DOMAIN here IS a
+ * parent of `<slug>.PREVIEW_PROXY_DOMAIN`), making the cookie visible to every OTHER
+ * preview sharing that same PREVIEW_PROXY_DOMAIN.
+ */
+function startWideCookieSite(name: string, proxyDomain: string): Promise<Site> {
+  return new Promise((resolve) => {
+    const server = createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(
+        `<!doctype html><html><body><p id="status">ready</p>` +
+          `<script>document.cookie = 'widecookie=${name}; Domain=${proxyDomain}; Path=/';</script>` +
+          `</body></html>`,
+      );
+    });
+    server.listen(0, '127.0.0.1', () => resolve({ server, port: (server.address() as AddressInfo).port, name }));
+  });
+}
+
 /** Drives /try end to end for a given site, returning the live preview iframe's src (its own origin + path). */
 async function createPreviewFor(page: import('@playwright/test').Page, site: Site): Promise<string> {
   await page.goto('/try');
@@ -113,11 +136,71 @@ test.describe('preview proxy: real cross-origin isolation (real api, real local 
     // The absolute-path background image (from an inline <style>, never touched by the
     // HTML rewriter) loads successfully through the proxy — proving a same-origin
     // absolute-path reference just works once every preview has its own real origin,
-    // with no <base> override or rewriting needed.
-    const bgResponse = await directB.request.get(`${originB}/bg.png`);
-    expect(bgResponse.status()).toBe(200);
+    // with no <base> override or rewriting needed. Fetched via an in-page
+    // `fetch()` (not `request.get`, Playwright's separate Node-side API-request client)
+    // — that client does its own DNS resolution outside the browser's network stack,
+    // which doesn't know about Chromium's own `*.localhost` special-casing and would
+    // fail with ENOTFOUND for an arbitrary slug subdomain.
+    const bgStatus = await directB.evaluate(async (url) => {
+      const res = await fetch(url);
+      return res.status;
+    }, `${originB}/bg.png`);
+    expect(bgStatus).toBe(200);
 
     await directA.close();
     await directB.close();
+  });
+
+  test('a cookie set with Domain=<PREVIEW_PROXY_DOMAIN> by one preview is not visible to another preview', async ({
+    page,
+    context,
+  }) => {
+    const wideA = await startWideCookieSite('wide-a', 'preview.localhost');
+    const wideB = await startWideCookieSite('wide-b', 'preview.localhost');
+    try {
+      const srcA = await createPreviewFor(page, wideA);
+      const originA = new URL(srcA).origin;
+      const srcB = await createPreviewFor(page, wideB);
+      const originB = new URL(srcB).origin;
+      expect(originA).not.toBe(originB);
+
+      const directA = await context.newPage();
+      await directA.goto(originA);
+      await expect(directA.locator('#status')).toHaveText('ready');
+
+      const directB = await context.newPage();
+      await directB.goto(originB);
+      await expect(directB.locator('#status')).toHaveText('ready');
+
+      // The cookie really was set (both sites legitimately have their own "widecookie" —
+      // same name, different value) — just scoped to its own origin only, because the
+      // Domain attribute was stripped before the browser ever saw it. Checking the
+      // *host* each cookie actually ended up scoped to (not merely "a cookie named
+      // widecookie exists", which would trivially be true for both sites' own, correctly
+      // host-scoped cookie) is what actually proves the attribute was stripped, and
+      // checking neither site's *value* is visible from the other's origin is what
+      // proves it never leaked.
+      const hostA = new URL(originA).hostname;
+      const hostB = new URL(originB).hostname;
+
+      const cookiesA = await context.cookies(originA);
+      const wideCookieOnA = cookiesA.find((c) => c.name === 'widecookie');
+      expect(wideCookieOnA?.value).toBe('wide-a');
+      expect(wideCookieOnA?.domain).toBe(hostA);
+
+      const cookiesB = await context.cookies(originB);
+      const wideCookieOnB = cookiesB.find((c) => c.name === 'widecookie');
+      expect(wideCookieOnB?.value).toBe('wide-b');
+      expect(wideCookieOnB?.domain).toBe(hostB);
+
+      expect(cookiesA.some((c) => c.name === 'widecookie' && c.value === 'wide-b')).toBe(false);
+      expect(cookiesB.some((c) => c.name === 'widecookie' && c.value === 'wide-a')).toBe(false);
+
+      await directA.close();
+      await directB.close();
+    } finally {
+      await new Promise((resolve) => wideA.server.close(resolve));
+      await new Promise((resolve) => wideB.server.close(resolve));
+    }
   });
 });

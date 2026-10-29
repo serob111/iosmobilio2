@@ -100,6 +100,47 @@ describe('createHtmlRewriteStream', () => {
     expect(out).toContain('window.open');
   });
 
+  it('injects a document.cookie setter override with a correctly-escaped Domain-stripping regex', async () => {
+    const out = await rewriteHtml('<html><body></body></html>', baseOptions());
+    // Guards against a real bug caught during development: an UNTAGGED template literal
+    // silently eats a bare `\s` (it's not a recognized string escape), collapsing the
+    // regex source to garbage (`s*domains*=`) that matches nothing — the literal output
+    // must contain an actual backslash-s, not just the letter s.
+    expect(out).toContain("Object.defineProperty(Document.prototype,'cookie'");
+    expect(out).toContain('\\s*domain\\s*=');
+  });
+
+  it("the injected cookie setter override actually strips a Domain attribute when executed", async () => {
+    const out = await rewriteHtml('<html><body></body></html>', baseOptions());
+    const scriptMatch = /<script>([\s\S]*?)<\/script>/.exec(out);
+    expect(scriptMatch).not.toBeNull();
+    // Executes the real extracted script against a minimal Document-prototype stand-in
+    // (not a full jsdom/browser) — cheap, and exercises the exact same
+    // Object.defineProperty/replace logic a real browser would run.
+    const fakeDocumentProto: { cookie?: string } = {};
+    let backingStore = '';
+    Object.defineProperty(fakeDocumentProto, 'cookie', {
+      configurable: true,
+      get() {
+        return backingStore;
+      },
+      set(v: string) {
+        backingStore = String(v);
+      },
+    });
+    const sandbox = {
+      Document: { prototype: fakeDocumentProto },
+      document: { addEventListener: () => {} },
+      window: {},
+      Object,
+      String,
+    };
+    const run = new Function(...Object.keys(sandbox), scriptMatch![1]!);
+    run(...Object.values(sandbox));
+    (fakeDocumentProto as unknown as { cookie: string }).cookie = 'name=value; Domain=proxy.example; Path=/';
+    expect(backingStore).toBe('name=value; Path=/');
+  });
+
   it('injects the Preview banner and click-interceptor script right after <body>', async () => {
     const out = await rewriteHtml('<html><body><p>hi</p></body></html>', baseOptions());
     const bodyIdx = out.indexOf('<body>');
