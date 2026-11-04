@@ -26,6 +26,9 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         NEXT_PUBLIC_API_BASE_URL: 'http://localhost:3011',
+        // Lets builds.spec.ts exercise the Builds UI block — safe to leave on for
+        // every other spec too, since none of them ever reach a project editor page.
+        NEXT_PUBLIC_ENABLE_BUILDS: 'true',
       },
     },
     {

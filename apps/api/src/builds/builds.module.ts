@@ -3,6 +3,7 @@ import { OrganizationsModule } from '../organizations/organizations.module.js';
 import { ProjectsModule } from '../projects/projects.module.js';
 import { BuildsController } from './builds.controller.js';
 import { BuildRunnerController } from './build-runner.controller.js';
+import { FakeRunnerController } from './fake-runner.controller.js';
 import { BuildsService } from './builds.service.js';
 import { BuildRunnerGuard } from './build-runner.guard.js';
 import { BuildRateLimitService } from './build-rate-limit.js';
@@ -12,7 +13,7 @@ import { FakeRunner } from './fake-runner.js';
 
 @Module({
   imports: [OrganizationsModule, ProjectsModule],
-  controllers: [BuildsController, BuildRunnerController],
+  controllers: [BuildsController, BuildRunnerController, FakeRunnerController],
   providers: [
     BuildsService,
     BuildRunnerGuard,
