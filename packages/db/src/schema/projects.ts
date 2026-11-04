@@ -12,6 +12,12 @@ export const projects = pgTable(
       .references(() => organizations.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     sourceUrl: text('source_url').notNull(),
+    // Set only by apps/api/scripts/migrate-legacy-projects.ts, to the old file-storage
+    // project id (e.g. "p_7e8c8fb7b47e") it was migrated from — null for every
+    // project created normally through the app. The unique constraint is what makes a
+    // re-run of that script idempotent: inserting the same legacy id twice is a
+    // conflict it catches and reports as "skipped", not a duplicate row.
+    legacyId: text('legacy_id').unique(),
     config: jsonb('config').notNull(),
     // Which version of @mobilio/config's ProjectConfigSchema `config` conforms to —
     // written on every insert/update (see apps/api's ProjectsService). Lets a future
