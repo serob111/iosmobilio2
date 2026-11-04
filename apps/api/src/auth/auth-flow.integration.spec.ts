@@ -26,11 +26,18 @@ describe.skipIf(!hasLiveServices)('auth + organizations HTTP flow (live Postgres
   beforeAll(async () => {
     mailLogFile = join(tmpdir(), `mobilio-mail-log-${Date.now()}.ndjson`);
     process.env.MAIL_LOG_FILE = mailLogFile;
+    // This suite is about auth/org flows, not CSRF — see csrf.integration.spec.ts for
+    // the dedicated, real-middleware coverage.
+    process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
     app = await createApp();
     await app.init();
 
     redis = new Redis(process.env.REDIS_URL!);
+  });
+
+  afterAll(() => {
+    delete process.env.CSRF_DISABLED_FOR_TESTING;
   });
 
   // Rate-limit buckets are keyed "<client-ip>|<path>" (sign-in and verify separately)

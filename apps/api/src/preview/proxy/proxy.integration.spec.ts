@@ -57,6 +57,8 @@ describe.skipIf(!hasLiveServices)('preview proxy (<slug>.<PREVIEW_PROXY_DOMAIN>/
     mailLogFile = join(tmpdir(), `mobilio-mail-log-proxy-${Date.now()}.ndjson`);
     process.env.MAIL_LOG_FILE = mailLogFile;
     process.env.BUILD_RUNNER = 'fake';
+    // This suite is about the proxy itself, not CSRF — see csrf.integration.spec.ts.
+    process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
     app = await createApp();
     await app.init();
@@ -74,6 +76,7 @@ describe.skipIf(!hasLiveServices)('preview proxy (<slug>.<PREVIEW_PROXY_DOMAIN>/
     }
     delete process.env.MAIL_LOG_FILE;
     delete process.env.BUILD_RUNNER;
+    delete process.env.CSRF_DISABLED_FOR_TESTING;
   });
 
   async function resetRateLimitBuckets(): Promise<void> {

@@ -3,10 +3,11 @@ import type { ProjectConfig } from "@mobilio/config";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3011";
 
 /**
- * Every apps/api error response is `{code, message}` (English, stable codes — never
- * meant to be shown directly, see lib/errorCodes.ts for the code -> localized-message
- * mapping). Carrying `code` as a typed property (not just embedded in the message
- * string) is what lets the UI translate by code instead of parsing English text.
+ * Every apps/api error response is `{error: {code, message, requestId}}` (English,
+ * stable codes — never meant to be shown directly, see lib/errorCodes.ts for the code
+ * -> localized-message mapping; see apps/api's HttpExceptionFilter for where this
+ * shape comes from). Carrying `code` as a typed property (not just embedded in the
+ * message string) is what lets the UI translate by code instead of parsing English text.
  */
 export class ApiError extends Error {
   constructor(
@@ -20,14 +21,13 @@ export class ApiError extends Error {
 
 async function throwApiError(res: Response): Promise<never> {
   const body: unknown = await res.json().catch(() => null);
-  const code =
-    body && typeof body === "object" && "code" in body && typeof (body as { code: unknown }).code === "string"
-      ? (body as { code: string }).code
-      : "UNKNOWN";
+  const error =
+    body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "object"
+      ? ((body as { error: unknown }).error as Record<string, unknown>)
+      : null;
+  const code = error && typeof error.code === "string" ? error.code : "UNKNOWN";
   const message =
-    body && typeof body === "object" && "message" in body && typeof (body as { message: unknown }).message === "string"
-      ? (body as { message: string }).message
-      : `Request failed with status ${res.status}`;
+    error && typeof error.message === "string" ? error.message : `Request failed with status ${res.status}`;
   throw new ApiError(code, message);
 }
 

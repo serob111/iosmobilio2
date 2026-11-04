@@ -48,6 +48,8 @@ describe.skipIf(!hasLiveServices)(
       mailLogFile = join(tmpdir(), `mobilio-mail-log-preview-${Date.now()}.ndjson`);
       process.env.MAIL_LOG_FILE = mailLogFile;
       process.env.BUILD_RUNNER = 'fake';
+      // This suite is about preview links, not CSRF — see csrf.integration.spec.ts.
+      process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
       app = await createApp();
       await app.init();
@@ -79,6 +81,7 @@ describe.skipIf(!hasLiveServices)(
       }
       delete process.env.MAIL_LOG_FILE;
       delete process.env.BUILD_RUNNER;
+      delete process.env.CSRF_DISABLED_FOR_TESTING;
     });
 
     afterEach(() => server.resetHandlers());

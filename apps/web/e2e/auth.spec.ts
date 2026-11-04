@@ -118,8 +118,12 @@ test.describe('auth', () => {
     const sinceLine = readMailLines().length;
 
     // No invite UI exists yet (out of Section 5's scope) — API calls reuse the same
-    // browser-context session cookie the page itself just established.
+    // browser-context session cookie the page itself just established. Unlike a real
+    // in-page fetch(), Playwright's request fixture doesn't attach an Origin header on
+    // its own, so it's set explicitly here to pass apps/api's CSRF Origin check the way
+    // a real browser-driven request naturally would.
     const inviteRes = await page.request.post(`http://localhost:3011/orgs/${orgId}/invitations`, {
+      headers: { Origin: 'http://localhost:3100' },
       data: { email: inviteeEmail, role: 'member' },
     });
     expect(inviteRes.ok()).toBe(true);
@@ -134,6 +138,7 @@ test.describe('auth', () => {
     await signInByMagicLink(page, inviteeEmail);
 
     const acceptRes = await page.request.post('http://localhost:3011/invitations/accept', {
+      headers: { Origin: 'http://localhost:3100' },
       data: { token },
     });
     expect(acceptRes.ok()).toBe(true);

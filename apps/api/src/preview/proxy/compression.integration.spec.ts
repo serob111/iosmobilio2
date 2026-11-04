@@ -108,6 +108,8 @@ describe.skipIf(!hasLiveServices)(
       mailLogFile = join(tmpdir(), `mobilio-mail-log-compression-${Date.now()}.ndjson`);
       process.env.MAIL_LOG_FILE = mailLogFile;
       process.env.BUILD_RUNNER = 'fake';
+      // This suite is about compression/header stripping, not CSRF — see csrf.integration.spec.ts.
+      process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
       app = await createApp();
       await app.init();
@@ -127,6 +129,7 @@ describe.skipIf(!hasLiveServices)(
       await app.close();
       delete process.env.MAIL_LOG_FILE;
       delete process.env.BUILD_RUNNER;
+      delete process.env.CSRF_DISABLED_FOR_TESTING;
     });
 
     async function signInAndGetOrgId(): Promise<string> {

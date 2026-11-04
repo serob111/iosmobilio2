@@ -54,6 +54,8 @@ describe.skipIf(!hasLiveServices)(
       // Read once by BuildsModule's BUILD_RUNNER factory at provider instantiation
       // (app.init() time), so it must be set before createApp() is called.
       process.env.BUILD_RUNNER = 'fake';
+      // This suite is about the build pipeline, not CSRF — see csrf.integration.spec.ts.
+      process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
       app = await createApp();
       await app.init();
@@ -89,6 +91,7 @@ describe.skipIf(!hasLiveServices)(
       }
       delete process.env.MAIL_LOG_FILE;
       delete process.env.BUILD_RUNNER;
+      delete process.env.CSRF_DISABLED_FOR_TESTING;
     });
 
     afterEach(() => server.resetHandlers());

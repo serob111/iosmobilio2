@@ -26,9 +26,11 @@ describe('fetchMe', () => {
     await expect(fetchMe()).resolves.toBeNull();
   });
 
-  it('throws an ApiError carrying the response body\'s code+message', async () => {
+  it('throws an ApiError carrying the response body\'s error.code+error.message', async () => {
     server.use(
-      http.get(`${API_BASE}/me`, () => HttpResponse.json({ code: 'FORBIDDEN', message: 'nope' }, { status: 403 })),
+      http.get(`${API_BASE}/me`, () =>
+        HttpResponse.json({ error: { code: 'FORBIDDEN', message: 'nope' } }, { status: 403 }),
+      ),
     );
 
     const error = await fetchMe().catch((e) => e);

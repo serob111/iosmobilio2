@@ -47,6 +47,8 @@ describe.skipIf(!hasLiveServices)(
     beforeAll(async () => {
       mailLogFile = join(tmpdir(), `mobilio-mail-log-drafts-${Date.now()}.ndjson`);
       process.env.MAIL_LOG_FILE = mailLogFile;
+      // This suite is about drafts/claim, not CSRF — see csrf.integration.spec.ts.
+      process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
       app = await createApp();
       await app.init();
@@ -76,6 +78,7 @@ describe.skipIf(!hasLiveServices)(
         unlinkSync(mailLogFile);
       }
       delete process.env.MAIL_LOG_FILE;
+      delete process.env.CSRF_DISABLED_FOR_TESTING;
     });
 
     afterEach(() => server.resetHandlers());

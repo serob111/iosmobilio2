@@ -26,6 +26,8 @@ describe.skipIf(!hasLiveServices)('organizations races + edge cases (live Postgr
   beforeAll(async () => {
     mailLogFile = join(tmpdir(), `mobilio-mail-log-race-${Date.now()}.ndjson`);
     process.env.MAIL_LOG_FILE = mailLogFile;
+    // This suite is about org races/edge cases, not CSRF — see csrf.integration.spec.ts.
+    process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
     app = await createApp();
     await app.init();
@@ -40,6 +42,7 @@ describe.skipIf(!hasLiveServices)('organizations races + edge cases (live Postgr
       unlinkSync(mailLogFile);
     }
     delete process.env.MAIL_LOG_FILE;
+    delete process.env.CSRF_DISABLED_FOR_TESTING;
   });
 
   // See auth-flow.integration.spec.ts for why this is suffix-matched rather than a

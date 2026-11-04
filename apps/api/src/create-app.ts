@@ -9,6 +9,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { validateBuildEnv } from './builds/validate-build-env.js';
 import { validatePreviewEnv } from './preview/validate-preview-env.js';
 import { validateSafeFetchTestEnv } from './net/safe-fetch.js';
+import { createCsrfMiddleware, validateCsrfTestEnv } from './common/csrf-middleware.js';
 import { createPreviewProxyMiddleware } from './preview/proxy/proxy-middleware.js';
 import { PreviewLinkService } from './preview/preview-link.service.js';
 import { ProxyRateLimitService } from './preview/proxy/proxy-rate-limit.js';
@@ -26,6 +27,7 @@ export async function createApp(): Promise<INestApplication> {
   validateBuildEnv();
   validatePreviewEnv();
   validateSafeFetchTestEnv();
+  validateCsrfTestEnv();
 
   // Better Auth needs the raw, unparsed request body (it parses JSON itself from the
   // Fetch API Request it builds) — bodyParser:false + mounting its handler before
@@ -57,6 +59,8 @@ export async function createApp(): Promise<INestApplication> {
       cache: app.get(ProxyCacheService),
     }),
   );
+
+  app.use(createCsrfMiddleware());
 
   const authService = app.get(AuthService);
   app.use('/api/auth', toNodeHandler(authService.auth));
