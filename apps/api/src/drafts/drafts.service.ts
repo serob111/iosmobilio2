@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import {
   BadRequestException,
   Inject,
@@ -159,9 +160,16 @@ export class DraftsService {
     await this.storage.put(draftIconKey(draftId), iconBuffer, 'image/png');
   }
 
-  /** GET /drafts/me/icon — a short-lived signed url, not proxied bytes. */
-  async getIconUrl(draftId: string): Promise<string> {
-    return this.storage.signedUrl(draftIconKey(draftId), 300, 'icon.png');
+  /**
+   * GET /drafts/me/icon — streamed bytes, not a signed-url redirect: the browser `<img
+   * crossOrigin="use-credentials">` carries that credentials mode through any redirect
+   * hop, and a signed S3/MinIO url is a third origin whose CORS response (often a bare
+   * `*`) can't satisfy a credentialed request — streaming through this api's own origin
+   * (already a correct, non-wildcard credentialed CORS policy, see create-app.ts) avoids
+   * depending on the object storage's CORS config at all.
+   */
+  async getIconStream(draftId: string): Promise<Readable> {
+    return this.storage.getStream(draftIconKey(draftId));
   }
 
   /**

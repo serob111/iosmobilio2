@@ -7,7 +7,6 @@ import {
   HttpStatus,
   Post,
   Put,
-  Redirect,
   Req,
   Res,
   UploadedFile,
@@ -76,9 +75,9 @@ export class DraftsController {
   @Get('me/icon')
   @Public()
   @UseGuards(DraftGuard)
-  @Redirect()
-  async getIcon(@Req() request: Request) {
-    const url = await this.draftsService.getIconUrl(request.draft!.id);
-    return { url };
+  async getIcon(@Req() request: Request, @Res() response: Response) {
+    const stream = await this.draftsService.getIconStream(request.draft!.id);
+    response.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+    stream.pipe(response);
   }
 }

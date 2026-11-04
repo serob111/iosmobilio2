@@ -6,14 +6,14 @@ import {
   Param,
   Post,
   Put,
-  Redirect,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { ICON_UPLOAD_LIMITS } from '../common/upload-limits.js';
 import { OrgGuard } from '../organizations/org.guard.js';
 import { ProjectGuard } from './project.guard.js';
@@ -81,9 +81,13 @@ export class ProjectsController {
 
   @Get(':projectId/icon')
   @UseGuards(OrgGuard, ProjectGuard)
-  @Redirect()
-  async getIcon(@Req() request: Request, @Param('projectId') projectId: string) {
-    const url = await this.projectsService.getIconUrl(request.tenant!.orgId, projectId);
-    return { url };
+  async getIcon(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Param('projectId') projectId: string,
+  ) {
+    const stream = await this.projectsService.getIconStream(request.tenant!.orgId, projectId);
+    response.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+    stream.pipe(response);
   }
 }

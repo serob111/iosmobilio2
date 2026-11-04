@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import QRCode from "qrcode";
+import { useTranslations } from "next-intl";
 
 type Props = {
   createLink: () => Promise<{ url: string }>;
@@ -21,6 +22,7 @@ type State =
  * exactly one place.
  */
 export function PreviewLinkButton({ createLink }: Props) {
+  const t = useTranslations("preview");
   const [state, setState] = useState<State>({ status: "idle" });
   const [copied, setCopied] = useState(false);
 
@@ -50,7 +52,7 @@ export function PreviewLinkButton({ createLink }: Props) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-2xl border border-zinc-200 p-4 text-center">
         {/* eslint-disable-next-line @next/next/no-img-element -- a data: URI generated client-side, not a static asset */}
-        <img src={state.qrDataUrl} alt="QR-код превью" width={196} height={196} />
+        <img src={state.qrDataUrl} alt={t("qrAlt")} width={196} height={196} />
         <div className="flex items-center gap-2">
           <a href={state.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[#4B2BE0] underline">
             {state.url}
@@ -60,7 +62,7 @@ export function PreviewLinkButton({ createLink }: Props) {
             onClick={() => handleCopy(state.url)}
             className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-semibold text-[#17112E] hover:bg-zinc-50"
           >
-            {copied ? "Скопировано" : "Копировать"}
+            {copied ? t("copied") : t("copyLink")}
           </button>
         </div>
       </div>
@@ -75,11 +77,9 @@ export function PreviewLinkButton({ createLink }: Props) {
         disabled={state.status === "loading"}
         className="rounded-full bg-[#4B2BE0] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
       >
-        {state.status === "loading" ? "Готовим ссылку…" : "Открыть на iPhone"}
+        {state.status === "loading" ? t("preparingLink") : t("openOnIphone")}
       </button>
-      {state.status === "error" ? (
-        <p className="text-xs text-red-600">Не удалось создать ссылку. Попробуйте ещё раз.</p>
-      ) : null}
+      {state.status === "error" ? <p className="text-xs text-red-600">{t("linkError")}</p> : null}
     </div>
   );
 }

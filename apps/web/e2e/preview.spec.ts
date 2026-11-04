@@ -39,6 +39,19 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
         id: 'draft-1',
         name: PREVIEW_DTO.name,
         sourceUrl: 'https://e2e-test-site.example/',
+        config: {
+          id: 'draft-1',
+          name: PREVIEW_DTO.name,
+          slug: 'e2e-test-cafe',
+          bundleId: 'com.example.e2etestcafe',
+          source: { type: 'url', url: 'https://e2e-test-site.example/' },
+          theme: PREVIEW_DTO.theme,
+          tabs: PREVIEW_DTO.tabs,
+          features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
+          allowedDomains: [],
+          trial: true,
+        },
+        configVersion: 1,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       }),
     });
@@ -75,9 +88,10 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
     });
   });
 
-  await page.goto('/try');
-  await page.getByPlaceholder('Адрес вашего сайта, например example.com').fill('e2e-test-site.example');
-  await page.getByRole('button', { name: 'Показать превью' }).click();
+  await page.goto('/');
+  await page.getByPlaceholder("Your site's address, e.g. example.com").fill('e2e-test-site.example');
+  await page.getByRole('button', { name: 'Show preview' }).click();
+  await page.waitForURL('**/try');
 
   const homeFrame = page.frameLocator('iframe[title="Главная"]');
   await expect(homeFrame.getByRole('heading', { name: 'Home page' })).toBeVisible();
@@ -86,7 +100,7 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
   const catalogFrame = page.frameLocator('iframe[title="Каталог"]');
   await expect(catalogFrame.getByRole('heading', { name: 'Catalog page' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Открыть на iPhone' }).click();
-  await expect(page.getByAltText('QR-код превью')).toBeVisible();
+  await page.getByRole('button', { name: 'Open on iPhone' }).click();
+  await expect(page.getByAltText('Preview QR code')).toBeVisible();
   await expect(page.getByRole('link', { name: `http://localhost:3100/preview/${SLUG}` })).toBeVisible();
 });

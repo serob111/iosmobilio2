@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ProjectsService } from './projects.service.js';
@@ -83,7 +84,7 @@ vi.mock('./icon.js', () => ({ processIconImage: processIconImageMock }));
 
 describe('ProjectsService', () => {
   let storagePut: ReturnType<typeof vi.fn>;
-  let storageSignedUrl: ReturnType<typeof vi.fn>;
+  let storageGetStream: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     runInTenantContextMock.mockClear();
@@ -99,7 +100,7 @@ describe('ProjectsService', () => {
     analyzeSiteMock.mockReset();
     processIconImageMock.mockReset();
     storagePut = vi.fn().mockResolvedValue(undefined);
-    storageSignedUrl = vi.fn().mockResolvedValue('https://signed.example/icon.png');
+    storageGetStream = vi.fn().mockResolvedValue(Readable.from([Buffer.from('icon-bytes')]));
   });
 
   async function buildService(): Promise<ProjectsService> {
@@ -107,7 +108,7 @@ describe('ProjectsService', () => {
       providers: [
         ProjectsService,
         DbService,
-        { provide: OBJECT_STORAGE, useValue: { put: storagePut, signedUrl: storageSignedUrl } },
+        { provide: OBJECT_STORAGE, useValue: { put: storagePut, getStream: storageGetStream } },
       ],
     }).compile();
     return moduleRef.get(ProjectsService);
@@ -316,17 +317,13 @@ describe('ProjectsService', () => {
     });
   });
 
-  describe('getIconUrl', () => {
-    it('signs the project icon key with a filename', async () => {
+  describe('getIconStream', () => {
+    it('streams the project icon key', async () => {
       const service = await buildService();
-      const url = await service.getIconUrl(ORG_ID, PROJECT_ID);
+      const stream = await service.getIconStream(ORG_ID, PROJECT_ID);
 
-      expect(url).toBe('https://signed.example/icon.png');
-      expect(storageSignedUrl).toHaveBeenCalledWith(
-        `orgs/${ORG_ID}/projects/${PROJECT_ID}/icon.png`,
-        300,
-        'icon.png',
-      );
+      expect(stream).toBeInstanceOf(Readable);
+      expect(storageGetStream).toHaveBeenCalledWith(`orgs/${ORG_ID}/projects/${PROJECT_ID}/icon.png`);
     });
   });
 });

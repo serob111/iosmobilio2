@@ -1,0 +1,132 @@
+{
+  "header": {
+    "signIn": "Войти",
+    "signOut": "Выйти",
+    "projects": "Проекты"
+  },
+  "login": {
+    "title": "Вход в Mobilio",
+    "emailPlaceholder": "you@example.com",
+    "sendLink": "Отправить ссылку",
+    "sending": "Отправляем…",
+    "sent": "Проверьте почту — там ссылка для входа.",
+    "sendError": "Не удалось отправить ссылку. Попробуйте ещё раз.",
+    "or": "или",
+    "continueWithGoogle": "Войти через Google"
+  },
+  "logout": {
+    "signingOut": "Выходим…"
+  },
+  "home": {
+    "title": "Превратите свой сайт в приложение для iPhone",
+    "subtitle": "Вставьте адрес сайта — увидите его в оболочке приложения прямо здесь.",
+    "urlPlaceholder": "Адрес вашего сайта, например example.com",
+    "submit": "Показать превью",
+    "submitLoading": "Анализируем сайт…"
+  },
+  "editor": {
+    "nameLabel": "Название приложения",
+    "replaceIcon": "Заменить иконку",
+    "uploadingIcon": "Загружаем…",
+    "themeSection": "Тема",
+    "primaryColor": "Основной цвет",
+    "backgroundColor": "Цвет фона",
+    "statusBarLabel": "Статус-бар",
+    "statusBarDark": "Тёмный",
+    "statusBarLight": "Светлый",
+    "tabsSection": "Вкладки",
+    "tabTitleLabel": "Название",
+    "tabPathLabel": "Путь",
+    "tabIconLabel": "Иконка",
+    "tabNativeContacts": "Контакты (встроенная)",
+    "addTab": "+ Добавить вкладку",
+    "removeTab": "Удалить",
+    "moveTabUp": "Выше",
+    "moveTabDown": "Ниже",
+    "featuresSection": "Функции",
+    "featureOffline": "Работа офлайн",
+    "featureShare": "Кнопка «Поделиться»",
+    "featureDeepLinks": "Диплинки",
+    "featurePullToRefresh": "Обновление свайпом",
+    "save": "Сохранить",
+    "saving": "Сохраняем…",
+    "saved": "Сохранено",
+    "icons": {
+      "home": "Главная",
+      "grid": "Каталог",
+      "location": "Карта",
+      "cart": "Корзина",
+      "person": "Профиль",
+      "search": "Поиск",
+      "heart": "Избранное",
+      "info": "Инфо",
+      "chat": "Чат"
+    }
+  },
+  "preview": {
+    "badge": "Превью — так ваш сайт будет выглядеть в приложении.",
+    "reportAbuse": "Сообщить о нарушении",
+    "openOnIphone": "Открыть на iPhone",
+    "preparingLink": "Готовим ссылку…",
+    "linkError": "Не удалось создать ссылку. Попробуйте ещё раз.",
+    "copyLink": "Копировать",
+    "copied": "Скопировано",
+    "qrAlt": "QR-код превью",
+    "screenUnavailable": "Этот экран недоступен в превью"
+  },
+  "claim": {
+    "saveAsProject": "Сохранить как проект",
+    "saving": "Сохраняем…",
+    "openSavedProject": "Открыть сохранённый проект",
+    "chooseOrganization": "Выберите организацию"
+  },
+  "projects": {
+    "title": "Ваши проекты",
+    "empty": "Пока нет проектов.",
+    "openProject": "Открыть",
+    "organization": "Организация",
+    "notFound": "Проект не найден"
+  },
+  "builds": {
+    "title": "Сборка .ipa",
+    "start": "Собрать .ipa",
+    "starting": "Запускаем…",
+    "statusQueued": "В очереди",
+    "statusBuilding": "Собирается",
+    "statusDone": "Готово",
+    "statusFailed": "Ошибка",
+    "downloadIpa": "Скачать .ipa",
+    "disclaimer": "Этот .ipa неподписанный — перед установкой его нужно самостоятельно подписать и установить вручную.",
+    "error": "Ошибка сборки"
+  },
+  "errors": {
+    "INVALID_URL": "Это не похоже на корректный адрес.",
+    "UNSAFE_URL": "Этот адрес нельзя использовать.",
+    "SITE_UNREACHABLE": "Не удалось обратиться к этому сайту. Проверьте адрес и попробуйте снова.",
+    "SITE_ERROR_STATUS": "Этот сайт вернул страницу с ошибкой.",
+    "NOT_HTML": "Этот адрес не похож на веб-страницу.",
+    "RESPONSE_TOO_LARGE": "Эта страница слишком большая для анализа.",
+    "TOO_MANY_REDIRECTS": "Этот сайт сделал слишком много перенаправлений.",
+    "VALIDATION_ERROR": "Часть введённых данных некорректна.",
+    "FILE_TOO_LARGE": "Этот файл слишком большой.",
+    "BAD_REQUEST": "Что-то не так с этим запросом.",
+    "FORBIDDEN": "У вас нет прав для этого действия.",
+    "NOT_FOUND": "Не удалось найти.",
+    "LAST_OWNER": "В организации должен остаться хотя бы один владелец.",
+    "MEMBER_NOT_FOUND": "Этот участник не найден.",
+    "INVITATION_NOT_FOUND": "Это приглашение не найдено.",
+    "DRAFT_NOT_FOUND": "Этот черновик не найден — возможно, он истёк.",
+    "BUILD_DISPATCH_FAILED": "Не удалось запустить сборку. Попробуйте снова.",
+    "BUILD_IN_PROGRESS": "Для этого проекта уже идёт сборка.",
+    "BUILD_NOT_FOUND": "Эта сборка не найдена.",
+    "INVALID_BUILD_STATE": "Это действие недоступно в текущем статусе сборки.",
+    "IPA_NOT_READY": "Файл .ipa ещё не готов.",
+    "IPA_TOO_LARGE": "Собранный файл .ipa слишком большой.",
+    "INVALID_IPA": "Собранный файл не является корректным .ipa.",
+    "PREVIEW_NOT_FOUND": "Эта ссылка превью больше не действительна.",
+    "PREVIEW_SOURCE_INVALID": "Источник этого превью настроен некорректно.",
+    "CSRF_ORIGIN_MISMATCH": "Сессия выглядит некорректной. Перезагрузите страницу и попробуйте снова.",
+    "INTERNAL_ERROR": "Что-то пошло не так на нашей стороне. Попробуйте снова.",
+    "UNKNOWN": "Что-то пошло не так. Попробуйте снова."
+  }
+}

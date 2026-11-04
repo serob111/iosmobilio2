@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ObjectNotFoundError } from '@mobilio/storage';
@@ -111,7 +112,7 @@ describe('DraftsService', () => {
   let storagePut: ReturnType<typeof vi.fn>;
   let storageGet: ReturnType<typeof vi.fn>;
   let storageDelete: ReturnType<typeof vi.fn>;
-  let storageSignedUrl: ReturnType<typeof vi.fn>;
+  let storageGetStream: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     runInTokenLookupContextMock.mockClear();
@@ -137,7 +138,7 @@ describe('DraftsService', () => {
     storagePut = vi.fn().mockResolvedValue(undefined);
     storageGet = vi.fn().mockResolvedValue(Buffer.from('icon-bytes'));
     storageDelete = vi.fn().mockResolvedValue(undefined);
-    storageSignedUrl = vi.fn().mockResolvedValue('https://signed.example/icon.png');
+    storageGetStream = vi.fn().mockResolvedValue(Readable.from([Buffer.from('icon-bytes')]));
   });
 
   async function buildService(): Promise<DraftsService> {
@@ -147,7 +148,7 @@ describe('DraftsService', () => {
         DbService,
         {
           provide: OBJECT_STORAGE,
-          useValue: { put: storagePut, get: storageGet, delete: storageDelete, signedUrl: storageSignedUrl },
+          useValue: { put: storagePut, get: storageGet, delete: storageDelete, getStream: storageGetStream },
         },
       ],
     }).compile();
@@ -349,13 +350,13 @@ describe('DraftsService', () => {
     });
   });
 
-  describe('getIconUrl', () => {
-    it('signs the draft icon key with a filename', async () => {
+  describe('getIconStream', () => {
+    it('streams the draft icon key', async () => {
       const service = await buildService();
-      const url = await service.getIconUrl(DRAFT_ID);
+      const stream = await service.getIconStream(DRAFT_ID);
 
-      expect(url).toBe('https://signed.example/icon.png');
-      expect(storageSignedUrl).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`, 300, 'icon.png');
+      expect(stream).toBeInstanceOf(Readable);
+      expect(storageGetStream).toHaveBeenCalledWith(`drafts/${DRAFT_ID}/icon.png`);
     });
   });
 

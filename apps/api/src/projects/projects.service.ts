@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import {
   BadRequestException,
   Inject,
@@ -191,8 +192,13 @@ export class ProjectsService {
     await this.storage.put(projectIconKey(orgId, projectId), iconBuffer, 'image/png');
   }
 
-  /** GET /orgs/:orgId/projects/:projectId/icon — a short-lived signed url, not proxied bytes. */
-  async getIconUrl(orgId: string, projectId: string): Promise<string> {
-    return this.storage.signedUrl(projectIconKey(orgId, projectId), 300, 'icon.png');
+  /**
+   * GET /orgs/:orgId/projects/:projectId/icon — streamed bytes, not a signed-url
+   * redirect. Same reasoning as DraftsService.getIconStream: the `<img
+   * crossOrigin="use-credentials">` carries credentials through any redirect, and a
+   * signed S3/MinIO url is a third origin whose CORS can't satisfy that.
+   */
+  async getIconStream(orgId: string, projectId: string): Promise<Readable> {
+    return this.storage.getStream(projectIconKey(orgId, projectId));
   }
 }

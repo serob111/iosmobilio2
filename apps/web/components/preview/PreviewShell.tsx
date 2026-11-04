@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import type { PreviewDto } from "@/lib/apiClient";
 import { TabIcon } from "./TabIcon";
 
@@ -26,6 +27,7 @@ type Props = {
  * form back to anywhere or navigate the parent frame away from this preview.
  */
 export function PreviewShell({ dto }: Props) {
+  const t = useTranslations("preview");
   const [activeIndex, setActiveIndex] = useState(0);
   const activeTab = dto.tabs[activeIndex];
   const isDark = dto.statusBar === "dark";
@@ -54,7 +56,7 @@ export function PreviewShell({ dto }: Props) {
               />
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-zinc-500">
-                Этот экран недоступен в превью
+                {t("screenUnavailable")}
               </div>
             )}
           </div>
@@ -81,9 +83,9 @@ export function PreviewShell({ dto }: Props) {
         </div>
       </div>
       <p className="max-w-sm text-center text-xs text-zinc-500">
-        Превью — так ваш сайт будет выглядеть в приложении.{" "}
+        {t("badge")}{" "}
         <a href={`mailto:${ABUSE_EMAIL}`} className="underline hover:text-zinc-700">
-          Сообщить о нарушении
+          {t("reportAbuse")}
         </a>
       </p>
     </div>

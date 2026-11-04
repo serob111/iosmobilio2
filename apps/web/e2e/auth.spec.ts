@@ -71,8 +71,8 @@ async function signInByMagicLink(page: Page, email: string): Promise<void> {
 
   await page.goto('/login');
   await page.getByPlaceholder('you@example.com').fill(email);
-  await page.getByRole('button', { name: 'Отправить ссылку для входа' }).click();
-  await page.getByText('Проверьте почту').waitFor();
+  await page.getByRole('button', { name: 'Send magic link' }).click();
+  await page.getByText('Check your email').waitFor();
 
   const mail = await waitForMail(email, '/api/auth/magic-link/verify', sinceLine);
   await resetRateLimitBuckets();
@@ -93,8 +93,8 @@ test.describe('auth', () => {
     const firstOrgName = await orgOption.first().textContent();
     expect(firstOrgName).toContain('workspace');
 
-    await page.getByRole('button', { name: 'Выйти' }).click();
-    await page.getByRole('link', { name: 'Войти' }).waitFor();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('link', { name: 'Sign in' }).waitFor();
 
     // Login again as the same (now existing, not new) user — same personal org, not a
     // second one created.
@@ -128,8 +128,8 @@ test.describe('auth', () => {
     const token = new URL(extractUrl(inviteMail.body)).searchParams.get('token');
     expect(token).toBeTruthy();
 
-    await page.getByRole('button', { name: 'Выйти' }).click();
-    await page.getByRole('link', { name: 'Войти' }).waitFor();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('link', { name: 'Sign in' }).waitFor();
 
     await signInByMagicLink(page, inviteeEmail);
 

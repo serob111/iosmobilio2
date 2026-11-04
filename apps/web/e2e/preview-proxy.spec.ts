@@ -71,11 +71,12 @@ function startWideCookieSite(name: string, proxyDomain: string): Promise<Site> {
   });
 }
 
-/** Drives /try end to end for a given site, returning the live preview iframe's src (its own origin + path). */
+/** Drives "/" -> /try end to end for a given site, returning the live preview iframe's src (its own origin + path). */
 async function createPreviewFor(page: import('@playwright/test').Page, site: Site): Promise<string> {
-  await page.goto('/try');
-  await page.getByPlaceholder('Адрес вашего сайта, например example.com').fill(`http://127.0.0.1:${site.port}/`);
-  await page.getByRole('button', { name: 'Показать превью' }).click();
+  await page.goto('/');
+  await page.getByPlaceholder("Your site's address, e.g. example.com").fill(`http://127.0.0.1:${site.port}/`);
+  await page.getByRole('button', { name: 'Show preview' }).click();
+  await page.waitForURL('**/try');
   const iframe = page.locator('iframe').first();
   await expect(iframe).toBeVisible({ timeout: 15_000 });
   const src = await iframe.getAttribute('src');

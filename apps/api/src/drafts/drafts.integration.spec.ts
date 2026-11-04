@@ -162,7 +162,7 @@ describe.skipIf(!hasLiveServices)(
         .expect(404);
     });
 
-    it('uploads a replacement icon and the icon endpoint redirects to a signed url that actually serves it', async () => {
+    it('uploads a replacement icon and the icon endpoint streams it directly (not a signed-url redirect)', async () => {
       mockSite();
       const createRes = await request(app.getHttpServer())
         .post('/drafts')
@@ -181,16 +181,9 @@ describe.skipIf(!hasLiveServices)(
         .attach('icon', png, { filename: 'icon.png', contentType: 'image/png' })
         .expect(201);
 
-      const iconRes = await request(app.getHttpServer())
-        .get('/drafts/me/icon')
-        .set('Cookie', cookie)
-        .redirects(0);
-      expect(iconRes.status).toBe(302);
-
-      const fetched = await fetch(iconRes.headers.location as string);
-      expect(fetched.status).toBe(200);
-      const bytes = Buffer.from(await fetched.arrayBuffer());
-      const meta = await sharp(bytes).metadata();
+      const iconRes = await request(app.getHttpServer()).get('/drafts/me/icon').set('Cookie', cookie).expect(200);
+      expect(iconRes.headers['content-type']).toBe('image/png');
+      const meta = await sharp(iconRes.body as Buffer).metadata();
       expect(meta.width).toBe(1024);
       expect(meta.height).toBe(1024);
     });
@@ -316,12 +309,8 @@ describe.skipIf(!hasLiveServices)(
       const projectIconRes = await request(app.getHttpServer())
         .get(`/orgs/${orgId}/projects/${projectId}/icon`)
         .set('Cookie', sessionCookie)
-        .redirects(0);
-      expect(projectIconRes.status).toBe(302);
-      const fetched = await fetch(projectIconRes.headers.location as string);
-      expect(fetched.status).toBe(200);
-      const bytes = Buffer.from(await fetched.arrayBuffer());
-      const meta = await sharp(bytes).metadata();
+        .expect(200);
+      const meta = await sharp(projectIconRes.body as Buffer).metadata();
       // processIconImage always normalizes to 1024x1024 regardless of input size (see the
       // icon-upload test above) — claiming moves that already-processed object as-is.
       expect(meta.width).toBe(1024);
@@ -359,13 +348,10 @@ describe.skipIf(!hasLiveServices)(
       expect(claimRes.status).toBe(201);
       const projectId = claimRes.body.id as string;
 
-      const projectIconRes = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .get(`/orgs/${orgId}/projects/${projectId}/icon`)
         .set('Cookie', sessionCookie)
-        .redirects(0);
-      expect(projectIconRes.status).toBe(302);
-      const fetched = await fetch(projectIconRes.headers.location as string);
-      expect(fetched.status).toBe(200);
+        .expect(200);
     });
 
     it('claims exactly once under concurrency: 5 simultaneous claims of the same draft yield exactly one success', async () => {

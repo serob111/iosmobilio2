@@ -1,0 +1,132 @@
+{
+  "header": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "projects": "Projects"
+  },
+  "login": {
+    "title": "Sign in to Mobilio",
+    "emailPlaceholder": "you@example.com",
+    "sendLink": "Send magic link",
+    "sending": "Sending…",
+    "sent": "Check your email for a sign-in link.",
+    "sendError": "Couldn't send the link. Please try again.",
+    "or": "or",
+    "continueWithGoogle": "Continue with Google"
+  },
+  "logout": {
+    "signingOut": "Signing out…"
+  },
+  "home": {
+    "title": "Turn your website into an iPhone app",
+    "subtitle": "Enter your site's address — see it inside the app shell right away.",
+    "urlPlaceholder": "Your site's address, e.g. example.com",
+    "submit": "Show preview",
+    "submitLoading": "Analyzing your site…"
+  },
+  "editor": {
+    "nameLabel": "App name",
+    "replaceIcon": "Replace icon",
+    "uploadingIcon": "Uploading…",
+    "themeSection": "Theme",
+    "primaryColor": "Primary color",
+    "backgroundColor": "Background color",
+    "statusBarLabel": "Status bar",
+    "statusBarDark": "Dark",
+    "statusBarLight": "Light",
+    "tabsSection": "Tabs",
+    "tabTitleLabel": "Title",
+    "tabPathLabel": "Path",
+    "tabIconLabel": "Icon",
+    "tabNativeContacts": "Contacts (built-in)",
+    "addTab": "+ Add tab",
+    "removeTab": "Remove",
+    "moveTabUp": "Move up",
+    "moveTabDown": "Move down",
+    "featuresSection": "Features",
+    "featureOffline": "Works offline",
+    "featureShare": "Share button",
+    "featureDeepLinks": "Deep links",
+    "featurePullToRefresh": "Pull to refresh",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "icons": {
+      "home": "Home",
+      "grid": "Grid",
+      "location": "Location",
+      "cart": "Cart",
+      "person": "Profile",
+      "search": "Search",
+      "heart": "Favorites",
+      "info": "Info",
+      "chat": "Chat"
+    }
+  },
+  "preview": {
+    "badge": "Preview — this is how your site will look in the app.",
+    "reportAbuse": "Report abuse",
+    "openOnIphone": "Open on iPhone",
+    "preparingLink": "Preparing link…",
+    "linkError": "Couldn't create the link. Please try again.",
+    "copyLink": "Copy",
+    "copied": "Copied",
+    "qrAlt": "Preview QR code",
+    "screenUnavailable": "This screen isn't available in the preview"
+  },
+  "claim": {
+    "saveAsProject": "Save as project",
+    "saving": "Saving…",
+    "openSavedProject": "Open saved project",
+    "chooseOrganization": "Choose an organization"
+  },
+  "projects": {
+    "title": "Your projects",
+    "empty": "No projects yet.",
+    "openProject": "Open",
+    "organization": "Organization",
+    "notFound": "Project not found"
+  },
+  "builds": {
+    "title": "Build .ipa",
+    "start": "Build .ipa",
+    "starting": "Starting…",
+    "statusQueued": "Queued",
+    "statusBuilding": "Building",
+    "statusDone": "Ready",
+    "statusFailed": "Failed",
+    "downloadIpa": "Download .ipa",
+    "disclaimer": "This .ipa is unsigned — you'll need to sideload and sign it yourself before installing.",
+    "error": "Build error"
+  },
+  "errors": {
+    "INVALID_URL": "That doesn't look like a valid URL.",
+    "UNSAFE_URL": "That address can't be used.",
+    "SITE_UNREACHABLE": "We couldn't reach that site. Check the address and try again.",
+    "SITE_ERROR_STATUS": "That site returned an error page.",
+    "NOT_HTML": "That address doesn't look like a web page.",
+    "RESPONSE_TOO_LARGE": "That page is too large to analyze.",
+    "TOO_MANY_REDIRECTS": "That site redirected too many times.",
+    "VALIDATION_ERROR": "Some of the information isn't valid.",
+    "FILE_TOO_LARGE": "That file is too large.",
+    "BAD_REQUEST": "Something about that request wasn't right.",
+    "FORBIDDEN": "You don't have permission to do that.",
+    "NOT_FOUND": "We couldn't find that.",
+    "LAST_OWNER": "An organization needs at least one owner.",
+    "MEMBER_NOT_FOUND": "That member couldn't be found.",
+    "INVITATION_NOT_FOUND": "That invitation couldn't be found.",
+    "DRAFT_NOT_FOUND": "That draft couldn't be found — it may have expired.",
+    "BUILD_DISPATCH_FAILED": "We couldn't start the build. Please try again.",
+    "BUILD_IN_PROGRESS": "A build is already running for this project.",
+    "BUILD_NOT_FOUND": "That build couldn't be found.",
+    "INVALID_BUILD_STATE": "That build isn't in a state that allows this.",
+    "IPA_NOT_READY": "The .ipa file isn't ready yet.",
+    "IPA_TOO_LARGE": "The built .ipa file is too large.",
+    "INVALID_IPA": "The built file isn't a valid .ipa.",
+    "PREVIEW_NOT_FOUND": "This preview link is no longer valid.",
+    "PREVIEW_SOURCE_INVALID": "This preview's source is misconfigured.",
+    "CSRF_ORIGIN_MISMATCH": "Your session looks invalid. Please reload the page and try again.",
+    "INTERNAL_ERROR": "Something went wrong on our side. Please try again.",
+    "UNKNOWN": "Something went wrong. Please try again."
+  }
+}

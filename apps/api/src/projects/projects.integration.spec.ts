@@ -181,7 +181,7 @@ describe.skipIf(!hasLiveServices)(
       expect(getAfterUpdate.body.config.name).toBe('Переименованное Кафе');
     });
 
-    it('uploads a replacement icon and the icon endpoint redirects to a signed url that actually serves it', async () => {
+    it('uploads a replacement icon and the icon endpoint streams it directly (not a signed-url redirect)', async () => {
       mockSite();
       const cookie = await signInByMagicLink(`itest-projects-icon-${Date.now()}@example.com`);
       const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
@@ -208,13 +208,9 @@ describe.skipIf(!hasLiveServices)(
       const iconRes = await request(app.getHttpServer())
         .get(`/orgs/${orgId}/projects/${projectId}/icon`)
         .set('Cookie', cookie)
-        .redirects(0);
-      expect(iconRes.status).toBe(302);
-
-      const fetched = await fetch(iconRes.headers.location as string);
-      expect(fetched.status).toBe(200);
-      const bytes = Buffer.from(await fetched.arrayBuffer());
-      const meta = await sharp(bytes).metadata();
+        .expect(200);
+      expect(iconRes.headers['content-type']).toBe('image/png');
+      const meta = await sharp(iconRes.body as Buffer).metadata();
       expect(meta.width).toBe(1024);
       expect(meta.height).toBe(1024);
     });

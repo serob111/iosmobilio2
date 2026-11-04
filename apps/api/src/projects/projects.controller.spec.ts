@@ -1,3 +1,4 @@
+import { PassThrough, Readable } from 'node:stream';
 import { BadRequestException } from '@nestjs/common';
 import { ProjectsController } from './projects.controller.js';
 import type { ProjectsService } from './projects.service.js';
@@ -10,9 +11,14 @@ function fakeService(
     listProjects: vi.fn(),
     updateProject: vi.fn(),
     uploadIcon: vi.fn(),
-    getIconUrl: vi.fn(),
+    getIconStream: vi.fn(),
     ...overrides,
   } as unknown as ProjectsService;
+}
+
+function fakeStreamResponse() {
+  const stream = new PassThrough();
+  return Object.assign(stream, { set: vi.fn() });
 }
 
 const projectStub = { id: 'project-1' };
@@ -89,14 +95,22 @@ describe('ProjectsController', () => {
   });
 
   describe('getIcon', () => {
-    it('redirects to the signed icon url', async () => {
-      const getIconUrl = vi.fn().mockResolvedValue('https://signed.example/icon.png');
-      const controller = new ProjectsController(fakeService({ getIconUrl }));
+    it('streams the icon bytes with an image/png content-type (not a signed-url redirect)', async () => {
+      const bytes = Buffer.from('fake-png-bytes');
+      const getIconStream = vi.fn().mockResolvedValue(Readable.from([bytes]));
+      const controller = new ProjectsController(fakeService({ getIconStream }));
+      const response = fakeStreamResponse();
 
-      const result = await controller.getIcon(request, 'project-1');
+      await controller.getIcon(request, response as never, 'project-1');
 
-      expect(result).toEqual({ url: 'https://signed.example/icon.png' });
-      expect(getIconUrl).toHaveBeenCalledWith('org-1', 'project-1');
+      expect(getIconStream).toHaveBeenCalledWith('org-1', 'project-1');
+      expect(response.set).toHaveBeenCalledWith({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+      const received = await new Promise<Buffer>((resolve) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c) => chunks.push(c));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+      });
+      expect(received).toEqual(bytes);
     });
   });
 });

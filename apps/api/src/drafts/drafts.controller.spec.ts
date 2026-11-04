@@ -1,3 +1,4 @@
+import { PassThrough, Readable } from 'node:stream';
 import { BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { DraftsController } from './drafts.controller.js';
 import type { DraftsService } from './drafts.service.js';
@@ -10,7 +11,7 @@ function fakeService(overrides: Partial<Record<keyof DraftsService, ReturnType<t
     createDraft: vi.fn(),
     updateDraft: vi.fn(),
     uploadIcon: vi.fn(),
-    getIconUrl: vi.fn(),
+    getIconStream: vi.fn(),
     claimDraft: vi.fn(),
     ...overrides,
   } as unknown as DraftsService;
@@ -22,6 +23,11 @@ function fakeRateLimit(allowed = true) {
 
 function fakeResponse() {
   return { cookie: vi.fn(), clearCookie: vi.fn() };
+}
+
+function fakeStreamResponse() {
+  const stream = new PassThrough();
+  return Object.assign(stream, { set: vi.fn() });
 }
 
 const draftStub = { id: 'draft-1' };
@@ -113,14 +119,22 @@ describe('DraftsController', () => {
   });
 
   describe('getIcon', () => {
-    it('redirects to the signed icon url', async () => {
-      const getIconUrl = vi.fn().mockResolvedValue('https://signed.example/icon.png');
-      const controller = new DraftsController(fakeService({ getIconUrl }), fakeRateLimit());
+    it('streams the icon bytes with an image/png content-type (not a signed-url redirect)', async () => {
+      const bytes = Buffer.from('fake-png-bytes');
+      const getIconStream = vi.fn().mockResolvedValue(Readable.from([bytes]));
+      const controller = new DraftsController(fakeService({ getIconStream }), fakeRateLimit());
+      const response = fakeStreamResponse();
 
-      const result = await controller.getIcon(requestWithDraft);
+      await controller.getIcon(requestWithDraft, response as never);
 
-      expect(result).toEqual({ url: 'https://signed.example/icon.png' });
-      expect(getIconUrl).toHaveBeenCalledWith('draft-1');
+      expect(getIconStream).toHaveBeenCalledWith('draft-1');
+      expect(response.set).toHaveBeenCalledWith({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+      const received = await new Promise<Buffer>((resolve) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (c) => chunks.push(c));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+      });
+      expect(received).toEqual(bytes);
     });
   });
 });
