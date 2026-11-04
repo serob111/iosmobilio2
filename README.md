@@ -2,6 +2,13 @@
 
 Сайт (`apps/web`) превращает адрес сайта в конфиг нативной iOS-оболочки (`apps/shell`), собирает
 неподписанный `.ipa` через GitHub Actions (`macos-latest`, без подписи) и отдаёт файл на скачивание.
+С Этапа 2 `apps/web` — чистый клиент: вся бизнес-логика (анализ сайта, проекты, черновики, сборки,
+превью, авторизация) живёт в `apps/api`, `apps/web` только зовёт его (`lib/apiClient.ts`) и рисует UI.
+
+Путь пользователя: `/` (адрес сайта) → `/try` (черновик: редактор + живое превью, без входа) →
+«Сохранить как проект» → вход (magic link/Google) → `/projects/:orgId/:projectId` (тот же
+редактор, теперь на проекте организации). Интерфейс — на английском по умолчанию, на русском по
+`/ru/...` (`next-intl`, см. «Пользовательский путь и UI» ниже).
 
 ## Запуск apps/web на Windows
 
@@ -11,8 +18,8 @@ cd apps/web
 npm run dev
 ```
 
-Откроется на `http://localhost:3000`. На `/` вставь адрес сайта → «Создать приложение», дальше
-редактирование на `/p/[id]`.
+Откроется на `http://localhost:3000`. Нужен уже поднятый `apps/api` (см. «Локальное окружение»
+ниже) — `apps/web` сам ничего не анализирует и ничего не хранит.
 
 Переменные окружения — скопируй `apps/web/.env.example` в `apps/web/.env.local` и заполни (см.
 ниже про токен и туннель):
@@ -243,18 +250,26 @@ npm run typecheck   # tsc --noEmit по всем workspace'ам
 npm run lint         # eslint по всем workspace'ам
 npm run test         # vitest по всем workspace'ам (packages/config, apps/web, apps/api, apps/worker)
 npm run test:coverage  # то же + покрытие (порог 80%: packages/config, apps/web/lib, apps/api auth+organizations)
-cd apps/web && npm run test:e2e   # Playwright: create→build→download, и полный auth-флоу (apps/web/e2e/auth.spec.ts)
+cd apps/web && npm run test:e2e   # Playwright, см. список специй ниже
 ```
 
-Тесты, которым нужны живые Postgres/Redis (health-check api, BullMQ-воркер, миграции, auth/organizations
-HTTP-флоу), сами пропускаются локально, если нужные переменные не заданы — поднимите инфраструктуру
-(`npm run dev:infra`), примените миграции (см. «База данных» выше) и экспортируйте переменные из
-`apps/api/.env.example`/`apps/worker/.env.example`/`packages/db/.env.example`, чтобы прогнать их
-по-настоящему. `npm run test:e2e` поднимает настоящий `api` (не мок) — тот же набор переменных нужен
-и ему, через `E2E_API_DATABASE_URL`/`E2E_API_REDIS_URL`/`E2E_API_S3_ENDPOINT` (см.
-`apps/web/playwright.config.ts`). Превью (`apps/web/e2e/preview.spec.ts`) при этом настоящий `api`
-не вызывает вовсе — мокает apps/api и проксируемый "сайт" на уровне сетевых запросов браузера
-(`page.route`), тем же способом, что `e2e/server.ts` мокает анализируемый сайт для старого флоу.
+Тесты, которым нужны живые Postgres/Redis (health-check api, BullMQ-воркер, миграции,
+auth/organizations HTTP-флоу, CSRF-мидлварь), сами пропускаются локально, если нужные переменные
+не заданы — поднимите инфраструктуру (`npm run dev:infra`), примените миграции (см. «База данных»
+выше) и экспортируйте переменные из `apps/api/.env.example`/`apps/worker/.env.example`/
+`packages/db/.env.example`, чтобы прогнать их по-настоящему. `npm run test:e2e` поднимает
+настоящий `api` (не мок, `BUILD_RUNNER=fake`) — тот же набор переменных нужен и ему, через
+`E2E_API_DATABASE_URL`/`E2E_API_REDIS_URL`/`E2E_API_S3_ENDPOINT` (см.
+`apps/web/playwright.config.ts`). Специи:
+
+- `e2e/journey.spec.ts` — полный путь пользователя (главная → черновик → изменения → вход →
+  claim → редактор проекта → сборка через `FakeRunner` → `.ipa` → выход/вход, проект на месте),
+  на английской и русской локали.
+- `e2e/auth.spec.ts` — регистрация/вход/выход, приглашение второго пользователя в организацию.
+- `e2e/preview-proxy.spec.ts` — изоляция origin'ов между двумя превью на настоящих локальных
+  сайтах (cookie/localStorage одного не видны другому, `Domain=`-атрибут вырезается).
+- `e2e/preview.spec.ts` (страница `/try`) — единственная специя, которая настоящий `api` не
+  вызывает: мокает его и проксируемый "сайт" на уровне сетевых запросов браузера (`page.route`).
 
 `.github/workflows/ci.yml` гоняет lint/typecheck/test:coverage на каждый push и PR (с Postgres/Redis
 как `services:` + применением миграций), и Playwright E2E — на PR в `main` (тоже с Postgres/Redis +
@@ -264,11 +279,13 @@ HTTP-флоу), сами пропускаются локально, если н�
 
 Этап 0/1: `/` анализировал сайт и правка шла через `apps/web`'s файловое хранилище
 (`data/projects/<id>/config.json`), а кнопка «Собрать .ipa» сама дёргала GitHub API. С Этапа 2
-анализ сайта и проекты уже живут в `apps/api` (см. «Проекты» ниже), а сборки — тоже через
-`apps/api`, не через `apps/web` (см. «Сборки» ниже): `apps/web`'s старые роуты
-(`/api/projects/[id]/build`, `/api/build-config`, `/api/build-icon`, `/api/projects/[id]/ipa`,
-`/api/projects/[id]/failed`) больше не используются воркфлоу и будут удалены отдельным шагом, когда
-`apps/web`'s фронтенд переключится на вызовы `api` напрямую.
+вся эта логика — анализ сайта, проекты, черновики, сборки — живёт в `apps/api` (см. разделы
+ниже); `apps/web`'s старые роуты (`/api/projects/[id]/build`, `/api/build-config`,
+`/api/build-icon`, `/api/projects/[id]/ipa`, `/api/projects/[id]/failed`), файловое хранилище
+(`lib/storage.ts`) и старая страница-редактор `/p/[id]` удалены (Этап 2, пункты 5-6) — `/p/[id]`
+отдаёт `410` со статической ссылкой на главную, а старые данные в `data/projects/` переносятся в
+организацию скриптом `apps/api/scripts/migrate-legacy-projects.ts` (см. «Перенос старых данных»
+ниже), а не читаются runtime-кодом напрямую.
 
 Можно запустить workflow и без сервера — вручную, с тестовым конфигом
 (`apps/shell/test/test.config.json` + `test-icon.png`), не трогая реальный проект:
@@ -301,16 +318,21 @@ DELETE /orgs/:orgId/members/:userId      — удалить участника (
 ```
 
 Все ошибки — `{ error: { code, message, requestId } }`. Доступ к чужой организации — `404`, не
-`403` (не раскрывает, существует ли она). В `apps/web` пока только шапка (пользователь + переключатель
-организаций) и `/login`/`/logout` — страниц для приглашений/управления участниками ещё нет, эти
-действия проверяются через прямые вызовы API (см. `apps/web/e2e/auth.spec.ts`).
+`403` (не раскрывает, существует ли она). В `apps/web` — шапка (пользователь + переключатель
+организаций), `/login`/`/logout`, список `/projects` и редактор проекта
+(`/projects/:orgId/:projectId`, см. «Пользовательский путь и UI» ниже); страниц для приглашений/
+управления участниками ещё нет — эти действия проверяются через прямые вызовы API (см.
+`apps/web/e2e/auth.spec.ts`).
+
+Небезопасные методы (`POST`/`PUT`/`PATCH`/`DELETE`) на этих и других cookie-авторизованных
+маршрутах (сессия, черновик) дополнительно защищены CSRF-мидлварью — см. «CSRF» ниже.
 
 ## Проекты (apps/api)
 
-Логика анализа сайта (`analyzeSite`) и обработки иконки перенесена из `apps/web` в
-`apps/api/src/projects` — `apps/web` пока держит свою копию (удалится, когда сам `apps/web`
-начнёт звать `api` вместо файлового хранилища, см. план Этапа 2). Эндпоинты — под
-`OrgGuard`/`ProjectGuard`, доступны любому участнику организации (без ограничения по роли):
+Логика анализа сайта (`analyzeSite`) и обработки иконки живёт только в `apps/api/src/projects` —
+`apps/web`'s собственная копия (файловое хранилище, старые `/api/*` роуты) удалена целиком (Этап 2,
+пункт 5). Эндпоинты — под `OrgGuard`/`ProjectGuard`, доступны любому участнику организации (без
+ограничения по роли):
 
 ```
 POST /orgs/:orgId/projects               — { url } → анализ сайта → создание проекта
@@ -318,12 +340,38 @@ GET  /orgs/:orgId/projects               — список проектов ор�
 GET  /orgs/:orgId/projects/:projectId    — проект (id, config, configVersion)
 PUT  /orgs/:orgId/projects/:projectId    — полная замена config (валидация как при создании)
 POST /orgs/:orgId/projects/:projectId/icon — загрузка иконки (multipart, поле "icon")
-GET  /orgs/:orgId/projects/:projectId/icon — 302 на подписанную ссылку в object storage
+GET  /orgs/:orgId/projects/:projectId/icon — PNG потоком из object storage
 ```
+
+Иконка отдаётся потоком, не редиректом на подписанную ссылку: браузерный
+`<img crossOrigin="use-credentials">` (нужен, чтобы запрос унёс cookie сессии/черновика на
+первый хоп) тащит этот же режим credentials через любой редирект, а дефолтный CORS-ответ
+MinIO/S3 на втором хопе (`Access-Control-Allow-Origin: *`) с `credentials: include` несовместим
+— браузер просто не отдаст такой ответ скрипту. Стриминг через собственный origin api (у
+которого уже настроен конкретный, не wildcard, CORS) убирает эту зависимость целиком.
 
 `projects.config` — jsonb, валидируется `@mobilio/config`'s `ProjectConfigSchema` при каждой
 записи; `projects.config_version` фиксирует, под какую версию схемы подогнан конкретный ряд
 (см. `CONFIG_SCHEMA_VERSION` там же) — на случай будущей миграции формы конфига.
+
+### Перенос старых данных (apps/api/scripts/migrate-legacy-projects.ts)
+
+Проекты старого файлового хранилища `apps/web` (`data/projects/<legacyId>/{config.json,icon.png}`,
+до Этапа 2) переносятся в организацию вручную, по одному разу, скриптом:
+
+```
+cd apps/api
+DATABASE_URL=... npx tsx scripts/migrate-legacy-projects.ts --org <orgId> [--dry-run] [--data-dir <path>]
+```
+
+Каждый `config.json` валидируется той же `parseProjectConfig`, что и обычное создание проекта;
+иконка прогоняется через тот же `sharp`-пайплайн (или заменяется сгенерированным буквенным
+аватаром, если `icon.png` нет/не читается). Идемпотентно — нового `uuid` проекту колонка
+`projects.legacy_id` (nullable, unique) помечает перенесённый старый id; повторный запуск находит
+совпадение и помечает его «пропущено», не дублирует строку. Отчёт — перенесено/пропущено/ошибки
+с причинами; битый `config.json` попадает в «ошибки» и не прерывает перенос остальных.
+`--dry-run` не пишет ни в БД, ни в object storage — только показывает, что бы перенёс настоящий
+запуск.
 
 ## Сборки (apps/api/src/builds)
 
@@ -434,7 +482,9 @@ POST /drafts                       — { url } → анализ сайта → �
 GET  /drafts/me                    — текущий черновик (по cookie)
 PUT  /drafts/me                    — полная замена config
 POST /drafts/me/icon               — загрузка иконки (multipart, поле "icon")
-GET  /drafts/me/icon               — 302 на подписанную ссылку в object storage
+GET  /drafts/me/icon               — PNG потоком из object storage (см. «Проекты» выше — тот же
+                                      credentials-через-редирект довод, не редирект на подписанную
+                                      ссылку)
 POST /orgs/:orgId/drafts/claim     — переносит черновик в проект организации (после входа)
 ```
 
@@ -493,6 +543,33 @@ pre-read узнаёт id черновика); если иконки чернов
 
 Загрузка иконки (`projects`, `drafts`) ограничена 2 МБ (`FileInterceptor`'s `limits`) —
 больше → `413 FILE_TOO_LARGE`.
+
+## CSRF (apps/api/src/common/csrf-middleware.ts)
+
+Сессионная и черновиковая cookie браузер прикладывает автоматически к любому запросу на свой
+origin — без защиты по `Origin` сторонний сайт мог бы заставить браузер жертвы выполнить мутацию
+от её же имени (POST/PUT/PATCH/DELETE). Особенно важно для загрузки иконки: `multipart/form-data`
+— «простой» CORS-запрос, без preflight, так что сам CORS тут вообще не защищает.
+
+Обычный Express-middleware (не часть Nest-роутинга — смонтирован в `create-app.ts` раньше него),
+для любого небезопасного метода требует, чтобы `Origin` запроса (резервный вариант — `Referer`,
+для редкого клиента без `Origin`) точно совпадал с `WEB_ORIGIN`; иначе — `403
+CSRF_ORIGIN_MISMATCH`. Исключения — ровно два:
+
+- `/api/auth/*` — свои роуты Better Auth, у которых уже свой механизм доверенных origin'ов;
+- `/builds/*` — раннер, авторизован `Bearer`-токеном, не cookie: подделать заголовок
+  `Authorization` чужим браузером автоматически нельзя так, как автоматически прикладывается
+  cookie, так что Origin-проверке тут нечего защищать.
+
+Прокси (`<slug>.<PREVIEW_PROXY_DOMAIN>/*`) в список исключений не входит и не нуждается — он
+смонтирован раньше этой мидлвари и обрабатывает свою зону целиком сам, никогда до CSRF-проверки
+не доходя.
+
+Тесты, не про сам CSRF (почти весь остальной `*.integration.spec.ts`), выставляют
+`CSRF_DISABLED_FOR_TESTING=true` перед `createApp()`, чтобы не обвешивать каждый свой запрос
+заголовком `Origin` — тот же паттерн, что у `SAFE_FETCH_ALLOW_LOCAL_FOR_TESTING` (см. ниже),
+отказывается работать при `NODE_ENV=production`. `csrf.integration.spec.ts` — единственный
+набор, что гоняет настоящую мидлварь.
 
 ## Защита от SSRF (apps/api/src/net)
 
@@ -666,33 +743,63 @@ Firefox) резолвят это в loopback сами, без записи в `/
 в проде api всегда доступен на дефолтном порту схемы через обратный прокси, а локально — нет, и
 без него сгенерированная ссылка превью молча указывала бы на порт 80/443, где никто не слушает.
 
-### Веб-оболочка (apps/web/app/preview/[slug], apps/web/app/try)
+### Веб-оболочка и редактор (apps/web)
 
 `/preview/[slug]` — публичная страница-оболочка: статус-бар, нижний таб-бар, активная вкладка —
 `<iframe sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox">`
 на `proxyBase + путь вкладки` (без `allow-forms`/`allow-top-navigation` — проксируемый сайт не
 может ни отправить форму куда-то вовне, ни увести родительский фрейм). На широких экранах —
 в рамке в виде iPhone, на мобильных — на весь экран с safe-area отступами; одно дерево
-разметки, не два отдельных под desktop/mobile. `/try` — минимальная, намеренно не дотягивающая
-до полноценного редактора `/p/[id]` страница: вставить url → черновик (api) → превью тут же,
-inline, в этой же странице, плюс кнопка «Открыть на iPhone» (QR, рисуется на клиенте пакетом
-`qrcode`, + копирование ссылки). Существует только чтобы довести фичу превью до конца и дать
-e2e-тесту (`apps/web/e2e/preview.spec.ts`) реальную страницу для прогона — перенос `/p/[id]` на
-api (Этап 2, пункт 6) этим не затронут и не начат.
+разметки, не два отдельных под desktop/mobile.
+
+`components/editor/ProjectEditor.tsx` — один редактор (имя, тема, вкладки — добавить/удалить/
+переставить, фичи, иконка) с живым превью (та же `PreviewShell`, собранная локально из только
+что сохранённого конфига — без лишнего запроса на каждое сохранение), общий для черновика и
+проекта через адаптер (`ProjectEditorAdapter`, `components/editor/{Draft,Project}Adapter.ts` —
+разница только в том, какие эндпоинты `apiClient.ts` дёргать, сам редактор не знает, с чем
+работает):
+
+- `/try` — черновик, без входа: `/` создаёт черновик (`POST /drafts`) и редиректит сюда,
+  `DraftAdapter`. Кнопка «Сохранить как проект» ведёт на `/login?callbackUrl=/try` — после входа
+  (magic link/Google), при первом входе автоматически созданной личной организацией (см.
+  «Авторизация» выше), `POST /orgs/:orgId/drafts/claim` переносит черновик, редирект на
+  `/projects/:orgId/:projectId`.
+- `/projects` — список проектов текущей организации + переключатель организации (тот же
+  `localStorage`-ключ, что у переключателя в шапке). `/projects/:orgId/:projectId` — тот же
+  редактор, `ProjectAdapter`, плюс блок сборок (`components/editor/BuildsBlock.tsx`) — скрыт за
+  `NEXT_PUBLIC_ENABLE_BUILDS` (по умолчанию выключен, см. `.env.example`): до Ad Hoc/TestFlight
+  неподписанный `.ipa` клиенту бесполезен. `runUrl` (ссылка на запуск GitHub Actions) клиенту не
+  показывается — тип `BuildSummary` в `apiClient.ts` намеренно его не содержит, хотя сервер
+  отдаёт.
+
+Ошибки api (`{code, message}`) переводятся в одном месте — `lib/errorCodes.ts`'s
+`useApiErrorMessage()`, по таблице в `messages/{en,ru}.json`'s `errors`-неймспейсе, ключ — сам
+код; код без перевода падает на `UNKNOWN`. Интерфейс целиком на `next-intl` (`i18n/routing.ts`):
+английский — по умолчанию, без префикса в url (внешние ссылки превью/QR строятся на `apps/api`
+без понятия о локали и не должны ломаться); русский — по `/ru/...`.
+
+Старая страница-редактор `/p/[id]` (файловое хранилище, свой API) удалена целиком — старый путь
+отдаёт `410` со статической ссылкой на главную (`apps/web/app/p/[id]/route.ts`, вне
+`app/[locale]` намеренно: это Route Handler, не страница, так что ему не нужен locale-префикс —
+старая закладка/ссылка `/p/<id>` получает `410` сразу, без промежуточного редиректа на
+`/en/p/<id>`).
 
 ## Структура репозитория
 
 ```
 apps/shell/   — Expo-оболочка (SDK 57, expo-router)
-apps/web/     — Next.js App Router: сайт, анализ сайтов, API сборки, вход/выход, шапка
+apps/web/     — Next.js App Router: UI (`next-intl`, en/ru), чистый клиент к apps/api
+                (`lib/apiClient.ts`) — своей бизнес-логики/хранилища больше нет
 apps/api/     — NestJS: auth (Better Auth), организации, проекты, черновики, сборки (builds),
-                превью + прокси (preview), health-check, очередь (BullMQ)
+                превью + прокси (preview), CSRF, health-check, очередь (BullMQ)
 apps/worker/  — BullMQ-воркер — каркас для следующих этапов
 packages/config/   — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
 packages/db/       — Drizzle-схема, миграции, роли/RLS, TenantContext (см. выше)
 packages/storage/  — ObjectStorage-интерфейс + S3/MinIO-адаптер (см. выше)
 packages/repacker/ — пусто, заготовка под будущую логику репака
-data/projects/   — файловое хранилище проектов apps/web (в .gitignore; уходит в Этапе 2)
+data/projects/   — старое файловое хранилище apps/web (в .gitignore; больше не читается runtime-
+                    кодом — перенести в организацию через
+                    apps/api/scripts/migrate-legacy-projects.ts, см. «Перенос старых данных»)
 docker-compose.yml — Postgres, Redis, MinIO, migrate/createbucket (роли+миграции+бакет), api, worker
 .github/workflows/build-ipa.yml — сборка .ipa в GitHub Actions
 .github/workflows/ci.yml        — lint/typecheck/test на push+PR; Playwright E2E (создание .ipa +
