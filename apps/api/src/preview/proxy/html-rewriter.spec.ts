@@ -141,14 +141,79 @@ describe('createHtmlRewriteStream', () => {
     expect(backingStore).toBe('name=value; Path=/');
   });
 
-  it('injects the Preview banner and click-interceptor script right after <body>', async () => {
-    const out = await rewriteHtml('<html><body><p>hi</p></body></html>', baseOptions());
+  it('injects the Preview banner right after <body>, and the cookie/click-interceptor script before <head>', async () => {
+    const out = await rewriteHtml('<html><head><title>T</title></head><body><p>hi</p></body></html>', baseOptions());
+    const headIdx = out.indexOf('<head>');
+    const scriptIdx = out.indexOf('<script>');
+    const titleIdx = out.indexOf('<title>');
     const bodyIdx = out.indexOf('<body>');
     const bannerIdx = out.indexOf('Preview · Mobilio');
     const pIdx = out.indexOf('<p>hi</p>');
+    expect(scriptIdx).toBeGreaterThan(headIdx);
+    expect(scriptIdx).toBeLessThan(titleIdx);
     expect(bannerIdx).toBeGreaterThan(bodyIdx);
     expect(bannerIdx).toBeLessThan(pIdx);
     expect(out).toContain('window.open');
+  });
+
+  it('falls back to injecting the script right before <body> when the document has no <head> at all', async () => {
+    const out = await rewriteHtml('<html><body><p>hi</p></body></html>', baseOptions());
+    const scriptIdx = out.indexOf('<script>');
+    const bodyIdx = out.indexOf('<body>');
+    const pIdx = out.indexOf('<p>hi</p>');
+    expect(scriptIdx).toBeGreaterThan(-1);
+    expect(scriptIdx).toBeLessThan(bodyIdx);
+    expect(bodyIdx).toBeLessThan(pIdx);
+  });
+
+  it('does not inject the script for a bodyless fragment (no <head>, no <body>) — an accepted gap, no real site serves this', async () => {
+    const out = await rewriteHtml('<p>hi</p>', baseOptions());
+    expect(out).not.toContain('<script>');
+  });
+
+  it('wraps window.cookieStore.set to strip a domain option from the object-form overload', async () => {
+    const out = await rewriteHtml('<html><body></body></html>', baseOptions());
+    const scriptMatch = /<script>([\s\S]*?)<\/script>/.exec(out);
+    expect(scriptMatch).not.toBeNull();
+    const calls: Array<Record<string, unknown> | [string, string]> = [];
+    const sandbox = {
+      Document: { prototype: {} },
+      document: { addEventListener: () => {} },
+      window: {
+        cookieStore: {
+          set: (...args: unknown[]) => {
+            calls.push(args.length === 1 ? (args[0] as Record<string, unknown>) : (args as [string, string]));
+          },
+        },
+      },
+      Object,
+      String,
+    };
+    const run = new Function(...Object.keys(sandbox), scriptMatch![1]!);
+    run(...Object.values(sandbox));
+    await (sandbox.window.cookieStore.set as unknown as (opts: Record<string, unknown>) => void)({
+      name: 'n',
+      value: 'v',
+      domain: 'proxy.example',
+    });
+    expect(calls).toEqual([{ name: 'n', value: 'v' }]);
+  });
+
+  it('leaves the two-argument cookieStore.set(name, value) overload untouched (no domain option to strip)', async () => {
+    const out = await rewriteHtml('<html><body></body></html>', baseOptions());
+    const scriptMatch = /<script>([\s\S]*?)<\/script>/.exec(out);
+    const calls: unknown[] = [];
+    const sandbox = {
+      Document: { prototype: {} },
+      document: { addEventListener: () => {} },
+      window: { cookieStore: { set: (...args: unknown[]) => calls.push(args) } },
+      Object,
+      String,
+    };
+    const run = new Function(...Object.keys(sandbox), scriptMatch![1]!);
+    run(...Object.values(sandbox));
+    (sandbox.window.cookieStore.set as unknown as (n: string, v: string) => void)('n', 'v');
+    expect(calls).toEqual([['n', 'v']]);
   });
 
   it('does not rewrite inline <script> contents (JS is never rewritten)', async () => {

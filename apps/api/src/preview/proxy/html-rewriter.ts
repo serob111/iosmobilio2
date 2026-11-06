@@ -15,30 +15,58 @@ const URL_ATTRS_BY_TAG: Record<string, string[]> = {
 };
 
 /**
- * Fixed banner ("Preview · Mobilio") + the external-link click interceptor + a
- * document.cookie setter override, injected as the first child of <body>.
+ * The external-link click interceptor + a document.cookie / cookieStore.set override,
+ * injected as the first element of <head> (or, if the document has no <head> at all,
+ * before whatever comes first instead — see where this is called from below) — as early
+ * as structurally possible, before any of the real page's own <head> scripts get a chance
+ * to run. The previous version injected this at the start of <body>, which runs strictly
+ * *after* every synchronous <head> script — a page with an early, synchronous
+ * `document.cookie = '...; Domain=...'` in its own <head> would have already set the
+ * wide-scoped cookie before this override ever installed.
  *
  * The click interceptor compares the clicked link's *resolved* origin against
  * window.location.origin rather than re-deriving the allowlist client-side — every link
  * this rewriter already decided was allowed is now proxy-relative (same origin as the
  * page itself); every link it left untouched is a real, different-origin absolute URL.
  * That's already exactly "internal vs external", with no need to duplicate
- * host-allowlist.ts's logic in a client-side script.
+ * host-allowlist.ts's logic in a client-side script. Registering the listener this early
+ * (before <body> exists) is fine — `document.addEventListener` doesn't need the target
+ * elements to exist yet, only to exist by the time a click actually happens.
  *
  * The cookie override strips any `Domain=...` attribute from cookies the real site's own
- * JS sets. Each preview already has its own slug subdomain for the scoping that matters
- * (a <slug>.<PREVIEW_PROXY_DOMAIN>-scoped cookie can't be read by a different slug's
- * origin) — but an explicit `Domain=<PREVIEW_PROXY_DOMAIN>` (or any of its parent
+ * JS sets, via both the classic `document.cookie = ...` setter and the newer async
+ * Cookie Store API (`cookieStore.set(...)`, only the object-options overload can even
+ * carry a domain). Each preview already has its own slug subdomain for the scoping that
+ * matters (a <slug>.<PREVIEW_PROXY_DOMAIN>-scoped cookie can't be read by a different
+ * slug's origin) — but an explicit `Domain=<PREVIEW_PROXY_DOMAIN>` (or any of its parent
  * domains) widens that scope to every OTHER preview sharing the same
  * PREVIEW_PROXY_DOMAIN, defeating the whole point. Server-side `Set-Cookie` is already
- * fully stripped (header-filter.ts), but a cookie set dynamically via `document.cookie =`
- * in the page's own JS never goes through an HTTP response header at all, so it has to be
- * caught here instead. Overridden on `Document.prototype` (not the `document` instance)
- * so it still applies even to a page that reassigns `document.cookie` before this script
- * manages to run on some OTHER document reference — there is only one prototype.
+ * fully stripped (header-filter.ts), but a cookie set dynamically in the page's own JS
+ * never goes through an HTTP response header at all, so it has to be caught here instead.
+ * `document.cookie`'s override lives on `Document.prototype` (not the `document`
+ * instance) so it still applies even to a page that reassigns `document.cookie` before
+ * this script manages to run on some OTHER document reference — there is only one
+ * prototype.
+ *
+ * Honest limits, not actually closed by this script: this is best-effort hardening for
+ * the *current document's* globals only. A same-page `<iframe>` has its own `Document`/
+ * `window` — a fresh realm this override never touches — so a page that embeds its own
+ * cross-origin iframe and sets cookies from inside *that* bypasses this entirely. The
+ * actual security boundary two things this is not: (1) the slug subdomain being
+ * registered on the Public Suffix List, so browsers really do treat it as its own site
+ * rather than a sibling of every other preview under PREVIEW_PROXY_DOMAIN (see README's
+ * launch checklist); and (2) this proxy never forwarding the browser's own Cookie header
+ * to the upstream site at all (proxy-fetch.ts) — nothing this override fails to catch can
+ * turn into the upstream site reading a cookie that was never sent to it in the first
+ * place.
  */
-function bannerAndInterceptorHtml(): string {
-  return `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#111;color:#fff;font:12px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:4px 8px;pointer-events:none;">Preview · Mobilio</div><script>(function(){var d=Object.getOwnPropertyDescriptor(Document.prototype,'cookie');if(d&&d.set){Object.defineProperty(Document.prototype,'cookie',{configurable:true,get:function(){return d.get.call(this);},set:function(v){d.set.call(this,String(v).replace(/;\\s*domain\\s*=[^;]*/gi,''));}});}document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=a.getAttribute('href');if(!href)return;try{var url=new URL(href,document.baseURI);if(url.origin!==window.location.origin){e.preventDefault();window.open(url.href,'_blank','noopener,noreferrer');}}catch(err){}},true);})();</script>`;
+function cookieInterceptorScript(): string {
+  return `<script>(function(){var d=Object.getOwnPropertyDescriptor(Document.prototype,'cookie');if(d&&d.set){Object.defineProperty(Document.prototype,'cookie',{configurable:true,get:function(){return d.get.call(this);},set:function(v){d.set.call(this,String(v).replace(/;\\s*domain\\s*=[^;]*/gi,''));}});}if(window.cookieStore&&window.cookieStore.set){var originalSet=window.cookieStore.set.bind(window.cookieStore);window.cookieStore.set=function(a,b){if(a&&typeof a==='object'){var opts={};for(var k in a){if(k!=='domain')opts[k]=a[k];}return originalSet(opts);}return originalSet(a,b);};}document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;var href=a.getAttribute('href');if(!href)return;try{var url=new URL(href,document.baseURI);if(url.origin!==window.location.origin){e.preventDefault();window.open(url.href,'_blank','noopener,noreferrer');}}catch(err){}},true);})();</script>`;
+}
+
+/** Fixed banner ("Preview · Mobilio"), injected as the first child of <body>. */
+function bannerHtml(): string {
+  return `<div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#111;color:#fff;font:12px -apple-system,BlinkMacSystemFont,sans-serif;text-align:center;padding:4px 8px;pointer-events:none;">Preview · Mobilio</div>`;
 }
 
 // header-filter.ts already strips the *HTTP-header* forms of these — a page can also
@@ -85,6 +113,17 @@ export type HtmlRewriterOptions = {
  */
 export function createHtmlRewriteStream(options: HtmlRewriterOptions): RewritingStream {
   const rewriter = new RewritingStream();
+  // parse5-sax-parser (which this is built on) reports tags exactly as they appear in the
+  // source — it does not synthesize an implied <head>/<body> the way a full tree-building
+  // HTML parser would. So "no <head> at all" is a real case to handle, not a hypothetical
+  // one: fall back to injecting right before <body> instead (still "first in the
+  // document" for any realistic page — every real site's homepage has a <body>, even if
+  // it omits <head>). A document with neither tag at all isn't handled specially: there's
+  // no reliable "stream is about to end, push one more chunk" hook on this Transform that
+  // doesn't risk pushing after the readable side has already signaled completion, and no
+  // real website serves a bodyless page, so this is an accepted, narrow gap rather than a
+  // realistic one.
+  let scriptInjected = false;
 
   function rewriteUrl(raw: string): string {
     return rewriteReferencedUrl(raw, options.currentPageUrl, options.allowlist, options.primaryHost);
@@ -104,11 +143,23 @@ export function createHtmlRewriteStream(options: HtmlRewriterOptions): Rewriting
         }
       }
     }
+
+    if (!scriptInjected && startTag.tagName === 'head') {
+      rewriter.emitStartTag(startTag);
+      rewriter.emitRaw(cookieInterceptorScript());
+      scriptInjected = true;
+      return;
+    }
+    if (!scriptInjected && startTag.tagName === 'body') {
+      rewriter.emitRaw(cookieInterceptorScript());
+      scriptInjected = true;
+    }
+
     rewriter.emitStartTag(startTag);
     // Emitted right after <body>'s own start tag, so the banner is the first child of
     // <body> (not the last, which emitting on body's *end* tag would produce).
     if (startTag.tagName === 'body') {
-      rewriter.emitRaw(bannerAndInterceptorHtml());
+      rewriter.emitRaw(bannerHtml());
     }
   });
 
