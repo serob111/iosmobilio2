@@ -160,11 +160,25 @@ describe.skipIf(!hasLiveDb)('preview_links RLS (live Postgres)', () => {
       expect(seenByOther).toHaveLength(0);
     });
 
-    it('the partial unique index rejects a second active link for the same project', async () => {
+    it('the partial unique index rejects a second active *share* link for the same project', async () => {
+      // insertProjectLink's default `kind` comes from the column's own schema default
+      // ('share') — exercising that default is deliberate here, not an oversight.
       await insertProjectLink(`hash-${uuidv7()}`);
       const caught: unknown = await insertProjectLink(`hash-${uuidv7()}`).catch((error: unknown) => error);
       expect(caught).toBeInstanceOf(Error);
-      expect((caught as { cause?: Error }).cause?.message).toMatch(/preview_links_one_active_per_project/i);
+      expect((caught as { cause?: Error }).cause?.message).toMatch(/preview_links_one_active_share_per_project/i);
+    });
+
+    it('does not restrict *editor* links at all — many may be active for the same project at once', async () => {
+      await insertProjectLink(`hash-${uuidv7()}`, { kind: 'editor' });
+      await expect(insertProjectLink(`hash-${uuidv7()}`, { kind: 'editor' })).resolves.toBeTypeOf('string');
+      await expect(insertProjectLink(`hash-${uuidv7()}`, { kind: 'editor' })).resolves.toBeTypeOf('string');
+    });
+
+    it('an active editor link never blocks a share link for the same project, and vice versa', async () => {
+      await insertProjectLink(`hash-${uuidv7()}`, { kind: 'editor' });
+      await expect(insertProjectLink(`hash-${uuidv7()}`, { kind: 'share' })).resolves.toBeTypeOf('string');
+      await expect(insertProjectLink(`hash-${uuidv7()}`, { kind: 'editor' })).resolves.toBeTypeOf('string');
     });
 
     it('regenerating (revoke then insert) frees the slot for a new active link', async () => {
@@ -196,7 +210,7 @@ describe.skipIf(!hasLiveDb)('preview_links RLS (live Postgres)', () => {
       expect(seenByOther).toHaveLength(0);
     });
 
-    it('the partial unique index rejects a second active link for the same draft', async () => {
+    it('the partial unique index rejects a second active *share* link for the same draft', async () => {
       const tokenHash = `test-hash-${uuidv7()}`;
       const draftId = await insertDraft(tokenHash);
       await insertDraftLink(tokenHash, draftId, `hash-${uuidv7()}`);
@@ -204,7 +218,16 @@ describe.skipIf(!hasLiveDb)('preview_links RLS (live Postgres)', () => {
         (error: unknown) => error,
       );
       expect(caught).toBeInstanceOf(Error);
-      expect((caught as { cause?: Error }).cause?.message).toMatch(/preview_links_one_active_per_draft/i);
+      expect((caught as { cause?: Error }).cause?.message).toMatch(/preview_links_one_active_share_per_draft/i);
+    });
+
+    it('does not restrict *editor* links at all — many may be active for the same draft at once', async () => {
+      const tokenHash = `test-hash-${uuidv7()}`;
+      const draftId = await insertDraft(tokenHash);
+      await insertDraftLink(tokenHash, draftId, `hash-${uuidv7()}`, { kind: 'editor' });
+      await expect(
+        insertDraftLink(tokenHash, draftId, `hash-${uuidv7()}`, { kind: 'editor' }),
+      ).resolves.toBeTypeOf('string');
     });
   });
 

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
-import { createDb, schema, eq } from '@mobilio/db';
+import { createDb, schema, eq, runInTokenLookupContext, getTenantDb } from '@mobilio/db';
 import { cleanupExpiredEditorPreviewLinks } from '../src/preview-links-cleanup';
 
 const hasLiveServices =
@@ -13,32 +13,46 @@ if (!hasLiveServices && process.env.REQUIRE_LIVE_SERVICES === 'true') {
 
 describe.skipIf(!hasLiveServices)('preview links cleanup (live Postgres + Redis)', () => {
   /**
-   * Both rows are inserted directly as mobilio_migrator (bypassing RLS entirely) — the
-   * app itself never creates an 'editor' link already in the past (expiresAt is always
-   * now+2h at creation time), so an expired fixture can only exist here the same way
-   * drafts-cleanup.integration.test.ts's own insertExpiredDirectly works.
+   * Inserted through the normal app-role `db` + a token-lookup context (not
+   * mobilio_migrator) — drafts_token_access's WITH CHECK only requires the draft's own
+   * expires_at to be in the future (true for every fixture here; only the *link's* own
+   * expiresAt varies) and the token_hash to match, both satisfied by this context.
+   * preview_links_draft_access similarly only requires the referenced draft to be
+   * valid under that same context — neither policy restricts what expiresAt value a new
+   * preview_links row itself may carry, so a past one inserts here exactly as the app
+   * would never normally do itself (createEditorLinkForDraft always sets now()+2h) but
+   * CAN be constructed this way for the fixture.
+   *
+   * Crucially, reading a *non-expired* row back (or deleting it) also requires this same
+   * token context — mobilio_migrator has no bypass policy for an unexpired draft/link
+   * (drafts_cleanup/preview_links_cleanup only cover already-expired rows), so every
+   * read/cleanup of the "live"/"share" fixtures below goes through the same context,
+   * never a bare migrator query.
    */
   async function insertDraftWithEditorLink(
-    migratorDb: ReturnType<typeof createDb>['db'],
+    db: ReturnType<typeof createDb>['db'],
     draftId: string,
     tokenHash: string,
     linkExpiresAt: Date,
   ): Promise<string> {
-    await migratorDb.insert(schema.drafts).values({
-      id: draftId,
-      name: 'Worker cleanup fixture',
-      sourceUrl: 'https://x.example/',
-      config: {},
-      tokenHash,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
     const linkId = randomUUID();
-    await migratorDb.insert(schema.previewLinks).values({
-      id: linkId,
-      draftId,
-      kind: 'editor',
-      slugHash: `worker-itest-${randomUUID()}`,
-      expiresAt: linkExpiresAt,
+    await runInTokenLookupContext(db, tokenHash, async () => {
+      const tx = getTenantDb();
+      await tx.insert(schema.drafts).values({
+        id: draftId,
+        name: 'Worker cleanup fixture',
+        sourceUrl: 'https://x.example/',
+        config: {},
+        tokenHash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      await tx.insert(schema.previewLinks).values({
+        id: linkId,
+        draftId,
+        kind: 'editor',
+        slugHash: `worker-itest-${randomUUID()}`,
+        expiresAt: linkExpiresAt,
+      });
     });
     return linkId;
   }
@@ -50,63 +64,77 @@ describe.skipIf(!hasLiveServices)('preview links cleanup (live Postgres + Redis)
     const expiredDraftId = randomUUID();
     const liveDraftId = randomUUID();
     const shareDraftId = randomUUID();
+    const expiredTokenHash = `worker-itest-${randomUUID()}`;
+    const liveTokenHash = `worker-itest-${randomUUID()}`;
+    const shareTokenHash = `worker-itest-${randomUUID()}`;
 
     try {
       const expiredLinkId = await insertDraftWithEditorLink(
-        migrator.db,
+        db,
         expiredDraftId,
-        `worker-itest-${randomUUID()}`,
+        expiredTokenHash,
         new Date(Date.now() - 30_000),
       );
-      const liveLinkId = await insertDraftWithEditorLink(
-        migrator.db,
-        liveDraftId,
-        `worker-itest-${randomUUID()}`,
-        new Date(Date.now() + 60_000),
-      );
+      const liveLinkId = await insertDraftWithEditorLink(db, liveDraftId, liveTokenHash, new Date(Date.now() + 60_000));
+
       // A 'share' link, also already past its own expiresAt — must survive regardless,
       // the cleanup function only ever touches kind='editor' (see 0018's RLS policy).
-      await migrator.db.insert(schema.drafts).values({
-        id: shareDraftId,
-        name: 'Worker cleanup fixture (share)',
-        sourceUrl: 'https://x.example/',
-        config: {},
-        tokenHash: `worker-itest-${randomUUID()}`,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-      });
       const shareLinkId = randomUUID();
-      await migrator.db.insert(schema.previewLinks).values({
-        id: shareLinkId,
-        draftId: shareDraftId,
-        kind: 'share',
-        slugHash: `worker-itest-${randomUUID()}`,
-        expiresAt: new Date(Date.now() - 30_000),
+      await runInTokenLookupContext(db, shareTokenHash, async () => {
+        const tx = getTenantDb();
+        await tx.insert(schema.drafts).values({
+          id: shareDraftId,
+          name: 'Worker cleanup fixture (share)',
+          sourceUrl: 'https://x.example/',
+          config: {},
+          tokenHash: shareTokenHash,
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        });
+        await tx.insert(schema.previewLinks).values({
+          id: shareLinkId,
+          draftId: shareDraftId,
+          kind: 'share',
+          slugHash: `worker-itest-${randomUUID()}`,
+          expiresAt: new Date(Date.now() - 30_000),
+        });
       });
 
       const result = await cleanupExpiredEditorPreviewLinks(db);
       expect(result.deletedCount).toBeGreaterThanOrEqual(1);
 
+      // The expired link's own row is gone — a bare migrator read is fine here since
+      // preview_links_cleanup (0018) covers exactly "editor, already expired", and
+      // either way the row genuinely no longer exists.
       const remainingExpired = await migrator.db
         .select()
         .from(schema.previewLinks)
         .where(eq(schema.previewLinks.id, expiredLinkId));
       expect(remainingExpired).toHaveLength(0);
 
-      const remainingLive = await migrator.db
-        .select()
-        .from(schema.previewLinks)
-        .where(eq(schema.previewLinks.id, liveLinkId));
+      // The live editor link and the share link are both still *unexpired* rows —
+      // mobilio_migrator has no policy granting it visibility into those at all, so
+      // these reads go through the same token context that created them.
+      const remainingLive = await runInTokenLookupContext(db, liveTokenHash, () =>
+        getTenantDb().select().from(schema.previewLinks).where(eq(schema.previewLinks.id, liveLinkId)),
+      );
       expect(remainingLive).toHaveLength(1);
 
-      const remainingShare = await migrator.db
-        .select()
-        .from(schema.previewLinks)
-        .where(eq(schema.previewLinks.id, shareLinkId));
+      const remainingShare = await runInTokenLookupContext(db, shareTokenHash, () =>
+        getTenantDb().select().from(schema.previewLinks).where(eq(schema.previewLinks.id, shareLinkId)),
+      );
       expect(remainingShare).toHaveLength(1);
     } finally {
-      await migrator.db.delete(schema.drafts).where(eq(schema.drafts.id, liveDraftId)).catch(() => {});
-      await migrator.db.delete(schema.drafts).where(eq(schema.drafts.id, shareDraftId)).catch(() => {});
-      await migrator.db.delete(schema.drafts).where(eq(schema.drafts.id, expiredDraftId)).catch(() => {});
+      // Each draft is still unexpired, so only its own token context (not a bare
+      // migrator delete) can remove it.
+      await runInTokenLookupContext(db, liveTokenHash, () =>
+        getTenantDb().delete(schema.drafts).where(eq(schema.drafts.id, liveDraftId)),
+      ).catch(() => {});
+      await runInTokenLookupContext(db, shareTokenHash, () =>
+        getTenantDb().delete(schema.drafts).where(eq(schema.drafts.id, shareDraftId)),
+      ).catch(() => {});
+      await runInTokenLookupContext(db, expiredTokenHash, () =>
+        getTenantDb().delete(schema.drafts).where(eq(schema.drafts.id, expiredDraftId)),
+      ).catch(() => {});
       await pool.end();
       await migrator.pool.end();
     }
