@@ -186,9 +186,28 @@ describe.skipIf(!hasLiveServices)(
 
       const iconRes = await request(app.getHttpServer()).get('/drafts/me/icon').set('Cookie', cookie).expect(200);
       expect(iconRes.headers['content-type']).toBe('image/png');
+      expect(iconRes.headers['x-content-type-options']).toBe('nosniff');
       const meta = await sharp(iconRes.body as Buffer).metadata();
       expect(meta.width).toBe(1024);
       expect(meta.height).toBe(1024);
+    });
+
+    it('404s with ICON_NOT_FOUND when the stored icon object is missing', async () => {
+      mockSite();
+      const createRes = await request(app.getHttpServer())
+        .post('/drafts')
+        .send({ url: 'https://drafts-itest.example/' })
+        .expect(201);
+      const cookie = draftCookieFrom(createRes);
+      const meRes = await request(app.getHttpServer()).get('/drafts/me').set('Cookie', cookie).expect(200);
+      const draftId = meRes.body.id as string;
+
+      // Deletes the icon createDraft() itself already put in storage during site
+      // analysis — simulates it going missing for any reason, independent of upload.
+      await createObjectStorageFromEnv().delete(draftIconKey(draftId));
+
+      const iconRes = await request(app.getHttpServer()).get('/drafts/me/icon').set('Cookie', cookie).expect(404);
+      expect(iconRes.body.error.code).toBe('ICON_NOT_FOUND');
     });
 
     it('rejects an icon upload over 2MB with 413 FILE_TOO_LARGE', async () => {

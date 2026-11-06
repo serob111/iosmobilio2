@@ -1,5 +1,6 @@
 import { PassThrough, Readable } from 'node:stream';
-import { BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
+import { ObjectNotFoundError } from '@mobilio/storage';
 import { DraftsController } from './drafts.controller.js';
 import type { DraftsService } from './drafts.service.js';
 import type { DraftRateLimitService } from './draft-rate-limit.js';
@@ -27,7 +28,21 @@ function fakeResponse() {
 
 function fakeStreamResponse() {
   const stream = new PassThrough();
-  return Object.assign(stream, { set: vi.fn() });
+  return Object.assign(stream, { set: vi.fn(), headersSent: false });
+}
+
+/** Pushes `chunks` in order, then destroys with `error` on the next read — simulating an upstream stream that fails partway (or immediately, for an empty chunks array) through delivery. */
+function erroringStream(chunks: Buffer[], error: Error): Readable {
+  let i = 0;
+  return new Readable({
+    read() {
+      if (i < chunks.length) {
+        this.push(chunks[i++]!);
+      } else {
+        process.nextTick(() => this.destroy(error));
+      }
+    },
+  });
 }
 
 const draftStub = { id: 'draft-1' };
@@ -119,7 +134,7 @@ describe('DraftsController', () => {
   });
 
   describe('getIcon', () => {
-    it('streams the icon bytes with an image/png content-type (not a signed-url redirect)', async () => {
+    it('streams the icon bytes with an image/png content-type, nosniff, and no-store (not a signed-url redirect)', async () => {
       const bytes = Buffer.from('fake-png-bytes');
       const getIconStream = vi.fn().mockResolvedValue(Readable.from([bytes]));
       const controller = new DraftsController(fakeService({ getIconStream }), fakeRateLimit());
@@ -128,13 +143,51 @@ describe('DraftsController', () => {
       await controller.getIcon(requestWithDraft, response as never);
 
       expect(getIconStream).toHaveBeenCalledWith('draft-1');
-      expect(response.set).toHaveBeenCalledWith({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+      expect(response.set).toHaveBeenCalledWith({
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
       const received = await new Promise<Buffer>((resolve) => {
         const chunks: Buffer[] = [];
         response.on('data', (c) => chunks.push(c));
         response.on('end', () => resolve(Buffer.concat(chunks)));
       });
       expect(received).toEqual(bytes);
+    });
+
+    it('404s with ICON_NOT_FOUND when the underlying object is missing', async () => {
+      const getIconStream = vi.fn().mockRejectedValue(new ObjectNotFoundError('drafts/draft-1/icon.png'));
+      const controller = new DraftsController(fakeService({ getIconStream }), fakeRateLimit());
+      const response = fakeStreamResponse();
+
+      const error: unknown = await controller.getIcon(requestWithDraft, response as never).catch((e) => e);
+
+      expect(error).toBeInstanceOf(NotFoundException);
+      expect((error as NotFoundException).getResponse()).toMatchObject({ code: 'ICON_NOT_FOUND' });
+    });
+
+    it('rejects (so the global exception filter can still produce a normal JSON 500) when the stream fails before any bytes were sent', async () => {
+      const getIconStream = vi.fn().mockResolvedValue(erroringStream([], new Error('storage read failed')));
+      const controller = new DraftsController(fakeService({ getIconStream }), fakeRateLimit());
+      const response = fakeStreamResponse();
+      response.headersSent = false;
+
+      await expect(controller.getIcon(requestWithDraft, response as never)).rejects.toThrow('storage read failed');
+    });
+
+    it('does not throw/crash — just logs — when the stream fails after headers were already sent', async () => {
+      const errorLog = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+      const getIconStream = vi
+        .fn()
+        .mockResolvedValue(erroringStream([Buffer.from('partial')], new Error('connection reset mid-transfer')));
+      const controller = new DraftsController(fakeService({ getIconStream }), fakeRateLimit());
+      const response = fakeStreamResponse();
+      response.headersSent = true;
+
+      await expect(controller.getIcon(requestWithDraft, response as never)).resolves.toBeUndefined();
+      expect(errorLog).toHaveBeenCalled();
+      errorLog.mockRestore();
     });
   });
 });

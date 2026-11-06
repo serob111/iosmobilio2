@@ -1,3 +1,4 @@
+import { pipeline } from 'node:stream/promises';
 import {
   BadRequestException,
   Body,
@@ -5,6 +6,8 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Logger,
+  NotFoundException,
   Post,
   Put,
   Req,
@@ -15,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
+import { ObjectNotFoundError } from '@mobilio/storage';
 import { Public } from '../auth/public.decorator.js';
 import { ICON_UPLOAD_LIMITS } from '../common/upload-limits.js';
 import { DraftGuard } from './draft.guard.js';
@@ -27,6 +31,8 @@ import './draft.types.js';
 
 @Controller('drafts')
 export class DraftsController {
+  private readonly logger = new Logger(DraftsController.name);
+
   constructor(
     private readonly draftsService: DraftsService,
     private readonly rateLimit: DraftRateLimitService,
@@ -76,8 +82,29 @@ export class DraftsController {
   @Public()
   @UseGuards(DraftGuard)
   async getIcon(@Req() request: Request, @Res() response: Response) {
-    const stream = await this.draftsService.getIconStream(request.draft!.id);
-    response.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
-    stream.pipe(response);
+    let stream;
+    try {
+      stream = await this.draftsService.getIconStream(request.draft!.id);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        throw new NotFoundException({ code: 'ICON_NOT_FOUND', message: 'Icon not found' });
+      }
+      throw error;
+    }
+    response.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    try {
+      await pipeline(stream, response);
+    } catch (error) {
+      // pipeline() always destroys both ends on failure — this only decides how to
+      // *report* it: if nothing has been sent yet, the usual exception filter can still
+      // produce a normal JSON 500; once bytes are already flowing, the response is
+      // already underway and can't be rewritten into an error body, so just log and let
+      // the (already-destroyed) connection drop.
+      if (response.headersSent) {
+        this.logger.error({ err: error }, 'Icon stream failed after headers were sent');
+        return;
+      }
+      throw error;
+    }
   }
 }

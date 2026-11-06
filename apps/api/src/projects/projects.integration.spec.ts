@@ -6,6 +6,7 @@ import request from 'supertest';
 import { http, HttpResponse } from 'msw';
 import sharp from 'sharp';
 import { Redis } from 'ioredis';
+import { createObjectStorageFromEnv, projectIconKey } from '@mobilio/storage';
 import { server } from '../../test/mocks/server.js';
 import { createApp } from '../create-app.js';
 
@@ -213,9 +214,34 @@ describe.skipIf(!hasLiveServices)(
         .set('Cookie', cookie)
         .expect(200);
       expect(iconRes.headers['content-type']).toBe('image/png');
+      expect(iconRes.headers['x-content-type-options']).toBe('nosniff');
       const meta = await sharp(iconRes.body as Buffer).metadata();
       expect(meta.width).toBe(1024);
       expect(meta.height).toBe(1024);
+    });
+
+    it('404s with ICON_NOT_FOUND when the stored icon object is missing', async () => {
+      mockSite();
+      const cookie = await signInByMagicLink(`itest-projects-icon-missing-${Date.now()}@example.com`);
+      const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+      const orgId = me.body.organizations[0].id as string;
+
+      const createRes = await request(app.getHttpServer())
+        .post(`/orgs/${orgId}/projects`)
+        .set('Cookie', cookie)
+        .send({ url: 'https://projects-itest.example/' })
+        .expect(201);
+      const projectId = createRes.body.id as string;
+
+      // Deletes the icon createProject() itself already put in storage during site
+      // analysis — simulates it going missing for any reason, independent of upload.
+      await createObjectStorageFromEnv().delete(projectIconKey(orgId, projectId));
+
+      const iconRes = await request(app.getHttpServer())
+        .get(`/orgs/${orgId}/projects/${projectId}/icon`)
+        .set('Cookie', cookie)
+        .expect(404);
+      expect(iconRes.body.error.code).toBe('ICON_NOT_FOUND');
     });
 
     it('rejects an icon upload over 2MB with 413 FILE_TOO_LARGE', async () => {
