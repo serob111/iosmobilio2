@@ -192,6 +192,75 @@ describe.skipIf(!hasLiveServices)('migrate-legacy-projects (live Postgres)', () 
     expect(dry.puts).toHaveLength(0);
   });
 
+  it('writes the icon before inserting the project row — a failing icon write leaves no orphaned project row behind', async () => {
+    await writeFixture('legacy-icon-fails', validConfig({ name: 'Icon Fails', slug: 'icon-fails' }));
+    const failingStorage: ObjectStorage = {
+      put: async () => {
+        throw new Error('storage outage');
+      },
+      putStream: async () => {
+        throw new Error('not used by this script');
+      },
+      get: async () => {
+        throw new Error('not used by this script');
+      },
+      getStream: async () => {
+        throw new Error('not used by this script');
+      },
+      delete: async () => {},
+      signedUrl: async () => {
+        throw new Error('not used by this script');
+      },
+    };
+
+    const outcomes = await migrateLegacyProjects({ dataDir, orgId, dryRun: false, db, storage: failingStorage });
+    const outcome = outcomeFor(outcomes, 'legacy-icon-fails');
+    expect(outcome.kind).toBe('error');
+    expect((outcome as Extract<MigrationOutcome, { kind: 'error' }>).reason).toMatch(/storage outage/);
+
+    // The DB insert must never have run — a project row inserted despite the failed
+    // icon write would be permanently icon-less (legacy_id uniqueness makes a re-run
+    // see it as "already migrated" and skip it, never getting a second chance).
+    const rows = await selectProjects((scoped) =>
+      scoped.select().from(schema.projects).where(eq(schema.projects.legacyId, 'legacy-icon-fails')),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a legacy_id already migrated into a different org reports a friendly error, not a raw unique-violation message', async () => {
+    await writeFixture('legacy-cross-org', validConfig({ name: 'Cross Org', slug: 'cross-org' }));
+
+    const otherOrgId = uuidv7();
+    await runInTenantContext(db, { orgId: otherOrgId, userId: 'test-setup' }, () =>
+      getTenantDb()
+        .insert(schema.organizations)
+        .values({ id: otherOrgId, name: 'Legacy Migration Other Org', slug: `legacy-migration-other-${Date.now()}` }),
+    );
+    try {
+      const first = fakeStorage();
+      const firstOutcomes = await migrateLegacyProjects({ dataDir, orgId: otherOrgId, dryRun: false, db, storage: first.storage });
+      expect(outcomeFor(firstOutcomes, 'legacy-cross-org').kind).toBe('migrated');
+
+      // orgId's own tenant-scoped existence check (RLS) can't see otherOrgId's row at
+      // all — only the global legacy_id unique constraint catches this, as a raw
+      // Postgres error that must get translated into this friendly message.
+      const second = fakeStorage();
+      const secondOutcomes = await migrateLegacyProjects({ dataDir, orgId, dryRun: false, db, storage: second.storage });
+      const outcome = outcomeFor(secondOutcomes, 'legacy-cross-org');
+      expect(outcome.kind).toBe('error');
+      expect((outcome as Extract<MigrationOutcome, { kind: 'error' }>).reason).toBe('Already migrated into another org');
+      // The icon write still happens before the (failing) insert is attempted — an
+      // orphaned icon object under a project id that never got a row is the accepted
+      // tradeoff (harmless, nothing ever references that key) for never leaving a
+      // successfully-inserted row icon-less.
+      expect(second.puts).toHaveLength(1);
+    } finally {
+      await runInTenantContext(db, { orgId: otherOrgId, userId: 'test-setup' }, () =>
+        getTenantDb().delete(schema.organizations).where(eq(schema.organizations.id, otherOrgId)),
+      );
+    }
+  });
+
   it('formatReport summarizes migrated/skipped/error counts', () => {
     const outcomes: MigrationOutcome[] = [
       { legacyId: 'a', kind: 'migrated', projectId: 'proj-a' },

@@ -38,6 +38,11 @@ export type MigrateLegacyProjectsOptions = {
 // an extra query to find a real member just to satisfy runInTenantContext's signature.
 const SCRIPT_ACTOR = 'legacy-migration-script';
 
+function isLegacyIdConflict(error: unknown): boolean {
+  const cause = (error as { cause?: { code?: string; constraint?: string } } | undefined)?.cause;
+  return cause?.code === '23505' && cause?.constraint === 'projects_legacy_id_unique';
+}
+
 /**
  * Idempotent via projects.legacy_id (nullable unique): each legacy project is looked
  * up by that id, scoped to the target org, before being inserted — a second run (or a
@@ -113,21 +118,14 @@ export async function migrateLegacyProjects(options: MigrateLegacyProjectsOption
         continue;
       }
 
-      await runInTenantContext(db, { orgId, userId: SCRIPT_ACTOR }, () =>
-        getTenantDb().insert(schema.projects).values({
-          id: projectId,
-          orgId,
-          name: parsed.data.name,
-          sourceUrl,
-          config: parsed.data,
-          configVersion: CONFIG_SCHEMA_VERSION,
-          legacyId,
-        }),
-      );
-
-      // Same fallback as DraftsService.claimDraft's missing-icon case: a legacy
-      // project without an icon.png (or one that fails to decode) gets a generated
-      // letter avatar instead of leaving the project iconless.
+      // Icon write first, DB insert second: an icon object with no project row
+      // pointing at it is harmless (nothing ever reads an orphaned key), but a
+      // project row inserted before the icon write succeeds would be permanently
+      // icon-less — the legacy_id uniqueness check above makes a re-run see it as
+      // "already migrated" and skip it forever, never getting a second chance at
+      // the icon. Same fallback as DraftsService.claimDraft's missing-icon case: a
+      // legacy project without an icon.png (or one that fails to decode) gets a
+      // generated letter avatar instead of leaving the project iconless.
       let iconBuffer: Buffer;
       try {
         const rawIcon = await readFile(path.join(dir, 'icon.png'));
@@ -136,6 +134,32 @@ export async function migrateLegacyProjects(options: MigrateLegacyProjectsOption
         iconBuffer = await generateLetterAvatar(parsed.data.name.charAt(0) || '?', parsed.data.theme.primary);
       }
       await storage.put(projectIconKey(orgId, projectId), iconBuffer, 'image/png');
+
+      try {
+        await runInTenantContext(db, { orgId, userId: SCRIPT_ACTOR }, () =>
+          getTenantDb().insert(schema.projects).values({
+            id: projectId,
+            orgId,
+            name: parsed.data.name,
+            sourceUrl,
+            config: parsed.data,
+            configVersion: CONFIG_SCHEMA_VERSION,
+            legacyId,
+          }),
+        );
+      } catch (error) {
+        // The existence check above is scoped to this org's own tenant context (RLS
+        // hides every other org's rows from it), so it can't tell "never migrated
+        // anywhere" apart from "migrated into a *different* org" — only the unique
+        // constraint itself (global across orgs) catches the latter, as a raw
+        // Postgres error that'd otherwise surface as an opaque unique-violation
+        // message instead of an actionable one.
+        if (isLegacyIdConflict(error)) {
+          outcomes.push({ legacyId, kind: 'error', reason: 'Already migrated into another org' });
+          continue;
+        }
+        throw error;
+      }
 
       outcomes.push({ legacyId, kind: 'migrated', projectId });
     } catch (error) {
