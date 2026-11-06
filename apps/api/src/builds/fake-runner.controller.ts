@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import { Public } from '../auth/public.decorator.js';
 import { FakeRunner } from './fake-runner.js';
 
@@ -8,9 +8,8 @@ import { FakeRunner } from './fake-runner.js';
  * builds.integration.spec.ts has) has no other way to read back the raw build token
  * createBuild() dispatched — it's deliberately never returned to the client (see
  * BuildsController.create) — so it can play the runner's part itself (POST
- * /builds/:id/start, etc., see fake-runner.ts). Gated on BUILD_RUNNER=fake itself,
- * which validateBuildEnv() already refuses when NODE_ENV=production, so this route
- * can never do anything on a real deployment even though it's always registered.
+ * /builds/:id/start, etc., see fake-runner.ts). BuildsModule only registers this
+ * controller at all when BUILD_RUNNER=fake — nothing to gate here once that's true.
  */
 @Controller('_test/fake-runner')
 export class FakeRunnerController {
@@ -19,9 +18,6 @@ export class FakeRunnerController {
   @Get('dispatched')
   @Public()
   list(): Array<{ id: string; token: string; baseUrl: string }> {
-    if (process.env.BUILD_RUNNER !== 'fake') {
-      throw new NotFoundException();
-    }
     return this.fakeRunner.dispatched;
   }
 }
