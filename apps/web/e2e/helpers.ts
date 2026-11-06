@@ -57,6 +57,11 @@ export async function resetRateLimitBuckets(): Promise<void> {
   const redis = redisClient();
   const keys = await redis.keys('*|/sign-in/magic-link');
   keys.push(...(await redis.keys('*|/magic-link/verify')));
+  // draft-rate-limit:<ip> (DraftRateLimitService, 10 POST /drafts per 10 minutes) is
+  // also shared across every test/spec file hitting the same real api process — a
+  // suite that creates several drafts (journey.spec.ts, preview-proxy.spec.ts) trips it
+  // within a handful of local re-runs otherwise.
+  keys.push(...(await redis.keys('draft-rate-limit:*')));
   if (keys.length > 0) {
     await redis.del(...keys);
   }

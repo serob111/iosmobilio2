@@ -56,7 +56,22 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
       }),
     });
   });
+  // The editor's own live-preview iframe link — a distinct, never-revoking endpoint
+  // from the share link below (see preview-link.service.ts's editor/share split).
+  await page.route(`${API_ORIGIN}/drafts/me/preview-link/editor`, async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({ url: `http://localhost:3100/preview/${SLUG}` }),
+    });
+  });
+  // The share link PreviewLinkButton manages: GET first (none active yet, 404), then
+  // POST to create one — same shape either way for this test's purposes.
   await page.route(`${API_ORIGIN}/drafts/me/preview-link`, async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({}) });
+      return;
+    }
     await route.fulfill({
       status: 201,
       contentType: 'application/json',

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { resetRateLimitBuckets } from './helpers';
 
 type Site = { server: Server; port: number; name: string };
 
@@ -91,6 +92,13 @@ test.describe('preview proxy: real cross-origin isolation (real api, real local 
   test.beforeAll(async () => {
     siteA = await startSite('site-a');
     siteB = await startSite('site-b');
+  });
+
+  // Each test in this file creates 2 real drafts (one per site) — well under the 10/10min
+  // limit on its own, but shared with every other spec file hitting the same real api
+  // process across a run (or repeated local runs), draft-rate-limit:<ip> adds up fast.
+  test.beforeEach(async () => {
+    await resetRateLimitBuckets();
   });
 
   test.afterAll(async () => {
