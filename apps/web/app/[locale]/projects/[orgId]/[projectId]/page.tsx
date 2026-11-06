@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { createProjectPreviewLink, fetchPreviewDto, fetchProject } from "@/lib/apiClient";
+import {
+  createProjectEditorPreviewLink,
+  createProjectPreviewLink,
+  fetchPreviewDto,
+  fetchProject,
+  fetchProjectPreviewLink,
+  regenerateProjectPreviewLink,
+} from "@/lib/apiClient";
 import { ProjectEditor } from "@/components/editor/ProjectEditor";
 import { createProjectAdapter } from "@/components/editor/ProjectAdapter";
 import type { ProjectEditorAdapter } from "@/components/editor/types";
@@ -23,7 +30,7 @@ export default function ProjectPage() {
         setState({ status: "not-found" });
         return;
       }
-      const { url } = await createProjectPreviewLink(params.orgId, params.projectId);
+      const { url } = await createProjectEditorPreviewLink(params.orgId, params.projectId);
       const slug = url.split("/preview/")[1];
       const dto = slug ? await fetchPreviewDto(slug) : null;
       if (!dto) {
@@ -47,7 +54,11 @@ export default function ProjectPage() {
   return (
     <div className="flex flex-1 flex-col items-center gap-6 bg-zinc-50 pb-12">
       <ProjectEditor adapter={state.adapter} />
-      <PreviewLinkButton createLink={() => createProjectPreviewLink(params.orgId, params.projectId)} />
+      <PreviewLinkButton
+        fetchLink={() => fetchProjectPreviewLink(params.orgId, params.projectId)}
+        createLink={() => createProjectPreviewLink(params.orgId, params.projectId)}
+        regenerateLink={() => regenerateProjectPreviewLink(params.orgId, params.projectId)}
+      />
     </div>
   );
 }

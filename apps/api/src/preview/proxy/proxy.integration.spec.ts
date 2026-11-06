@@ -152,14 +152,18 @@ describe.skipIf(!hasLiveServices)('preview proxy (<slug>.<PREVIEW_PROXY_DOMAIN>/
     return Array.isArray(cookie) ? cookie : [cookie];
   }
 
-  async function createPreviewSlug(cookie: string[]): Promise<string> {
+  async function createPreviewSlugWithIds(cookie: string[]): Promise<{ slug: string; orgId: string; projectId: string }> {
     mockHomepage();
     const { orgId, projectId } = await createProjectForFakeSite(cookie);
     const linkRes = await request(app.getHttpServer())
       .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
       .set('Cookie', cookie)
       .expect(201);
-    return (linkRes.body.url as string).split('/preview/')[1]!;
+    return { slug: (linkRes.body.url as string).split('/preview/')[1]!, orgId, projectId };
+  }
+
+  async function createPreviewSlug(cookie: string[]): Promise<string> {
+    return (await createPreviewSlugWithIds(cookie)).slug;
   }
 
   function proxyGet(slug: string, path: string): request.Test {
@@ -320,6 +324,31 @@ describe.skipIf(!hasLiveServices)('preview proxy (<slug>.<PREVIEW_PROXY_DOMAIN>/
     const second = await proxyGet(slug, '/counter').expect(200);
     expect(second.text).toContain('hits=1');
     expect(hits).toBe(1);
+  });
+
+  it('a revoked slug 404s immediately, even for a path that was cached while it was still active', async () => {
+    const cookie = await signInByMagicLink(`itest-proxy-cache-revoke-${Date.now()}@example.com`);
+    const { slug, orgId, projectId } = await createPreviewSlugWithIds(cookie);
+    server.use(
+      http.get(`https://${FAKE_SITE_HOST}/cached-page`, () =>
+        HttpResponse.text('<html><body>cached</body></html>', { headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      ),
+    );
+
+    // Warm the cache for this slug+path while the link is still active.
+    await proxyGet(slug, '/cached-page').expect(200);
+
+    // Regenerating revokes the old slug (PreviewLinkService.regenerateShareLinkForProject)
+    // — resolveProxySource is checked before the cache lookup on every request (see
+    // proxy-middleware.ts), so this must 404, not serve the still-warm cache entry.
+    await request(app.getHttpServer())
+      .post(`/orgs/${orgId}/projects/${projectId}/preview-link/regenerate`)
+      .set('Cookie', cookie)
+      .expect(201);
+
+    const res = await proxyGet(slug, '/cached-page');
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('PREVIEW_NOT_FOUND');
   });
 
   it('does not answer a preview-shaped path on the main (non-proxy) host', async () => {

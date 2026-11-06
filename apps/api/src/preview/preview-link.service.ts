@@ -14,6 +14,7 @@ import { type ObjectStorage, projectIconKey, draftIconKey } from '@mobilio/stora
 import { DbService } from '../db/db.service.js';
 import { OBJECT_STORAGE } from '../storage/object-storage.token.js';
 import { generatePreviewSlug, hashPreviewSlug } from './preview-slug.js';
+import { encryptPreviewSlug, decryptPreviewSlug } from './preview-slug-crypto.js';
 import { previewProxyOrigin } from './validate-preview-env.js';
 
 export type PreviewDto = {
@@ -25,6 +26,8 @@ export type PreviewDto = {
   proxyBase: string;
 };
 
+const EDITOR_LINK_LIFETIME_MS = 2 * 60 * 60 * 1000;
+
 function previewUrl(rawSlug: string): string {
   const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:3000';
   return `${webOrigin}/preview/${rawSlug}`;
@@ -32,6 +35,15 @@ function previewUrl(rawSlug: string): string {
 
 function proxyBase(rawSlug: string): string {
   return previewProxyOrigin(rawSlug);
+}
+
+/** Exactly one of these two is ever set — mirrors the table's own exactly-one-owner CHECK. */
+type Owner = { projectId: string; orgId: string } | { draftId: string };
+
+function ownerWhere(owner: Owner) {
+  return 'projectId' in owner
+    ? eq(schema.previewLinks.projectId, owner.projectId)
+    : eq(schema.previewLinks.draftId, owner.draftId);
 }
 
 @Injectable()
@@ -42,43 +54,104 @@ export class PreviewLinkService {
   ) {}
 
   /**
-   * POST /orgs/:orgId/projects/:projectId/preview-link — regenerating revokes whatever
-   * active link already exists first (not insert-and-catch-conflict): both statements run
-   * inside the same tenant transaction, so a crash between them just leaves no active
-   * link at all (safe — a client that didn't get a response will retry), never two.
+   * Looks up the currently-active (not revoked, not expired) 'share' link for this
+   * owner, if any — used both by the GET endpoint (redisplay) and by "create if none
+   * active" (to decide whether to actually insert a new row). Returns null rather than
+   * throwing; callers that need a 404 (the GET endpoint itself) do that at the call site.
    */
-  async createForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
+  private async findActiveShareLink(owner: Owner): Promise<{ url: string } | null> {
+    const [row] = await getTenantDb()
+      .select()
+      .from(schema.previewLinks)
+      .where(and(ownerWhere(owner), eq(schema.previewLinks.kind, 'share'), isNull(schema.previewLinks.revokedAt)));
+    if (!row || !row.slugEnc) return null;
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+    return { url: previewUrl(decryptPreviewSlug(row.slugEnc)) };
+  }
+
+  private async insertShareLink(owner: Owner, expiresAt?: Date): Promise<{ url: string }> {
     const { rawSlug, slugHash } = generatePreviewSlug();
-    await runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
-      const tx = getTenantDb();
-      await tx
-        .update(schema.previewLinks)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(schema.previewLinks.projectId, projectId), isNull(schema.previewLinks.revokedAt)));
-      await tx.insert(schema.previewLinks).values({ orgId, projectId, slugHash });
-    });
+    const slugEnc = encryptPreviewSlug(rawSlug);
+    await getTenantDb()
+      .insert(schema.previewLinks)
+      .values({ ...owner, kind: 'share', slugHash, slugEnc, expiresAt });
     return { url: previewUrl(rawSlug) };
   }
 
-  /**
-   * POST /drafts/me/preview-link — expiresAt mirrors the draft's own expiry exactly, so
-   * the link stops resolving (preview_links_slug_lookup, 0014) the moment the draft would
-   * anyway, without needing a separate sweep. If the draft is later claimed into a
-   * project, the draft row's deletion (DraftsService.claimDraft) cascades to this row
-   * too (preview_links.draft_id references drafts.id ON DELETE CASCADE) — no explicit
-   * revoke call needed there.
-   */
-  async createForDraft(tokenHash: string, draftId: string, draftExpiresAt: Date): Promise<{ url: string }> {
+  private async revokeActiveShareLink(owner: Owner): Promise<void> {
+    await getTenantDb()
+      .update(schema.previewLinks)
+      .set({ revokedAt: new Date() })
+      .where(and(ownerWhere(owner), eq(schema.previewLinks.kind, 'share'), isNull(schema.previewLinks.revokedAt)));
+  }
+
+  private async insertEditorLink(owner: Owner): Promise<{ url: string }> {
     const { rawSlug, slugHash } = generatePreviewSlug();
-    await runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
-      const tx = getTenantDb();
-      await tx
-        .update(schema.previewLinks)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(schema.previewLinks.draftId, draftId), isNull(schema.previewLinks.revokedAt)));
-      await tx.insert(schema.previewLinks).values({ draftId, slugHash, expiresAt: draftExpiresAt });
-    });
+    await getTenantDb()
+      .insert(schema.previewLinks)
+      .values({ ...owner, kind: 'editor', slugHash, expiresAt: new Date(Date.now() + EDITOR_LINK_LIFETIME_MS) });
     return { url: previewUrl(rawSlug) };
+  }
+
+  // --- editor links: created every time the editor page loads, never revoke anything ---
+
+  async createEditorLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
+    return runInTenantContext(this.dbService.db, { orgId, userId }, () =>
+      this.insertEditorLink({ projectId, orgId }),
+    );
+  }
+
+  async createEditorLinkForDraft(tokenHash: string, draftId: string): Promise<{ url: string }> {
+    return runInTokenLookupContext(this.dbService.db, tokenHash, () => this.insertEditorLink({ draftId }));
+  }
+
+  // --- share links: at most one active at a time, explicitly fetched/created/regenerated ---
+
+  /** GET .../preview-link — 404s (PREVIEW_LINK_NOT_FOUND) if nothing is currently active. */
+  async getActiveShareLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
+    const link = await runInTenantContext(this.dbService.db, { orgId, userId }, () =>
+      this.findActiveShareLink({ projectId, orgId }),
+    );
+    if (!link) throw new NotFoundException({ code: 'PREVIEW_LINK_NOT_FOUND', message: 'No active share link' });
+    return link;
+  }
+
+  async getActiveShareLinkForDraft(tokenHash: string, draftId: string): Promise<{ url: string }> {
+    const link = await runInTokenLookupContext(this.dbService.db, tokenHash, () =>
+      this.findActiveShareLink({ draftId }),
+    );
+    if (!link) throw new NotFoundException({ code: 'PREVIEW_LINK_NOT_FOUND', message: 'No active share link' });
+    return link;
+  }
+
+  /** POST .../preview-link — returns the existing active share link if there is one, otherwise creates it. Never revokes. */
+  async createShareLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
+    return runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
+      const existing = await this.findActiveShareLink({ projectId, orgId });
+      return existing ?? this.insertShareLink({ projectId, orgId });
+    });
+  }
+
+  async createShareLinkForDraft(tokenHash: string, draftId: string, draftExpiresAt: Date): Promise<{ url: string }> {
+    return runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
+      const existing = await this.findActiveShareLink({ draftId });
+      return existing ?? this.insertShareLink({ draftId }, draftExpiresAt);
+    });
+  }
+
+  /** POST .../preview-link/regenerate — always revokes whatever's active first, then creates a new one. */
+  async regenerateShareLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
+    return runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
+      await this.revokeActiveShareLink({ projectId, orgId });
+      return this.insertShareLink({ projectId, orgId });
+    });
+  }
+
+  async regenerateShareLinkForDraft(tokenHash: string, draftId: string, draftExpiresAt: Date): Promise<{ url: string }> {
+    return runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
+      await this.revokeActiveShareLink({ draftId });
+      return this.insertShareLink({ draftId }, draftExpiresAt);
+    });
   }
 
   /**
@@ -87,6 +160,9 @@ export class PreviewLinkService {
    * other part of the raw config. `theme`/`statusBar` overlap (statusBar already lives
    * inside theme) is deliberate, not a mistake — some shell consumers want the whole theme
    * object, some just want the one field, and duplicating a few bytes costs nothing.
+   * Kind-agnostic on purpose: an 'editor' link's slug works here identically to a 'share'
+   * one — the distinction only governs how a link is created/revoked, not whether a valid,
+   * active one may be read.
    */
   async getPreviewDto(rawSlug: string): Promise<PreviewDto> {
     const slugHash = hashPreviewSlug(rawSlug);

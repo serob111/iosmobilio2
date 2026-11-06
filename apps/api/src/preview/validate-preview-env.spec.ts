@@ -96,6 +96,24 @@ describe('validatePreviewEnv', () => {
     process.env.PREVIEW_PROXY_DOMAIN = 'preview.mobilio.co.uk';
     expect(() => validatePreviewEnv()).toThrow(/different registrable domain/);
   });
+
+  it('throws when PREVIEW_SLUG_KEY is missing', () => {
+    process.env.PREVIEW_PROXY_DOMAIN = 'mobilio-preview.example';
+    delete process.env.PREVIEW_SLUG_KEY;
+    expect(() => validatePreviewEnv()).toThrow(/PREVIEW_SLUG_KEY must be set/);
+  });
+
+  it('throws when PREVIEW_SLUG_KEY does not decode to exactly 32 bytes', () => {
+    process.env.PREVIEW_PROXY_DOMAIN = 'mobilio-preview.example';
+    process.env.PREVIEW_SLUG_KEY = Buffer.alloc(16, 1).toString('base64');
+    expect(() => validatePreviewEnv()).toThrow(/decode to exactly 32 bytes/);
+  });
+
+  it('passes with a valid 32-byte PREVIEW_SLUG_KEY', () => {
+    process.env.PREVIEW_PROXY_DOMAIN = 'mobilio-preview.example';
+    process.env.PREVIEW_SLUG_KEY = Buffer.alloc(32, 1).toString('base64');
+    expect(() => validatePreviewEnv()).not.toThrow();
+  });
 });
 
 describe('previewProxyOrigin/previewProxyDomain/previewProxyScheme', () => {

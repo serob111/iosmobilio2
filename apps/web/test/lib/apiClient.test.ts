@@ -6,17 +6,23 @@ import {
   buildIpaUrl,
   claimDraft,
   createDraft,
+  createDraftEditorPreviewLink,
   createDraftPreviewLink,
+  createProjectEditorPreviewLink,
   createProjectPreviewLink,
   draftIconUrl,
+  fetchDraftPreviewLink,
   fetchMe,
   fetchPreviewDto,
   fetchProject,
+  fetchProjectPreviewLink,
   getBuild,
   getMyDraft,
   listBuilds,
   listProjects,
   projectIconUrl,
+  regenerateDraftPreviewLink,
+  regenerateProjectPreviewLink,
   startBuild,
   updateDraftConfig,
   updateProjectConfig,
@@ -202,6 +208,44 @@ describe('createDraftPreviewLink', () => {
   });
 });
 
+describe('createDraftEditorPreviewLink', () => {
+  it('POSTs to the editor sub-path, distinct from the share-link endpoint', async () => {
+    server.use(
+      http.post(`${API_BASE}/drafts/me/preview-link/editor`, () =>
+        HttpResponse.json({ url: 'http://localhost:3100/preview/editor-abc' }, { status: 201 }),
+      ),
+    );
+    await expect(createDraftEditorPreviewLink()).resolves.toEqual({ url: 'http://localhost:3100/preview/editor-abc' });
+  });
+});
+
+describe('fetchDraftPreviewLink', () => {
+  it('returns the active share link when one exists', async () => {
+    server.use(
+      http.get(`${API_BASE}/drafts/me/preview-link`, () =>
+        HttpResponse.json({ url: 'http://localhost:3100/preview/abc' }),
+      ),
+    );
+    await expect(fetchDraftPreviewLink()).resolves.toEqual({ url: 'http://localhost:3100/preview/abc' });
+  });
+
+  it('returns null (not an error) when none exists yet (404)', async () => {
+    server.use(http.get(`${API_BASE}/drafts/me/preview-link`, () => new HttpResponse(null, { status: 404 })));
+    await expect(fetchDraftPreviewLink()).resolves.toBeNull();
+  });
+});
+
+describe('regenerateDraftPreviewLink', () => {
+  it('POSTs to the regenerate sub-path', async () => {
+    server.use(
+      http.post(`${API_BASE}/drafts/me/preview-link/regenerate`, () =>
+        HttpResponse.json({ url: 'http://localhost:3100/preview/new-abc' }, { status: 201 }),
+      ),
+    );
+    await expect(regenerateDraftPreviewLink()).resolves.toEqual({ url: 'http://localhost:3100/preview/new-abc' });
+  });
+});
+
 describe('claimDraft', () => {
   it('POSTs to the org-scoped claim endpoint and returns the new project id', async () => {
     server.use(
@@ -269,6 +313,50 @@ describe('createProjectPreviewLink', () => {
       ),
     );
     await expect(createProjectPreviewLink('org1', 'p1')).resolves.toEqual({ url: 'http://localhost:3100/preview/xyz' });
+  });
+});
+
+describe('createProjectEditorPreviewLink', () => {
+  it('POSTs to the editor sub-path, distinct from the share-link endpoint', async () => {
+    server.use(
+      http.post(`${API_BASE}/orgs/org1/projects/p1/preview-link/editor`, () =>
+        HttpResponse.json({ url: 'http://localhost:3100/preview/editor-xyz' }, { status: 201 }),
+      ),
+    );
+    await expect(createProjectEditorPreviewLink('org1', 'p1')).resolves.toEqual({
+      url: 'http://localhost:3100/preview/editor-xyz',
+    });
+  });
+});
+
+describe('fetchProjectPreviewLink', () => {
+  it('returns the active share link when one exists', async () => {
+    server.use(
+      http.get(`${API_BASE}/orgs/org1/projects/p1/preview-link`, () =>
+        HttpResponse.json({ url: 'http://localhost:3100/preview/xyz' }),
+      ),
+    );
+    await expect(fetchProjectPreviewLink('org1', 'p1')).resolves.toEqual({ url: 'http://localhost:3100/preview/xyz' });
+  });
+
+  it('returns null (not an error) when none exists yet (404)', async () => {
+    server.use(
+      http.get(`${API_BASE}/orgs/org1/projects/p1/preview-link`, () => new HttpResponse(null, { status: 404 })),
+    );
+    await expect(fetchProjectPreviewLink('org1', 'p1')).resolves.toBeNull();
+  });
+});
+
+describe('regenerateProjectPreviewLink', () => {
+  it('POSTs to the regenerate sub-path', async () => {
+    server.use(
+      http.post(`${API_BASE}/orgs/org1/projects/p1/preview-link/regenerate`, () =>
+        HttpResponse.json({ url: 'http://localhost:3100/preview/new-xyz' }, { status: 201 }),
+      ),
+    );
+    await expect(regenerateProjectPreviewLink('org1', 'p1')).resolves.toEqual({
+      url: 'http://localhost:3100/preview/new-xyz',
+    });
   });
 });
 

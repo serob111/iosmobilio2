@@ -65,6 +65,9 @@ export default defineConfig({
         // *.localhost exists in this environment.
         PREVIEW_PROXY_DOMAIN: 'preview.localhost',
         PREVIEW_PROXY_SCHEME: 'http',
+        // validatePreviewEnv requires this unconditionally now (share links' raw slug
+        // must be encryptable for redisplay) — any 32 bytes, base64, work for a test run.
+        PREVIEW_SLUG_KEY: Buffer.alloc(32, 9).toString('base64'),
         // This api answers on :3011, not the scheme's default port — without this,
         // every generated preview link would silently point at :80, where nothing here
         // is listening. Real deployments (always on 443 behind a reverse proxy) never set this.

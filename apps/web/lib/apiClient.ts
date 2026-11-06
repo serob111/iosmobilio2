@@ -158,13 +158,50 @@ export async function uploadDraftIcon(file: File): Promise<void> {
   }
 }
 
-/** For <img src>/crossOrigin="use-credentials"> — the endpoint itself 302s to a short-lived signed URL. `v` is a cache-busting value (e.g. Date.now()) to force a reload right after a fresh upload. */
+/** For <img src>/crossOrigin="use-credentials"> — the endpoint streams the bytes itself (not a redirect: a signed S3/MinIO url is a third origin whose CORS can't satisfy a credentialed request). `v` is a cache-busting value (e.g. Date.now()) to force a reload right after a fresh upload. */
 export function draftIconUrl(v?: number): string {
   return `${API_BASE_URL}/drafts/me/icon${v !== undefined ? `?v=${v}` : ""}`;
 }
 
+/** The editor's own live-preview iframe link — create fresh every time the editor page loads, never revokes anything (a share link the user already sent out keeps working). */
+export async function createDraftEditorPreviewLink(): Promise<{ url: string }> {
+  const res = await fetch(`${API_BASE_URL}/drafts/me/preview-link/editor`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ url: string }>;
+}
+
+/** The current active share link, if any — null (not an error) when none has been created yet. */
+export async function fetchDraftPreviewLink(): Promise<{ url: string } | null> {
+  const res = await fetch(`${API_BASE_URL}/drafts/me/preview-link`, { credentials: "include" });
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ url: string }>;
+}
+
+/** Creates a share link only if none is currently active; returns the existing one otherwise. */
 export async function createDraftPreviewLink(): Promise<{ url: string }> {
   const res = await fetch(`${API_BASE_URL}/drafts/me/preview-link`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ url: string }>;
+}
+
+/** Explicitly revokes whatever share link is active and creates a brand new one. */
+export async function regenerateDraftPreviewLink(): Promise<{ url: string }> {
+  const res = await fetch(`${API_BASE_URL}/drafts/me/preview-link/regenerate`, {
     method: "POST",
     credentials: "include",
   });
@@ -251,8 +288,45 @@ export function projectIconUrl(orgId: string, projectId: string, v?: number): st
   return `${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/icon${v !== undefined ? `?v=${v}` : ""}`;
 }
 
+/** The editor's own live-preview iframe link — create fresh every time the editor page loads, never revokes anything (a share link the user already sent out keeps working). */
+export async function createProjectEditorPreviewLink(orgId: string, projectId: string): Promise<{ url: string }> {
+  const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/preview-link/editor`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ url: string }>;
+}
+
+/** The current active share link, if any — null (not an error) when none has been created yet. */
+export async function fetchProjectPreviewLink(orgId: string, projectId: string): Promise<{ url: string } | null> {
+  const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/preview-link`, { credentials: "include" });
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ url: string }>;
+}
+
+/** Creates a share link only if none is currently active; returns the existing one otherwise. */
 export async function createProjectPreviewLink(orgId: string, projectId: string): Promise<{ url: string }> {
   const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/preview-link`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ url: string }>;
+}
+
+/** Explicitly revokes whatever share link is active and creates a brand new one. */
+export async function regenerateProjectPreviewLink(orgId: string, projectId: string): Promise<{ url: string }> {
+  const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/preview-link/regenerate`, {
     method: "POST",
     credentials: "include",
   });

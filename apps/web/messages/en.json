@@ -72,7 +72,11 @@
     "copyLink": "Copy",
     "copied": "Copied",
     "qrAlt": "Preview QR code",
-    "screenUnavailable": "This screen isn't available in the preview"
+    "screenUnavailable": "This screen isn't available in the preview",
+    "regenerateLink": "Generate new link",
+    "regenerateConfirm": "The old link will stop working for anyone who has it. Continue?",
+    "regenerateConfirmYes": "Yes, generate new link",
+    "regenerateConfirmNo": "Cancel"
   },
   "claim": {
     "saveAsProject": "Save as project",
@@ -124,6 +128,7 @@
     "IPA_TOO_LARGE": "The built .ipa file is too large.",
     "INVALID_IPA": "The built file isn't a valid .ipa.",
     "PREVIEW_NOT_FOUND": "This preview link is no longer valid.",
+    "PREVIEW_LINK_NOT_FOUND": "No share link exists yet.",
     "PREVIEW_SOURCE_INVALID": "This preview's source is misconfigured.",
     "CSRF_ORIGIN_MISMATCH": "Your session looks invalid. Please reload the page and try again.",
     "INTERNAL_ERROR": "Something went wrong on our side. Please try again.",

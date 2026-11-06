@@ -6,10 +6,13 @@ import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import {
   claimDraft,
+  createDraftEditorPreviewLink,
   createDraftPreviewLink,
+  fetchDraftPreviewLink,
   fetchMe,
   fetchPreviewDto,
   getMyDraft,
+  regenerateDraftPreviewLink,
   type DraftSummary,
   type MeResponse,
 } from "@/lib/apiClient";
@@ -26,9 +29,11 @@ type LoadState =
 
 /**
  * The draft editor — assumes "/" already created a draft via createDraft(); this page
- * only ever reads it back (getMyDraft()). The preview link is created exactly once (on
- * mount), then reused for the editor's whole lifetime — ProjectEditor only ever rebuilds
- * the PreviewShell's content from the locally-saved config, never re-creates the link.
+ * only ever reads it back (getMyDraft()). The editor's own live-preview iframe link
+ * (createDraftEditorPreviewLink) is created fresh on every mount and never revokes
+ * anything — it's a distinct 'editor'-kind link from the 'share'-kind one
+ * PreviewLinkButton manages below, so opening/reloading this page never invalidates a
+ * share link the user already copied/sent (see preview-link.service.ts).
  */
 export default function TryPage() {
   const t = useTranslations("claim");
@@ -51,7 +56,7 @@ export default function TryPage() {
         setState({ status: "missing" });
         return;
       }
-      const { url } = await createDraftPreviewLink();
+      const { url } = await createDraftEditorPreviewLink();
       if (cancelled) return;
       const slug = url.split("/preview/")[1];
       const dto = slug ? await fetchPreviewDto(slug) : null;
@@ -113,7 +118,11 @@ export default function TryPage() {
   return (
     <div className="flex flex-1 flex-col items-center gap-6 bg-zinc-50 pb-12">
       <ProjectEditor adapter={state.adapter} />
-      <PreviewLinkButton createLink={createDraftPreviewLink} />
+      <PreviewLinkButton
+        fetchLink={fetchDraftPreviewLink}
+        createLink={createDraftPreviewLink}
+        regenerateLink={regenerateDraftPreviewLink}
+      />
 
       {me === null ? (
         <Link href={{ pathname: "/login", query: { callbackUrl: pathname } }} className="text-sm font-medium text-[#4B2BE0] underline">

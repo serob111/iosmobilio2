@@ -22,3 +22,10 @@ process.env.BUILD_RUNNER ??= 'fake';
 // it never matches those and never accidentally 404s an ordinary integration test's own
 // requests.
 process.env.PREVIEW_PROXY_DOMAIN ??= 'preview.invalid';
+
+// validatePreviewEnv also now requires PREVIEW_SLUG_KEY unconditionally (share links'
+// raw slug must always be encryptable/decryptable for redisplay) — same default-only-
+// if-unset reasoning as the two vars above. Fixed, not random, so test output (if ever
+// printed) doesn't vary run to run; the exact bytes don't matter, only that there are 32
+// of them.
+process.env.PREVIEW_SLUG_KEY ??= Buffer.alloc(32, 7).toString('base64');

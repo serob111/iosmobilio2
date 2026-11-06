@@ -120,6 +120,20 @@
       "when": 1793816449057,
       "tag": "0016_projects_legacy_id",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793820961077,
+      "tag": "0017_preview_links_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793820989996,
+      "tag": "0018_preview_links_editor_cleanup",
+      "breakpoints": true
     }
   ]
 }

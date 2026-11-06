@@ -62,6 +62,11 @@ describe.skipIf(!hasLiveServices)(
     async function resetRateLimitBuckets(): Promise<void> {
       const keys = await redis.keys('*|/sign-in/magic-link');
       keys.push(...(await redis.keys('*|/magic-link/verify')));
+      // draft-rate-limit:* (DraftRateLimitService, 10 POST /drafts per 10 minutes) is
+      // also per-client and shared across every test in this file (and every other file
+      // in the same vitest run — fileParallelism:false means they all run in one
+      // process) — the draft-backed describe block alone calls POST /drafts five times.
+      keys.push(...(await redis.keys('draft-rate-limit:*')));
       if (keys.length > 0) {
         await redis.del(...keys);
       }
@@ -136,7 +141,7 @@ describe.skipIf(!hasLiveServices)(
     }
 
     describe('project-backed link', () => {
-      it('creates a link, serves only the allowed fields via GET /preview/:slug, and regenerating revokes the old one', async () => {
+      it('creates a share link, serves only the allowed fields via GET /preview/:slug, and regenerating revokes the old one', async () => {
         mockSite();
         const cookie = await signInByMagicLink(`itest-preview-project-${Date.now()}@example.com`);
         const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
@@ -172,7 +177,7 @@ describe.skipIf(!hasLiveServices)(
         expect(previewRes.body.projectId).toBeUndefined();
 
         const regenerateRes = await request(app.getHttpServer())
-          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link/regenerate`)
           .set('Cookie', cookie)
           .expect(201);
         const secondSlug = slugFromUrl(regenerateRes.body.url as string);
@@ -180,6 +185,98 @@ describe.skipIf(!hasLiveServices)(
 
         await request(app.getHttpServer()).get(`/preview/${firstSlug}`).expect(404);
         await request(app.getHttpServer()).get(`/preview/${secondSlug}`).expect(200);
+      });
+
+      it('POST .../preview-link is idempotent (returns the existing active link, never a second one) while one is active', async () => {
+        mockSite();
+        const cookie = await signInByMagicLink(`itest-preview-idempotent-${Date.now()}@example.com`);
+        const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+        const orgId = me.body.organizations[0].id as string;
+        const createRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects`)
+          .set('Cookie', cookie)
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const projectId = createRes.body.id as string;
+
+        const firstRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        const secondRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        expect(secondRes.body.url).toBe(firstRes.body.url);
+
+        // GET redisplays the exact same, still-active link — not a fresh one.
+        const getRes = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(200);
+        expect(getRes.body.url).toBe(firstRes.body.url);
+      });
+
+      it('GET .../preview-link 404s (PREVIEW_LINK_NOT_FOUND) when no share link has been created yet', async () => {
+        mockSite();
+        const cookie = await signInByMagicLink(`itest-preview-get-none-${Date.now()}@example.com`);
+        const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+        const orgId = me.body.organizations[0].id as string;
+        const createRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects`)
+          .set('Cookie', cookie)
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const projectId = createRes.body.id as string;
+
+        const getRes = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(404);
+        expect(getRes.body.error.code).toBe('PREVIEW_LINK_NOT_FOUND');
+      });
+
+      it('opening the editor (POST .../preview-link/editor) repeatedly never revokes the active share link', async () => {
+        mockSite();
+        const cookie = await signInByMagicLink(`itest-preview-editor-isolation-${Date.now()}@example.com`);
+        const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+        const orgId = me.body.organizations[0].id as string;
+        const createRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects`)
+          .set('Cookie', cookie)
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const projectId = createRes.body.id as string;
+
+        const shareRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        const shareSlug = slugFromUrl(shareRes.body.url as string);
+
+        // Simulates opening the editor page three times (three separate page loads) —
+        // each one must get its own fresh, independently-valid editor link, and none of
+        // them may touch the share link above.
+        const editorSlugs: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          const editorRes = await request(app.getHttpServer())
+            .post(`/orgs/${orgId}/projects/${projectId}/preview-link/editor`)
+            .set('Cookie', cookie)
+            .expect(201);
+          editorSlugs.push(slugFromUrl(editorRes.body.url as string));
+        }
+        expect(new Set(editorSlugs).size).toBe(3);
+
+        for (const slug of editorSlugs) {
+          await request(app.getHttpServer()).get(`/preview/${slug}`).expect(200);
+        }
+        // The share link the user may already have copied/sent is still alive.
+        await request(app.getHttpServer()).get(`/preview/${shareSlug}`).expect(200);
+        const stillActive = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(200);
+        expect(stillActive.body.url).toBe(shareRes.body.url);
       });
 
       it('404s creating a preview link for a project the caller\'s org does not own', async () => {
@@ -206,7 +303,7 @@ describe.skipIf(!hasLiveServices)(
     });
 
     describe('draft-backed link', () => {
-      it('creates a link for an anonymous draft and serves it the same way', async () => {
+      it('creates a share link for an anonymous draft and serves it the same way', async () => {
         mockSite();
         const draftRes = await request(app.getHttpServer())
           .post('/drafts')
@@ -224,6 +321,45 @@ describe.skipIf(!hasLiveServices)(
         expect(previewRes.body.name).toBe('Preview Test Cafe');
         expect(previewRes.body.projectId).toBeUndefined();
         expect(previewRes.body.draftId).toBeUndefined();
+      });
+
+      it('opening the editor repeatedly never revokes the draft\'s active share link, and regenerate explicitly does', async () => {
+        mockSite();
+        const draftRes = await request(app.getHttpServer())
+          .post('/drafts')
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const draftCookie = draftCookieFrom(draftRes);
+
+        const shareRes = await request(app.getHttpServer())
+          .post('/drafts/me/preview-link')
+          .set('Cookie', draftCookie)
+          .expect(201);
+        const shareSlug = slugFromUrl(shareRes.body.url as string);
+
+        const editorRes1 = await request(app.getHttpServer())
+          .post('/drafts/me/preview-link/editor')
+          .set('Cookie', draftCookie)
+          .expect(201);
+        const editorRes2 = await request(app.getHttpServer())
+          .post('/drafts/me/preview-link/editor')
+          .set('Cookie', draftCookie)
+          .expect(201);
+        expect(editorRes1.body.url).not.toBe(editorRes2.body.url);
+        await request(app.getHttpServer()).get(`/preview/${slugFromUrl(editorRes1.body.url as string)}`).expect(200);
+        await request(app.getHttpServer()).get(`/preview/${slugFromUrl(editorRes2.body.url as string)}`).expect(200);
+        // Still alive after two editor-link creations.
+        await request(app.getHttpServer()).get(`/preview/${shareSlug}`).expect(200);
+
+        const regenerateRes = await request(app.getHttpServer())
+          .post('/drafts/me/preview-link/regenerate')
+          .set('Cookie', draftCookie)
+          .expect(201);
+        const newShareSlug = slugFromUrl(regenerateRes.body.url as string);
+        expect(newShareSlug).not.toBe(shareSlug);
+        // Regenerate, unlike the editor endpoint, does revoke the old share link.
+        await request(app.getHttpServer()).get(`/preview/${shareSlug}`).expect(404);
+        await request(app.getHttpServer()).get(`/preview/${newShareSlug}`).expect(200);
       });
 
       it('dies the moment the draft is claimed into an org', async () => {

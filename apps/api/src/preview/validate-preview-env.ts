@@ -78,6 +78,18 @@ export function validatePreviewEnv(): void {
         `(both resolve to "${proxyRegistrableDomain}") — a subdomain is not enough, cookies/same-site must not cross`,
     );
   }
+
+  // Share links (preview-slug-crypto.ts) must always be able to encrypt/decrypt their
+  // raw slug for redisplay, not just when some optional feature is turned on — unlike
+  // BUILD_TOKEN_KEY (only required when BUILD_RUNNER isn't "fake"), this has no mode
+  // where it's legitimately absent.
+  const slugKeyB64 = process.env.PREVIEW_SLUG_KEY;
+  if (!slugKeyB64) {
+    throw new Error('PREVIEW_SLUG_KEY must be set');
+  }
+  if (Buffer.from(slugKeyB64, 'base64').length !== 32) {
+    throw new Error('PREVIEW_SLUG_KEY must decode to exactly 32 bytes (base64)');
+  }
 }
 
 export function previewProxyScheme(): string {
