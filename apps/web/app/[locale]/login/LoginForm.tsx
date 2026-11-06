@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { authClient } from "@/lib/authClient";
+import { safeCallbackPath } from "@/lib/safeCallbackPath";
 
 export function LoginForm() {
   const t = useTranslations("login");
@@ -14,9 +15,12 @@ export function LoginForm() {
   // Lets a flow like /try's "save as project" button send the user back to exactly
   // where they started (including the locale prefix, since this is the real browser
   // path, not next-intl's own locale-stripped one) instead of always landing on "/".
+  // callbackUrl is attacker-controlled (it's a query param anyone can craft into a
+  // /login link) — safeCallbackPath rejects anything that isn't a same-origin relative
+  // path before it's concatenated into the actual sign-in redirect target.
   function callbackURL(): string {
-    const callbackUrl = searchParams.get("callbackUrl");
-    return callbackUrl ? `${window.location.origin}${callbackUrl}` : window.location.origin;
+    const safePath = safeCallbackPath(searchParams.get("callbackUrl"), window.location.origin);
+    return safePath ? `${window.location.origin}${safePath}` : window.location.origin;
   }
 
   async function handleSubmit(event: React.FormEvent) {
