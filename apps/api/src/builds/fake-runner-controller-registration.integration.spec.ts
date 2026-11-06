@@ -42,10 +42,10 @@ describe.skipIf(!hasLiveServices)('BuildsModule controller registration (live Po
     const { createApp } = await import('../create-app.js');
     app = await createApp();
     await app.init();
-  });
+  }, 30_000);
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
     delete process.env.BUILD_RUNNER;
     delete process.env.API_PUBLIC_URL;
     delete process.env.GITHUB_DISPATCH_TOKEN;
