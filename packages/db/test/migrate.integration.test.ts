@@ -65,6 +65,10 @@ describe.skipIf(!hasFullEnv)('db:migrate (live Postgres)', () => {
       expect(afterCount).toBe(beforeCount);
       expect(afterCount).toBeGreaterThan(0);
     },
+    // Runs the whole migration pipeline (now 19 files) twice against a real DB — close
+    // to Vitest's 5s default even in isolation, and the full monorepo suite's shared-DB
+    // contention pushed it over that once.
+    15_000,
   );
 
   it('mobilio_migrator owns every table and RLS is forced on every org_id table', async () => {
