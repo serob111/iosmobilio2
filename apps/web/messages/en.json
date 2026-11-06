@@ -82,14 +82,21 @@
     "saveAsProject": "Save as project",
     "saving": "Saving…",
     "openSavedProject": "Open saved project",
-    "chooseOrganization": "Choose an organization"
+    "chooseOrganization": "Choose an organization",
+    "workspaceNameLabel": "Workspace name",
+    "workspaceNamePlaceholder": "Workspace name",
+    "createWorkspaceAndSave": "Create workspace and save",
+    "loadError": "Something went wrong loading your draft.",
+    "retry": "Retry"
   },
   "projects": {
     "title": "Your projects",
     "empty": "No projects yet.",
     "openProject": "Open",
     "organization": "Organization",
-    "notFound": "Project not found"
+    "notFound": "Project not found",
+    "loadError": "Something went wrong loading this project.",
+    "retry": "Retry"
   },
   "builds": {
     "title": "Build .ipa",

@@ -82,14 +82,21 @@
     "saveAsProject": "Сохранить как проект",
     "saving": "Сохраняем…",
     "openSavedProject": "Открыть сохранённый проект",
-    "chooseOrganization": "Выберите организацию"
+    "chooseOrganization": "Выберите организацию",
+    "workspaceNameLabel": "Название рабочего пространства",
+    "workspaceNamePlaceholder": "Название рабочего пространства",
+    "createWorkspaceAndSave": "Создать рабочее пространство и сохранить",
+    "loadError": "Не удалось загрузить черновик.",
+    "retry": "Повторить"
   },
   "projects": {
     "title": "Ваши проекты",
     "empty": "Пока нет проектов.",
     "openProject": "Открыть",
     "organization": "Организация",
-    "notFound": "Проект не найден"
+    "notFound": "Проект не найден",
+    "loadError": "Не удалось загрузить проект.",
+    "retry": "Повторить"
   },
   "builds": {
     "title": "Сборка .ipa",

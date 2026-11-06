@@ -63,6 +63,20 @@ export async function fetchMe(): Promise<MeResponse | null> {
   return res.json() as Promise<MeResponse>;
 }
 
+/** For a signed-in user with no organization yet — used to spin up a personal workspace on the spot, then immediately claimDraft(orgId) into it. */
+export async function createOrganization(name: string): Promise<{ orgId: string; slug: string }> {
+  const res = await fetch(`${API_BASE_URL}/orgs`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    return throwApiError(res);
+  }
+  return res.json() as Promise<{ orgId: string; slug: string }>;
+}
+
 export interface Tab {
   title: string;
   icon: string;
