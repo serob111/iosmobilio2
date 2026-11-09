@@ -358,6 +358,17 @@ describe('regenerateProjectPreviewLink', () => {
       url: 'http://localhost:3100/preview/new-xyz',
     });
   });
+
+  it('throws ApiError on a non-ok response', async () => {
+    server.use(
+      http.post(`${API_BASE}/orgs/org1/projects/p1/preview-link/regenerate`, () =>
+        HttpResponse.json({ error: { code: 'FORBIDDEN', message: 'nope' } }, { status: 403 }),
+      ),
+    );
+    const error = await regenerateProjectPreviewLink('org1', 'p1').catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('FORBIDDEN');
+  });
 });
 
 describe('builds', () => {
@@ -368,6 +379,17 @@ describe('builds', () => {
       ),
     );
     await expect(startBuild('org1', 'p1')).resolves.toEqual({ id: 'build-1', status: 'queued' });
+  });
+
+  it('startBuild throws ApiError on a non-ok response', async () => {
+    server.use(
+      http.post(`${API_BASE}/orgs/org1/projects/p1/builds`, () =>
+        HttpResponse.json({ error: { code: 'BUILD_IN_PROGRESS', message: 'nope' } }, { status: 409 }),
+      ),
+    );
+    const error = await startBuild('org1', 'p1').catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('BUILD_IN_PROGRESS');
   });
 
   it('listBuilds returns every build for the project', async () => {
@@ -382,6 +404,28 @@ describe('builds', () => {
     const row = { id: 'build-1', status: 'building', runId: 123, error: null, startedAt: 'now', finishedAt: null, createdAt: 'now' };
     server.use(http.get(`${API_BASE}/orgs/org1/projects/p1/builds/build-1`, () => HttpResponse.json(row)));
     await expect(getBuild('org1', 'p1', 'build-1')).resolves.toEqual(row);
+  });
+
+  it('listBuilds throws ApiError on a non-ok response', async () => {
+    server.use(
+      http.get(`${API_BASE}/orgs/org1/projects/p1/builds`, () =>
+        HttpResponse.json({ error: { code: 'FORBIDDEN', message: 'nope' } }, { status: 403 }),
+      ),
+    );
+    const error = await listBuilds('org1', 'p1').catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('FORBIDDEN');
+  });
+
+  it('getBuild throws ApiError on a non-ok response', async () => {
+    server.use(
+      http.get(`${API_BASE}/orgs/org1/projects/p1/builds/build-1`, () =>
+        HttpResponse.json({ error: { code: 'NOT_FOUND', message: 'nope' } }, { status: 404 }),
+      ),
+    );
+    const error = await getBuild('org1', 'p1', 'build-1').catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('NOT_FOUND');
   });
 
   it("buildIpaUrl builds a plain href, deliberately not runUrl", () => {

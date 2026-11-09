@@ -14,7 +14,9 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['lib/**/*.ts'],
-      exclude: ['lib/**/*.d.ts'],
+      // authClient.ts/fonts.ts are pure SDK/config initialization (Better Auth client
+      // factory, next/font/google setup) with no logic of their own to exercise.
+      exclude: ['lib/**/*.d.ts', 'lib/authClient.ts', 'lib/fonts.ts'],
       thresholds: {
         lines: 80,
         statements: 80,
