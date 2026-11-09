@@ -77,6 +77,15 @@ jobs:
 
       - run: npm ci
 
+      # apps/api/src/preview/proxy/compression.integration.spec.ts launches a real
+      # Chromium (the `playwright` package, not @playwright/test) to prove gzip/br/
+      # deflate decompression + the proxy's own *.localhost subdomain routing work in
+      # an actual browser, not just via supertest — `npm ci`'s postinstall doesn't
+      # reliably download the browser binary on every runner, so this is explicit.
+      - name: Install Playwright's Chromium (for apps/api's own browser-based integration test)
+        working-directory: apps/api
+        run: npx playwright install --with-deps chromium
+
       # Run as a plain step, not a `services:` container — GitHub Actions service
       # containers have no way to pass a command to the entrypoint, and
       # cgr.dev/chainguard/minio needs `server /data ...` args to actually start the
