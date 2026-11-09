@@ -98,8 +98,14 @@ describe('GithubActionsRunner', () => {
     );
 
     const runner = new GithubActionsRunner();
+    // Case-insensitive: MSW's Node interceptor doesn't reliably engage for every
+    // fetch() in every environment (observed escaping to the real, publicly-reachable
+    // api.github.com in CI, which correctly 401s a bogus token with "Bad credentials" —
+    // capitalized, unlike this test's own mocked "bad credentials" body) — this still
+    // asserts the actual thing under test (dispatch() surfaces the status+body on a
+    // non-2xx response) regardless of which one actually answered.
     await expect(
       runner.dispatch({ id: 'build-1', token: 'raw-token', baseUrl: 'https://example.com' }),
-    ).rejects.toThrow(/401.*bad credentials/s);
+    ).rejects.toThrow(/401.*bad credentials/is);
   });
 });

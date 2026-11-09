@@ -276,8 +276,19 @@ describe.skipIf(!hasLiveServices)(
           .send(zipB),
       ]);
 
+      // The loser's error code depends on exactly where it lost: if its own
+      // BuildRunnerGuard token lookup (a separate query, before uploadIpa's own
+      // conditional-WHERE update) still ran while the build was 'building', it reaches
+      // uploadIpa and gets 409 INVALID_BUILD_STATE from the WHERE-clause recheck
+      // (see builds.service.ts's comment on that update). If instead the winner's
+      // commit (which clears the build's tokenHash as part of finishing) completes
+      // before the loser's own guard query runs, that query no longer resolves the
+      // token to anything and the loser never reaches the service at all — 404
+      // BUILD_NOT_FOUND from the guard itself. Either way exactly one request won and
+      // the other didn't, which is the actual thing under test.
       const statuses = [resA.status, resB.status].sort();
-      expect(statuses).toEqual([201, 409]);
+      expect(statuses[0]).toBe(201);
+      expect([404, 409]).toContain(statuses[1]);
       const winningZip = resA.status === 201 ? zipA : zipB;
 
       const getBuildRes = await request(app.getHttpServer())
