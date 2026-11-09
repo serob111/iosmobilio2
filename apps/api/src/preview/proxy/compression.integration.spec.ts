@@ -5,6 +5,7 @@ import { gzipSync, brotliCompressSync, deflateSync } from 'node:zlib';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { chromium, type Browser } from 'playwright';
+import { Redis } from 'ioredis';
 import { runInTenantContext, getTenantDb, schema } from '@mobilio/db';
 import { createApp } from '../../create-app.js';
 import { DbService } from '../../db/db.service.js';
@@ -101,6 +102,7 @@ describe.skipIf(!hasLiveServices)(
     let upstreamPort: number;
     let browser: Browser;
     let mailLogFile: string;
+    let redis: Redis;
 
     beforeAll(async () => {
       const { tmpdir } = await import('node:os');
@@ -121,12 +123,28 @@ describe.skipIf(!hasLiveServices)(
       upstreamPort = (upstream.address() as AddressInfo).port;
 
       browser = await chromium.launch();
+      redis = new Redis(process.env.REDIS_URL!);
     }, 60_000);
+
+    // Same reasoning as preview.integration.spec.ts's own resetRateLimitBuckets — the
+    // magic-link sign-in/verify rate limit is shared across every test *file* in this
+    // vitest run (fileParallelism:false means they all run in one process against the
+    // same Redis), so a bucket left near its limit by an earlier file can tip this
+    // file's own single sign-in over into a 429. Confirmed by this exact failure
+    // showing up in a real CI run once this file was added to the suite.
+    beforeEach(async () => {
+      const keys = await redis.keys('*|/sign-in/magic-link');
+      keys.push(...(await redis.keys('*|/magic-link/verify')));
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    });
 
     afterAll(async () => {
       await browser.close();
       await new Promise((resolve) => upstream.close(resolve));
       await app.close();
+      await redis.quit();
       delete process.env.MAIL_LOG_FILE;
       delete process.env.BUILD_RUNNER;
       delete process.env.CSRF_DISABLED_FOR_TESTING;
