@@ -131,16 +131,24 @@ npm run dev
 Поднимет `postgres`+`redis` через Docker Compose, затем параллельно запустит `web`, `api`, `worker`
 (`concurrently`). Только инфраструктуру — `npm run dev:infra`.
 
-### Вариант 2 — всё в Docker
+### Вариант 2 — инфраструктура + api/worker в Docker, web нативно
 
 ```
 docker compose up
+docker compose exec -T postgres true   # не обязательно, просто дождаться healthy
+npm run dev --workspace=mobilio-web    # web у `apps/web` своего Dockerfile/сервиса ещё нет
 ```
 
-Перед первым запуском скопируй `.env.example` → `.env` в `apps/api` и `apps/worker` (и при желании
-заполни `SENTRY_DSN`, `GOOGLE_CLIENT_ID`/`SECRET`, `RESEND_API_KEY` — все опциональны, см. ниже).
-`migrate`-сервис сам поднимет роли и применит миграции перед стартом `api`/`worker`
-(`depends_on: service_completed_successfully`) — отдельный шаг не нужен.
+`docker compose up` поднимает `postgres`/`redis`/`minio` + одноразовые `createbucket`/`migrate`
+(роли и миграции — автоматически, `depends_on: service_completed_successfully`, отдельный шаг не
+нужен) + `api` (порт `3001`) и `worker` — **не** `web`: он всегда запускается нативно, даже в этом
+варианте. `api`/`worker`'s `environment:` в `docker-compose.yml` уже содержит рабочие
+dev-заглушки (`BETTER_AUTH_SECRET`, `PREVIEW_PROXY_DOMAIN`/`PREVIEW_SLUG_KEY` и т.д. — без них
+`createApp()` не стартует, см. `validatePreviewEnv`/Better Auth) — `apps/api/.env`/`apps/worker/.env`
+эти два контейнера **не читают** (только «Вариант 1», где `api`/`worker` запускаются нативно,
+читает соответствующий `.env`). Переопределить что-то (`SENTRY_DSN`, `GOOGLE_CLIENT_ID`/`SECRET`,
+`RESEND_API_KEY` — все опциональны) — правь `docker-compose.yml`'s `api:`/`worker:` блоки напрямую
+или добавь `env_file:`.
 
 `GET /health` на `api` проверяет живость Postgres и Redis и отвечает 200/503.
 

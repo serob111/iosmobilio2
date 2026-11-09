@@ -122,6 +122,32 @@ services:
       # Override to "github" with those set if you actually want this container
       # dispatching real builds; local dev otherwise has no use for it.
       BUILD_RUNNER: fake
+      # Everything below is required unconditionally (createApp() refuses to boot
+      # without it — see validatePreviewEnv/BETTER_AUTH_SECRET) — dev-only placeholder
+      # values, not meant for anything beyond this local Docker flow. apps/web still
+      # runs natively even in this "everything in Docker" variant (no web service/
+      # Dockerfile exists yet), so these are anchored to its native default port 3000.
+      BETTER_AUTH_SECRET: dev-only-not-a-real-secret
+      WEB_ORIGIN: http://localhost:3000
+      # Reachable from the browser, not api's own internal container port — this is
+      # what magic-link URLs/OAuth redirects and the preview proxy's own port get built
+      # from, so it must match the host-side mapping below (3001), not PORT (3000).
+      API_BASE_URL: http://localhost:3001
+      # The claim-token/session cookies default to Secure (HTTPS-only) — this flow is
+      # plain HTTP, so without this, drafts/sign-in would silently never persist a
+      # cookie at all. Same reasoning as apps/api/.env.example's own COOKIE_SECURE=false.
+      COOKIE_SECURE: 'false'
+      # Must be a different host from WEB_ORIGIN above — "preview.localhost" (not bare
+      # "localhost") resolves to loopback in Chromium/Firefox with no DNS/hosts-file
+      # entry needed, same convention as apps/api/.env.example and playwright.config.ts.
+      PREVIEW_PROXY_DOMAIN: preview.localhost
+      PREVIEW_PROXY_SCHEME: http
+      PREVIEW_PROXY_PORT: '3001'
+      # AES-256-GCM key for share-link slug encryption (preview-slug-crypto.ts) — any 32
+      # raw bytes, base64; this one decodes to the literal ASCII string
+      # "mobilio-dev-only-preview-slug-k!". Generate a real one for anything beyond this
+      # local Docker flow (`openssl rand -base64 32`).
+      PREVIEW_SLUG_KEY: bW9iaWxpby1kZXYtb25seS1wcmV2aWV3LXNsdWctayE=
     ports:
       - '3001:3000'
     depends_on:
