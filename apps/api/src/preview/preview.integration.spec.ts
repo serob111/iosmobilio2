@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { http, HttpResponse } from 'msw';
 import { Redis } from 'ioredis';
-import { createDb, schema, eq, runInTokenLookupContext, getTenantDb } from '@mobilio/db';
+import { createDb, schema, eq, runInTenantContext, runInTokenLookupContext, getTenantDb } from '@mobilio/db';
 import { server } from '../../test/mocks/server.js';
 import { createApp } from '../create-app.js';
 
@@ -215,6 +215,81 @@ describe.skipIf(!hasLiveServices)(
           .set('Cookie', cookie)
           .expect(200);
         expect(getRes.body.url).toBe(firstRes.body.url);
+      });
+
+      it('a broken active share link (undecryptable slug_enc, e.g. after a PREVIEW_SLUG_KEY rotation) 404s on GET and is transparently replaced on POST', async () => {
+        mockSite();
+        const cookie = await signInByMagicLink(`itest-preview-broken-${Date.now()}@example.com`);
+        const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+        const orgId = me.body.organizations[0].id as string;
+        const userId = me.body.user.id as string;
+        const createRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects`)
+          .set('Cookie', cookie)
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const projectId = createRes.body.id as string;
+
+        const firstRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        const firstSlug = slugFromUrl(firstRes.body.url as string);
+
+        // Simulates a PREVIEW_SLUG_KEY rotation: the row is still active (not revoked),
+        // but its slug_enc can no longer be decrypted with the key the running api has —
+        // 40 bytes is long enough to pass decryptPreviewSlug's length check and reach
+        // the actual GCM auth-tag verification, which then fails for real.
+        await runInTenantContext(migrator.db, { orgId, userId }, () =>
+          getTenantDb()
+            .update(schema.previewLinks)
+            .set({ slugEnc: Buffer.alloc(40, 1).toString('base64') })
+            .where(eq(schema.previewLinks.projectId, projectId)),
+        );
+
+        const getRes = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(404);
+        expect(getRes.body.error.code).toBe('PREVIEW_LINK_NOT_FOUND');
+
+        // POST transparently revokes the broken row and creates a working replacement —
+        // never a 500, and the old (now-broken) slug no longer resolves either.
+        const postRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        const newSlug = slugFromUrl(postRes.body.url as string);
+        expect(newSlug).not.toBe(firstSlug);
+        await request(app.getHttpServer()).get(`/preview/${newSlug}`).expect(200);
+
+        const confirmRes = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(200);
+        expect(confirmRes.body.url).toBe(postRes.body.url);
+      });
+
+      it('two concurrent POST .../preview-link calls for the same project return the same url and never 500', async () => {
+        mockSite();
+        const cookie = await signInByMagicLink(`itest-preview-race-${Date.now()}@example.com`);
+        const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+        const orgId = me.body.organizations[0].id as string;
+        const createRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects`)
+          .set('Cookie', cookie)
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const projectId = createRes.body.id as string;
+
+        const [resA, resB] = await Promise.all([
+          request(app.getHttpServer()).post(`/orgs/${orgId}/projects/${projectId}/preview-link`).set('Cookie', cookie),
+          request(app.getHttpServer()).post(`/orgs/${orgId}/projects/${projectId}/preview-link`).set('Cookie', cookie),
+        ]);
+
+        expect(resA.status).toBe(201);
+        expect(resB.status).toBe(201);
+        expect(resA.body.url).toBe(resB.body.url);
       });
 
       it('GET .../preview-link 404s (PREVIEW_LINK_NOT_FOUND) when no share link has been created yet', async () => {

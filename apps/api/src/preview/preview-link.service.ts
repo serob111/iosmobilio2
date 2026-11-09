@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   runInTenantContext,
   runInTokenLookupContext,
@@ -8,6 +8,7 @@ import {
   eq,
   and,
   isNull,
+  type Db,
 } from '@mobilio/db';
 import type { ProjectConfig } from '@mobilio/config';
 import { type ObjectStorage, projectIconKey, draftIconKey } from '@mobilio/storage';
@@ -46,8 +47,27 @@ function ownerWhere(owner: Owner) {
     : eq(schema.previewLinks.draftId, owner.draftId);
 }
 
+/**
+ * Both preview_links_one_active_share_per_project/_draft (0017) are hit by the exact
+ * same race: two concurrent POSTs both pass the "is one already active" check, then
+ * both attempt the insert — whichever loses gets this, the DB-level backstop behind the
+ * check-then-insert above.
+ */
+function isActiveShareLinkConflict(error: unknown): boolean {
+  const cause = (error as { cause?: { code?: string; constraint?: string } } | undefined)?.cause;
+  return (
+    cause?.code === '23505' &&
+    (cause?.constraint === 'preview_links_one_active_share_per_project' ||
+      cause?.constraint === 'preview_links_one_active_share_per_draft')
+  );
+}
+
+type ShareLinkLookup = { status: 'ok'; url: string } | { status: 'none' } | { status: 'broken'; rowId: string };
+
 @Injectable()
 export class PreviewLinkService {
+  private readonly logger = new Logger(PreviewLinkService.name);
+
   constructor(
     private readonly dbService: DbService,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStorage,
@@ -56,25 +76,59 @@ export class PreviewLinkService {
   /**
    * Looks up the currently-active (not revoked, not expired) 'share' link for this
    * owner, if any — used both by the GET endpoint (redisplay) and by "create if none
-   * active" (to decide whether to actually insert a new row). Returns null rather than
-   * throwing; callers that need a 404 (the GET endpoint itself) do that at the call site.
+   * active" (to decide whether to actually insert a new row). A row with no slug_enc, or
+   * one that fails to decrypt (e.g. PREVIEW_SLUG_KEY was rotated after it was written),
+   * is reported as 'broken' rather than silently treated the same as 'none': the GET
+   * endpoint still 404s for it either way, but a caller that's about to *insert* a
+   * replacement needs to know there's a row occupying the one-active-share slot that it
+   * must revoke first, or the insert will violate the partial unique index. Never logs
+   * the ciphertext itself, only the row id.
    */
-  private async findActiveShareLink(owner: Owner): Promise<{ url: string } | null> {
+  private async lookupActiveShareLink(owner: Owner): Promise<ShareLinkLookup> {
     const [row] = await getTenantDb()
       .select()
       .from(schema.previewLinks)
       .where(and(ownerWhere(owner), eq(schema.previewLinks.kind, 'share'), isNull(schema.previewLinks.revokedAt)));
-    if (!row || !row.slugEnc) return null;
-    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
-    return { url: previewUrl(decryptPreviewSlug(row.slugEnc)) };
+    if (!row) return { status: 'none' };
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return { status: 'none' };
+    if (!row.slugEnc) {
+      this.logger.warn({ previewLinkId: row.id }, 'active share link has no slug_enc');
+      return { status: 'broken', rowId: row.id };
+    }
+    try {
+      return { status: 'ok', url: previewUrl(decryptPreviewSlug(row.slugEnc)) };
+    } catch {
+      this.logger.warn({ previewLinkId: row.id }, 'failed to decrypt active share link slug (PREVIEW_SLUG_KEY rotated?)');
+      return { status: 'broken', rowId: row.id };
+    }
   }
 
-  private async insertShareLink(owner: Owner, expiresAt?: Date): Promise<{ url: string }> {
+  /**
+   * Inserts a fresh share link inside its own nested transaction (a Postgres SAVEPOINT,
+   * via drizzle's own nested .transaction() — not a second top-level transaction): if the
+   * insert loses a concurrent race against the partial unique index, only this savepoint
+   * rolls back, not the whole outer runInTenantContext/runInTokenLookupContext
+   * transaction — the reread that follows still runs inside that outer transaction/
+   * context. Without the savepoint, the unique-violation error would instead abort the
+   * *entire* surrounding transaction at the Postgres level, and the reread would just
+   * fail too ("current transaction is aborted").
+   */
+  private async insertShareLinkOrReread(owner: Owner, expiresAt?: Date): Promise<{ url: string }> {
+    const db = getTenantDb() as unknown as Db;
+    try {
+      return await db.transaction((tx) => this.insertShareLink(tx as unknown as Db, owner, expiresAt));
+    } catch (error) {
+      if (!isActiveShareLinkConflict(error)) throw error;
+      const retry = await this.lookupActiveShareLink(owner);
+      if (retry.status === 'ok') return { url: retry.url };
+      throw error;
+    }
+  }
+
+  private async insertShareLink(db: Db, owner: Owner, expiresAt?: Date): Promise<{ url: string }> {
     const { rawSlug, slugHash } = generatePreviewSlug();
     const slugEnc = encryptPreviewSlug(rawSlug);
-    await getTenantDb()
-      .insert(schema.previewLinks)
-      .values({ ...owner, kind: 'share', slugHash, slugEnc, expiresAt });
+    await db.insert(schema.previewLinks).values({ ...owner, kind: 'share', slugHash, slugEnc, expiresAt });
     return { url: previewUrl(rawSlug) };
   }
 
@@ -107,35 +161,44 @@ export class PreviewLinkService {
 
   // --- share links: at most one active at a time, explicitly fetched/created/regenerated ---
 
-  /** GET .../preview-link — 404s (PREVIEW_LINK_NOT_FOUND) if nothing is currently active. */
+  /** GET .../preview-link — 404s (PREVIEW_LINK_NOT_FOUND) if nothing is currently active (including a 'broken' row — this never mutates). */
   async getActiveShareLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
-    const link = await runInTenantContext(this.dbService.db, { orgId, userId }, () =>
-      this.findActiveShareLink({ projectId, orgId }),
+    const lookup = await runInTenantContext(this.dbService.db, { orgId, userId }, () =>
+      this.lookupActiveShareLink({ projectId, orgId }),
     );
-    if (!link) throw new NotFoundException({ code: 'PREVIEW_LINK_NOT_FOUND', message: 'No active share link' });
-    return link;
+    if (lookup.status !== 'ok') throw new NotFoundException({ code: 'PREVIEW_LINK_NOT_FOUND', message: 'No active share link' });
+    return { url: lookup.url };
   }
 
   async getActiveShareLinkForDraft(tokenHash: string, draftId: string): Promise<{ url: string }> {
-    const link = await runInTokenLookupContext(this.dbService.db, tokenHash, () =>
-      this.findActiveShareLink({ draftId }),
+    const lookup = await runInTokenLookupContext(this.dbService.db, tokenHash, () =>
+      this.lookupActiveShareLink({ draftId }),
     );
-    if (!link) throw new NotFoundException({ code: 'PREVIEW_LINK_NOT_FOUND', message: 'No active share link' });
-    return link;
+    if (lookup.status !== 'ok') throw new NotFoundException({ code: 'PREVIEW_LINK_NOT_FOUND', message: 'No active share link' });
+    return { url: lookup.url };
   }
 
-  /** POST .../preview-link — returns the existing active share link if there is one, otherwise creates it. Never revokes. */
+  /**
+   * POST .../preview-link — returns the existing active share link if there is one,
+   * otherwise creates it. A 'broken' active row (undecryptable/missing slug_enc) is
+   * revoked first, in the same transaction, so the insert that follows doesn't collide
+   * with it on the partial unique index.
+   */
   async createShareLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
     return runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
-      const existing = await this.findActiveShareLink({ projectId, orgId });
-      return existing ?? this.insertShareLink({ projectId, orgId });
+      const lookup = await this.lookupActiveShareLink({ projectId, orgId });
+      if (lookup.status === 'ok') return { url: lookup.url };
+      if (lookup.status === 'broken') await this.revokeActiveShareLink({ projectId, orgId });
+      return this.insertShareLinkOrReread({ projectId, orgId });
     });
   }
 
   async createShareLinkForDraft(tokenHash: string, draftId: string, draftExpiresAt: Date): Promise<{ url: string }> {
     return runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
-      const existing = await this.findActiveShareLink({ draftId });
-      return existing ?? this.insertShareLink({ draftId }, draftExpiresAt);
+      const lookup = await this.lookupActiveShareLink({ draftId });
+      if (lookup.status === 'ok') return { url: lookup.url };
+      if (lookup.status === 'broken') await this.revokeActiveShareLink({ draftId });
+      return this.insertShareLinkOrReread({ draftId }, draftExpiresAt);
     });
   }
 
@@ -143,14 +206,14 @@ export class PreviewLinkService {
   async regenerateShareLinkForProject(orgId: string, userId: string, projectId: string): Promise<{ url: string }> {
     return runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
       await this.revokeActiveShareLink({ projectId, orgId });
-      return this.insertShareLink({ projectId, orgId });
+      return this.insertShareLinkOrReread({ projectId, orgId });
     });
   }
 
   async regenerateShareLinkForDraft(tokenHash: string, draftId: string, draftExpiresAt: Date): Promise<{ url: string }> {
     return runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
       await this.revokeActiveShareLink({ draftId });
-      return this.insertShareLink({ draftId }, draftExpiresAt);
+      return this.insertShareLinkOrReread({ draftId }, draftExpiresAt);
     });
   }
 
