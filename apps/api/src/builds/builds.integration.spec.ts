@@ -187,7 +187,11 @@ describe.skipIf(!hasLiveServices)(
         const startRes = await request(app.getHttpServer())
           .post(`/builds/${buildId}/start`)
           .set(...bearer(rawToken))
-          .send({ runId: 123, runUrl: 'https://github.com/example/example/actions/runs/123' })
+          // A real-looking run id, not a toy value: GitHub Actions run ids have long since
+          // exceeded int4's ~2.1 billion ceiling (packages/db/migrations/0019), and this
+          // would 500 on a "value out of range for type integer" if that column ever
+          // regressed back to integer.
+          .send({ runId: 43268190556, runUrl: 'https://github.com/example/example/actions/runs/43268190556' })
           .expect(201);
         expect(startRes.body.status).toBe('building');
 
@@ -195,7 +199,11 @@ describe.skipIf(!hasLiveServices)(
         await request(app.getHttpServer())
           .post(`/builds/${buildId}/start`)
           .set(...bearer(rawToken))
-          .send({ runId: 123, runUrl: 'https://github.com/example/example/actions/runs/123' })
+          // A real-looking run id, not a toy value: GitHub Actions run ids have long since
+          // exceeded int4's ~2.1 billion ceiling (packages/db/migrations/0019), and this
+          // would 500 on a "value out of range for type integer" if that column ever
+          // regressed back to integer.
+          .send({ runId: 43268190556, runUrl: 'https://github.com/example/example/actions/runs/43268190556' })
           .expect(201);
 
         const configRes = await request(app.getHttpServer())
