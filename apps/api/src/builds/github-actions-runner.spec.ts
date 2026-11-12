@@ -37,7 +37,9 @@ describe('GithubActionsRunner', () => {
     process.env.GITHUB_REF = 'main';
 
     let capturedAuth: string | null = null;
-    let capturedBody: { ref: string; inputs: { buildId: string; buildTokenEnc: string; baseUrl: string } } | undefined;
+    let capturedBody:
+      | { ref: string; inputs: { buildId: string; buildTokenEnc: string; baseUrl: string; useTestConfig: string } }
+      | undefined;
     server.use(
       http.post(
         'https://api.github.com/repos/serob111/iosmobilio2/actions/workflows/build-ipa.yml/dispatches',
@@ -56,6 +58,11 @@ describe('GithubActionsRunner', () => {
     expect(capturedBody?.ref).toBe('main');
     expect(capturedBody?.inputs.buildId).toBe('build-1');
     expect(capturedBody?.inputs.baseUrl).toBe('https://example.com');
+    // build-ipa.yml's useTestConfig input defaults to true (so a manual, no-inputs run
+    // from the GitHub UI safely builds the test fixture) — the REST dispatch API applies
+    // that default whenever an input is omitted, so every real dispatch must say 'false'
+    // explicitly or it silently builds the test fixture and skips every apps/api callback.
+    expect(capturedBody?.inputs.useTestConfig).toBe('false');
     // Never the raw token itself in the dispatch body — only a ciphertext that decrypts
     // back to it with the same BUILD_TOKEN_KEY the workflow's own secret would hold.
     expect(capturedBody?.inputs.buildTokenEnc).not.toBe('raw-token-value');
