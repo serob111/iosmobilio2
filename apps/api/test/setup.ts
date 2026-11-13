@@ -53,24 +53,17 @@ process.env.PREVIEW_SLUG_KEY ??= Buffer.alloc(32, 7).toString('base64');
 // in-process). A connect()-layer guard can't tell that apart from a real leak by
 // inspecting the call's arguments — matched or unmatched, mocked or genuinely bypassed,
 // the call looks identical. What *can* tell them apart is whether MSW's own machinery is
-// on the call stack at all: every one of this app's specs that talks to an external host
-// already sets its own onUnhandledRequest ('error' or 'bypass') — that is MSW's own,
-// existing, correct safety net for "no handler matched this", and this guard isn't
-// trying to duplicate it. This guard's actual job is the case MSW can't cover at all:
-// a connect() that never went through MSW's patch in the first place — no server.listen()
-// call in that file, a client library MSW doesn't patch, or a stray real request from
-// code that forgot to mock anything.
+// on the call stack at all — but that only works because every spec that talks to an
+// external host is required to use test/msw-policy.ts's onUnhandledRequest callback
+// (not the 'bypass'/'warn' string options, which let an unmatched request straight
+// through to this same real connect() with no way for this guard to tell it apart from
+// a matched one): that callback throws for anything outside this same allow-list,
+// BEFORE the request ever reaches the socket layer, so a request that actually arrives
+// here from inside MSW already passed that check.
 import net from 'node:net';
+import { isAllowedNetworkHost } from './allowed-network-hosts.js';
 
 Error.stackTraceLimit = Math.max(Error.stackTraceLimit, 50);
-
-const ALLOWED_NETWORK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres', 'redis', 'minio']);
-
-function isAllowedNetworkHost(host: unknown): boolean {
-  if (typeof host !== 'string' || host.length === 0) return true; // no host (e.g. a unix socket path) — not a remote-network connection
-  if (ALLOWED_NETWORK_HOSTS.has(host)) return true;
-  return host.startsWith('127.'); // any loopback address in 127.0.0.0/8, not just 127.0.0.1
-}
 
 function extractHost(args: unknown[]): unknown {
   const first = args[0];

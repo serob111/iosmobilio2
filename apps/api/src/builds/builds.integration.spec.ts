@@ -62,8 +62,10 @@ describe.skipIf(!hasLiveServices)(
       fakeRunner = app.get(FakeRunner);
 
       redis = new Redis(process.env.REDIS_URL!);
-      // msw@3.0.4's ListenOptions wraps SharedOptions in type-fest's PartialDeep, which mishandles onUnhandledRequest's function-in-union value type — the cast works around a type-only issue, not a real API mismatch.
-      server.listen({ onUnhandledRequest: 'bypass' } as Parameters<typeof server.listen>[0]);
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     // Each test signs in once via magic-link, and Better Auth's own sign-in rate limit

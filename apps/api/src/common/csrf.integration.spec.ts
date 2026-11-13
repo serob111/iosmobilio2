@@ -47,8 +47,10 @@ describe.skipIf(!hasLiveServices)(
     beforeAll(async () => {
       app = await createApp();
       await app.init();
-      // msw@3.0.4's ListenOptions wraps SharedOptions in type-fest's PartialDeep, which mishandles onUnhandledRequest's function-in-union value type — the cast works around a type-only issue, not a real API mismatch.
-      server.listen({ onUnhandledRequest: 'bypass' } as Parameters<typeof server.listen>[0]);
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     afterAll(async () => {
