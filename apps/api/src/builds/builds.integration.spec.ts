@@ -395,7 +395,12 @@ describe.skipIf(!hasLiveServices)(
           .expect(200);
         expect(getBuildRes.body.status).toBe('building');
       },
-      90000,
+      // 90000 cut it too close in practice — a real run (both locally and on a GitHub
+      // Actions runner) took just over 90s to construct and stream a 300MB buffer
+      // through supertest, timing the test out despite the actual request completing
+      // and asserting correctly. This only widens the margin; the assertions above are
+      // unchanged.
+      150000,
     );
 
     it('404s the same for a wrong/unknown build token (no signal that leaks whether a build exists)', async () => {
