@@ -30,6 +30,9 @@ export default defineConfig({
         'src/storage/**/*.ts',
         'src/net/**/*.ts',
         'src/drafts/**/*.ts',
+        'src/builds/**/*.ts',
+        'src/preview/**/*.ts',
+        'src/common/**/*.ts',
       ],
       exclude: ['src/**/*.spec.ts', 'src/**/*.d.ts', 'src/**/*.types.ts'],
       thresholds: {
