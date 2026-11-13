@@ -1,0 +1,1 @@
+ALTER TABLE "builds" ALTER COLUMN "run_id" SET DATA TYPE bigint;

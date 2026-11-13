@@ -63,7 +63,10 @@ describe.skipIf(!hasLiveServices)(
       // bypass, not error: this file's own requests to the live NestJS app (via supertest)
       // don't match any registered handler below and must pass through untouched — only
       // analyzeSite's one external fetch to the fake site url is actually mocked.
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     // See auth-flow.integration.spec.ts for why this is suffix-matched rather than a

@@ -30,6 +30,9 @@ export default defineConfig({
         'src/storage/**/*.ts',
         'src/net/**/*.ts',
         'src/drafts/**/*.ts',
+        'src/builds/**/*.ts',
+        'src/preview/**/*.ts',
+        'src/common/**/*.ts',
       ],
       exclude: ['src/**/*.spec.ts', 'src/**/*.d.ts', 'src/**/*.types.ts'],
       thresholds: {
@@ -37,6 +40,14 @@ export default defineConfig({
         statements: 80,
         functions: 80,
         branches: 80,
+        // Per-glob thresholds in addition to (not instead of) the global one above —
+        // the global aggregate can clear 80% while one specific area (e.g. preview's
+        // branch coverage) sits well under it, hidden by better-covered modules
+        // elsewhere in the same aggregate. Each of these must independently clear 80%
+        // on every metric now, same as the global figure.
+        'src/builds/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
+        'src/preview/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
+        'src/common/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
       },
     },
   },

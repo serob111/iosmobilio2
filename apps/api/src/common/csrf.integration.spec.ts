@@ -47,7 +47,10 @@ describe.skipIf(!hasLiveServices)(
     beforeAll(async () => {
       app = await createApp();
       await app.init();
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     afterAll(async () => {

@@ -54,7 +54,10 @@ describe.skipIf(!hasLiveServices)(
       await app.init();
 
       redis = new Redis(process.env.REDIS_URL!);
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     async function resetRateLimitBuckets(): Promise<void> {
@@ -419,3 +422,33 @@ describe.skipIf(!hasLiveServices)(
     });
   },
 );
+
+// Not gated on hasLiveServices — this is about the shared MSW policy itself
+// (test/msw-policy.ts), not this file's own live-infra integration tests, and
+// shouldn't be skipped just because Postgres/Redis/MinIO aren't configured locally.
+// Proves the thing this whole file previously got wrong by setting
+// onUnhandledRequest: 'bypass' (not a real msw@3.0.4 option at all — see
+// msw-policy.ts): an unmocked request to a real, non-local host must fail loudly,
+// never reach the real network.
+describe('shared MSW policy (test/msw-policy.ts)', () => {
+  beforeAll(() => server.listen());
+  afterAll(() => server.close());
+  afterEach(() => server.resetHandlers());
+
+  it('rejects an unmocked fetch to a real external host instead of letting it reach the real network', async () => {
+    const start = Date.now();
+    await expect(fetch('https://example.com/')).rejects.toThrow(/fetch failed/);
+    // A real DNS/TCP round trip to a real host takes at least tens of milliseconds for
+    // DNS alone, usually far more — this being near-instant is itself evidence nothing
+    // real was ever attempted (confirmed separately by tracing it: msw's own
+    // HttpResponse.error() destroys the request in-process with no network I/O).
+    expect(Date.now() - start).toBeLessThan(2000);
+  });
+
+  it('still lets a request this file explicitly mocked through, even to the same otherwise-disallowed host', async () => {
+    server.use(http.get('https://example.com/', () => HttpResponse.text('mocked')));
+    const res = await fetch('https://example.com/');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('mocked');
+  });
+});
