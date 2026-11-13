@@ -9,6 +9,9 @@ import { RoleGuard } from './role.guard.js';
 @Module({
   controllers: [MeController, OrganizationsController, InvitationsController],
   providers: [OrganizationsService, OrgGuard, RoleGuard],
-  exports: [OrganizationsService],
+  // OrgGuard is exported so other modules whose routes nest under /orgs/:orgId (like
+  // ProjectsModule) can reuse it via @UseGuards(OrgGuard) instead of re-implementing
+  // the same membership check.
+  exports: [OrganizationsService, OrgGuard],
 })
 export class OrganizationsModule {}

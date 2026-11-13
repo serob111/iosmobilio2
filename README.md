@@ -2,6 +2,13 @@
 
 Сайт (`apps/web`) превращает адрес сайта в конфиг нативной iOS-оболочки (`apps/shell`), собирает
 неподписанный `.ipa` через GitHub Actions (`macos-latest`, без подписи) и отдаёт файл на скачивание.
+С Этапа 2 `apps/web` — чистый клиент: вся бизнес-логика (анализ сайта, проекты, черновики, сборки,
+превью, авторизация) живёт в `apps/api`, `apps/web` только зовёт его (`lib/apiClient.ts`) и рисует UI.
+
+Путь пользователя: `/` (адрес сайта) → `/try` (черновик: редактор + живое превью, без входа) →
+«Сохранить как проект» → вход (magic link/Google) → `/projects/:orgId/:projectId` (тот же
+редактор, теперь на проекте организации). Интерфейс — на английском по умолчанию, на русском по
+`/ru/...` (`next-intl`, см. «Пользовательский путь и UI» ниже).
 
 ## Запуск apps/web на Windows
 
@@ -11,8 +18,8 @@ cd apps/web
 npm run dev
 ```
 
-Откроется на `http://localhost:3000`. На `/` вставь адрес сайта → «Создать приложение», дальше
-редактирование на `/p/[id]`.
+Откроется на `http://localhost:3000`. Нужен уже поднятый `apps/api` (см. «Локальное окружение»
+ниже) — `apps/web` сам ничего не анализирует и ничего не хранит.
 
 Переменные окружения — скопируй `apps/web/.env.example` в `apps/web/.env.local` и заполни (см.
 ниже про токен и туннель):
@@ -21,20 +28,23 @@ npm run dev
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-## Чтобы кнопка «Собрать .ipa» заработала целиком
+## Чтобы сборка .ipa заработала целиком (Этап 2: через apps/api)
 
-GitHub Actions должен достучаться до твоего локального сервера (скачать конфиг/иконку, загрузить
-`.ipa` обратно), поэтому `localhost` не подходит — нужен публичный туннель.
+Начиная с Этапа 2 сборки создаются и отслеживаются через `apps/api`, а не через `apps/web` —
+GitHub Actions — это просто текущий исполнитель, с которым `api` общается по одноразовому
+токену конкретной сборки (см. «Сборки (apps/api)» ниже). GitHub Actions должен достучаться до
+твоего локального `api` (скачать конфиг/иконку, загрузить `.ipa` обратно), поэтому `localhost`
+не подходит — нужен публичный туннель **до `api`** (не до `web`, как было в Этапе 0/1).
 
-### 1. Запусти cloudflared-туннель
+### 1. Запусти cloudflared-туннель до локального api
 
 ```
-cloudflared tunnel --url http://localhost:3000
+cloudflared tunnel --url http://localhost:3011
 ```
 
 Команда выведет публичный адрес вида `https://random-words.trycloudflare.com` — это и есть
-`PUBLIC_BASE_URL`. **Адрес меняется при каждом перезапуске туннеля** — после перезапуска обнови
-секрет `PUBLIC_BASE_URL` в репозитории (см. ниже) и `PUBLIC_BASE_URL` в `apps/web/.env.local`.
+`API_PUBLIC_URL`. **Адрес меняется при каждом перезапуске туннеля** — после перезапуска обнови
+`API_PUBLIC_URL` в `apps/api/.env`.
 
 ### 2. Создай fine-grained GitHub-токен
 
@@ -42,24 +52,56 @@ GitHub → Settings → Developer settings → Fine-grained tokens → Generate 
 - Repository access: только этот репозиторий (`serob111/iosmobilio2` или твой форк/копия);
 - Permissions → Actions: **Read and write**.
 
-Это и есть `GITHUB_TOKEN`.
+Это и есть `GITHUB_DISPATCH_TOKEN`.
 
-### 3. Настрой секреты репозитория
-
-Settings → Secrets and variables → Actions → Repository secrets:
-- `BUILD_SECRET` — любая случайная строка (например, `openssl rand -hex 32`), одна и та же в
-  секретах репозитория и в `apps/web/.env.local`;
-- `PUBLIC_BASE_URL` — адрес туннеля из шага 1.
-
-### 4. Заполни apps/web/.env.local
+### 3. Сгенерируй BUILD_TOKEN_KEY и добавь его в секреты репозитория
 
 ```
-PUBLIC_BASE_URL=https://your-tunnel.trycloudflare.com
-GITHUB_TOKEN=github_pat_...
+openssl rand -base64 32
+```
+
+Это значение идёт **и** в `apps/api/.env` (`BUILD_TOKEN_KEY`), **и** в секрет репозитория
+`BUILD_TOKEN_KEY` (Settings → Secrets and variables → Actions → New repository secret) —
+один и тот же ключ на обеих сторонах. `api` шифрует одноразовый токен сборки этим ключом
+(AES-256-GCM) перед тем, как он попадёт в workflow_dispatch; воркфлоу расшифровывает его
+тем же ключом на стороне GitHub (см. «Сборки» ниже).
+
+### 4. Заполни apps/api/.env
+
+```
+BUILD_RUNNER=github
+API_PUBLIC_URL=https://your-tunnel.trycloudflare.com
+GITHUB_DISPATCH_TOKEN=github_pat_...
 GITHUB_REPO=serob111/iosmobilio2
+GITHUB_WORKFLOW=build-ipa.yml
 GITHUB_REF=main
-BUILD_SECRET=тот-же-секрет-что-в-репозитории
+BUILD_TOKEN_KEY=<то же значение, что в секрете репозитория>
 ```
+
+### 5. Создай сборку
+
+Сессионной cookie из обычного входа (см. «Авторизация и организации» ниже) и существующего
+проекта достаточно:
+
+```
+curl -X POST http://localhost:3011/orgs/<orgId>/projects/<projectId>/builds \
+  -H "Cookie: better-auth.session_token=..."
+```
+
+`api` сам вызовет `workflow_dispatch` с `buildId`/зашифрованным токеном
+(`buildTokenEnc`)/`baseUrl=API_PUBLIC_URL` — дальше workflow сам пройдёт `decrypt → start →
+config → icon → сборка → upload`, не трогая `apps/web`. Статус —
+`GET /orgs/<orgId>/projects/<projectId>/builds/<buildId>`, готовый файл —
+`GET .../builds/<buildId>/ipa` (302 на подписанную ссылку).
+
+### 6. Проверь, что токен не попал в лог открытым текстом
+
+Открой сам run в GitHub Actions UI (Actions → build-ipa → этот run) и разверни каждый шаг,
+особенно «Decrypt build token», «Report build started», «Fetch project config (apps/api)»,
+«Upload .ipa to apps/api» — везде, где видна `Authorization: Bearer ***`, токен должен быть
+замаскирован звёздочками (`::add-mask::` в шаге «Decrypt build token» это гарантирует), а не
+виден как hex-строка. Это нужно проверять вручную один раз после любого изменения
+`build-ipa.yml`, трогающего токен — автоматически (в CI) этот прогон не гоняется.
 
 ### Совет
 
@@ -68,8 +110,16 @@ BUILD_SECRET=тот-же-секрет-что-в-репозитории
 
 ## Локальное окружение (apps/api, apps/worker)
 
-Postgres и Redis поднимаются в Docker, `api`/`worker`/`web` можно гонять нативно (быстрее при
-разработке) или тоже в контейнерах.
+Node — одна версия везде: `22.x` (`.nvmrc`, корневой `package.json`'s `engines.node`, от
+которого отталкивается CI через `node-version-file`, и все `Dockerfile`). `apps/api`'s
+`undici` зависимость закреплена на точную версию (`6.21.2`), совпадающую с той, что
+встроена в Node 22 (`process.versions.undici`) — `safeFetch` передаёт собственный
+`undici.Agent` как `dispatcher` в глобальный `fetch`, и версия пакета должна совпадать с
+версией, встроенной в саму Node, иначе `Agent` из другой линии undici может повести себя
+не так, как ожидается.
+
+Postgres, Redis и MinIO (объектное хранилище) поднимаются в Docker, `api`/`worker`/`web` можно
+гонять нативно (быстрее при разработке) или тоже в контейнерах.
 
 ### Вариант 1 — инфраструктура в Docker, приложения нативно
 
@@ -81,18 +131,46 @@ npm run dev
 Поднимет `postgres`+`redis` через Docker Compose, затем параллельно запустит `web`, `api`, `worker`
 (`concurrently`). Только инфраструктуру — `npm run dev:infra`.
 
-### Вариант 2 — всё в Docker
+### Вариант 2 — инфраструктура + api/worker в Docker, web нативно
 
 ```
 docker compose up
+docker compose exec -T postgres true   # не обязательно, просто дождаться healthy
+npm run dev --workspace=mobilio-web    # web у `apps/web` своего Dockerfile/сервиса ещё нет
 ```
 
-Перед первым запуском скопируй `.env.example` → `.env` в `apps/api` и `apps/worker` (и при желании
-заполни `SENTRY_DSN`, `GOOGLE_CLIENT_ID`/`SECRET`, `RESEND_API_KEY` — все опциональны, см. ниже).
-`migrate`-сервис сам поднимет роли и применит миграции перед стартом `api`/`worker`
-(`depends_on: service_completed_successfully`) — отдельный шаг не нужен.
+`docker compose up` поднимает `postgres`/`redis`/`minio` + одноразовые `createbucket`/`migrate`
+(роли и миграции — автоматически, `depends_on: service_completed_successfully`, отдельный шаг не
+нужен) + `api` (порт `3001`) и `worker` — **не** `web`: он всегда запускается нативно, даже в этом
+варианте. `api`/`worker`'s `environment:` в `docker-compose.yml` уже содержит рабочие
+dev-заглушки (`BETTER_AUTH_SECRET`, `PREVIEW_PROXY_DOMAIN`/`PREVIEW_SLUG_KEY` и т.д. — без них
+`createApp()` не стартует, см. `validatePreviewEnv`/Better Auth) — `apps/api/.env`/`apps/worker/.env`
+эти два контейнера **не читают** (только «Вариант 1», где `api`/`worker` запускаются нативно,
+читает соответствующий `.env`). Переопределить что-то (`SENTRY_DSN`, `GOOGLE_CLIENT_ID`/`SECRET`,
+`RESEND_API_KEY` — все опциональны) — правь `docker-compose.yml`'s `api:`/`worker:` блоки напрямую
+или добавь `env_file:`.
 
 `GET /health` на `api` проверяет живость Postgres и Redis и отвечает 200/503.
+
+## Хранилище файлов (MinIO / R2)
+
+Иконки проектов и собранные `.ipa` лежат в объектном хранилище, а не на диске — интерфейс
+`ObjectStorage` (`packages/storage`) оборачивает S3-совместимый API. Локально и в CI это MinIO
+(контейнер `minio` в `docker-compose.yml`), в проде — Cloudflare R2 (просто другой `S3_ENDPOINT`,
+без `S3_FORCE_PATH_STYLE`). Ключи объектов: `orgs/<orgId>/projects/<projectId>/icon.png`,
+`.../builds/<buildId>/app.ipa` — см. `packages/storage/src/keys.ts`. Скачивание — только по
+коротким подписанным ссылкам (`ObjectStorage.signedUrl`), объекты не публичны.
+
+MinIO-образ — `cgr.dev/chainguard/minio`, не `minio/minio`/`bitnami/minio` с Docker Hub: оба
+теперь требуют авторизацию даже для анонимного `docker pull` (изменилось в 2025 году), Chainguard
+пока отдаёт `:latest` без логина. Он работает под непривилегированным пользователем, который не
+может писать в `/data` без `user: "0"` в compose (только для dev/CI-инфраструктуры, не для прода —
+в проде это R2, никакого контейнера нет). В образе нет `curl`/`wget`, поэтому healthcheck — просто
+TCP-коннект через `bash`'s `/dev/tcp`, а не HTTP-пробинг.
+
+Бакет MinIO не создаётся сам — ни `minio/mc`, ни `amazon/aws-cli` сейчас не тянутся анонимно, так
+что бакет создаёт одноразовый сервис `createbucket` (`packages/storage/src/scripts/ensure-bucket.ts`),
+который делает это через уже используемый `@aws-sdk/client-s3`, без отдельного CLI-образа.
 
 ## База данных: миграции, роли, RLS
 
@@ -162,6 +240,9 @@ npm run db:migrate --workspace=@mobilio/db
 BETTER_AUTH_SECRET=...        # обязательна, см. apps/api/.env.example
 API_BASE_URL=http://localhost:3011
 WEB_ORIGIN=http://localhost:3000   # CORS + куда ведут magic-link ссылки
+PREVIEW_PROXY_DOMAIN=preview.localhost   # другой домен, чем WEB_ORIGIN — см. "Превью" → "Wildcard DNS и TLS" ниже
+PREVIEW_PROXY_SCHEME=http                # дефолт https; http только для локальной *.localhost-разработки
+PREVIEW_PROXY_PORT=3011                  # только для локальной разработки — см. "Wildcard DNS и TLS"
 
 GOOGLE_CLIENT_ID=             # опционально — без них вход через Google просто выключен
 GOOGLE_CLIENT_SECRET=
@@ -177,15 +258,26 @@ npm run typecheck   # tsc --noEmit по всем workspace'ам
 npm run lint         # eslint по всем workspace'ам
 npm run test         # vitest по всем workspace'ам (packages/config, apps/web, apps/api, apps/worker)
 npm run test:coverage  # то же + покрытие (порог 80%: packages/config, apps/web/lib, apps/api auth+organizations)
-cd apps/web && npm run test:e2e   # Playwright: create→build→download, и полный auth-флоу (apps/web/e2e/auth.spec.ts)
+cd apps/web && npm run test:e2e   # Playwright, см. список специй ниже
 ```
 
-Тесты, которым нужны живые Postgres/Redis (health-check api, BullMQ-воркер, миграции, auth/organizations
-HTTP-флоу), сами пропускаются локально, если нужные переменные не заданы — поднимите инфраструктуру
-(`npm run dev:infra`), примените миграции (см. «База данных» выше) и экспортируйте переменные из
-`apps/api/.env.example`/`apps/worker/.env.example`/`packages/db/.env.example`, чтобы прогнать их
-по-настоящему. `npm run test:e2e` поднимает настоящий `api` (не мок) — тот же набор переменных нужен
-и ему, через `E2E_API_DATABASE_URL`/`E2E_API_REDIS_URL` (см. `apps/web/playwright.config.ts`).
+Тесты, которым нужны живые Postgres/Redis (health-check api, BullMQ-воркер, миграции,
+auth/organizations HTTP-флоу, CSRF-мидлварь), сами пропускаются локально, если нужные переменные
+не заданы — поднимите инфраструктуру (`npm run dev:infra`), примените миграции (см. «База данных»
+выше) и экспортируйте переменные из `apps/api/.env.example`/`apps/worker/.env.example`/
+`packages/db/.env.example`, чтобы прогнать их по-настоящему. `npm run test:e2e` поднимает
+настоящий `api` (не мок, `BUILD_RUNNER=fake`) — тот же набор переменных нужен и ему, через
+`E2E_API_DATABASE_URL`/`E2E_API_REDIS_URL`/`E2E_API_S3_ENDPOINT` (см.
+`apps/web/playwright.config.ts`). Специи:
+
+- `e2e/journey.spec.ts` — полный путь пользователя (главная → черновик → изменения → вход →
+  claim → редактор проекта → сборка через `FakeRunner` → `.ipa` → выход/вход, проект на месте),
+  на английской и русской локали.
+- `e2e/auth.spec.ts` — регистрация/вход/выход, приглашение второго пользователя в организацию.
+- `e2e/preview-proxy.spec.ts` — изоляция origin'ов между двумя превью на настоящих локальных
+  сайтах (cookie/localStorage одного не видны другому, `Domain=`-атрибут вырезается).
+- `e2e/preview.spec.ts` (страница `/try`) — единственная специя, которая настоящий `api` не
+  вызывает: мокает его и проксируемый "сайт" на уровне сетевых запросов браузера (`page.route`).
 
 `.github/workflows/ci.yml` гоняет lint/typecheck/test:coverage на каждый push и PR (с Postgres/Redis
 как `services:` + применением миграций), и Playwright E2E — на PR в `main` (тоже с Postgres/Redis +
@@ -193,18 +285,15 @@ HTTP-флоу), сами пропускаются локально, если н�
 
 ## Как это работает
 
-1. `/` анализирует сайт (cheerio: название, иконка, цвет, до 4 вкладок из навигации), сохраняет
-   конфиг в `data/projects/<id>/config.json` по zod-схеме (`packages/config`).
-2. `/p/[id]` — правка конфига + кнопка «Собрать .ipa». Кнопка вызывает
-   `POST /api/projects/[id]/build`, который запускает `.github/workflows/build-ipa.yml` через
-   GitHub API (`workflow_dispatch`).
-3. Workflow (на `macos-latest`) скачивает конфиг и иконку с сервера (`/api/build-config`,
-   `/api/build-icon`, защищены заголовком `x-build-secret`), подставляет их в
-   `apps/shell/project.config.json` + `apps/shell/src/config/generated.config.json`, собирает
-   `expo prebuild` → `pod install` → `xcodebuild archive` (без подписи) → `.ipa`, загружает файл
-   обратно (`POST /api/projects/[id]/ipa`) или сообщает об ошибке (`POST /api/projects/[id]/failed`).
-4. `/p/[id]` опрашивает `GET /api/projects/[id]/build` каждые 10 секунд и показывает статус; при
-   готовности — кнопка «Скачать .ipa» (`GET /api/projects/[id]/ipa`).
+Этап 0/1: `/` анализировал сайт и правка шла через `apps/web`'s файловое хранилище
+(`data/projects/<id>/config.json`), а кнопка «Собрать .ipa» сама дёргала GitHub API. С Этапа 2
+вся эта логика — анализ сайта, проекты, черновики, сборки — живёт в `apps/api` (см. разделы
+ниже); `apps/web`'s старые роуты (`/api/projects/[id]/build`, `/api/build-config`,
+`/api/build-icon`, `/api/projects/[id]/ipa`, `/api/projects/[id]/failed`), файловое хранилище
+(`lib/storage.ts`) и старая страница-редактор `/p/[id]` удалены (Этап 2, пункты 5-6) — `/p/[id]`
+отдаёт `410` со статической ссылкой на главную, а старые данные в `data/projects/` переносятся в
+организацию скриптом `apps/api/scripts/migrate-legacy-projects.ts` (см. «Перенос старых данных»
+ниже), а не читаются runtime-кодом напрямую.
 
 Можно запустить workflow и без сервера — вручную, с тестовым конфигом
 (`apps/shell/test/test.config.json` + `test-icon.png`), не трогая реальный проект:
@@ -237,22 +326,503 @@ DELETE /orgs/:orgId/members/:userId      — удалить участника (
 ```
 
 Все ошибки — `{ error: { code, message, requestId } }`. Доступ к чужой организации — `404`, не
-`403` (не раскрывает, существует ли она). В `apps/web` пока только шапка (пользователь + переключатель
-организаций) и `/login`/`/logout` — страниц для приглашений/управления участниками ещё нет, эти
-действия проверяются через прямые вызовы API (см. `apps/web/e2e/auth.spec.ts`).
+`403` (не раскрывает, существует ли она). В `apps/web` — шапка (пользователь + переключатель
+организаций), `/login`/`/logout`, список `/projects` и редактор проекта
+(`/projects/:orgId/:projectId`, см. «Пользовательский путь и UI» ниже); страниц для приглашений/
+управления участниками ещё нет — эти действия проверяются через прямые вызовы API (см.
+`apps/web/e2e/auth.spec.ts`).
+
+Небезопасные методы (`POST`/`PUT`/`PATCH`/`DELETE`) на этих и других cookie-авторизованных
+маршрутах (сессия, черновик) дополнительно защищены CSRF-мидлварью — см. «CSRF» ниже.
+
+## Проекты (apps/api)
+
+Логика анализа сайта (`analyzeSite`) и обработки иконки живёт только в `apps/api/src/projects` —
+`apps/web`'s собственная копия (файловое хранилище, старые `/api/*` роуты) удалена целиком (Этап 2,
+пункт 5). Эндпоинты — под `OrgGuard`/`ProjectGuard`, доступны любому участнику организации (без
+ограничения по роли):
+
+```
+POST /orgs/:orgId/projects               — { url } → анализ сайта → создание проекта
+GET  /orgs/:orgId/projects               — список проектов организации (без полного config)
+GET  /orgs/:orgId/projects/:projectId    — проект (id, config, configVersion)
+PUT  /orgs/:orgId/projects/:projectId    — полная замена config (валидация как при создании)
+POST /orgs/:orgId/projects/:projectId/icon — загрузка иконки (multipart, поле "icon")
+GET  /orgs/:orgId/projects/:projectId/icon — PNG потоком из object storage
+```
+
+Иконка отдаётся потоком, не редиректом на подписанную ссылку: браузерный
+`<img crossOrigin="use-credentials">` (нужен, чтобы запрос унёс cookie сессии/черновика на
+первый хоп) тащит этот же режим credentials через любой редирект, а дефолтный CORS-ответ
+MinIO/S3 на втором хопе (`Access-Control-Allow-Origin: *`) с `credentials: include` несовместим
+— браузер просто не отдаст такой ответ скрипту. Стриминг через собственный origin api (у
+которого уже настроен конкретный, не wildcard, CORS) убирает эту зависимость целиком.
+
+`projects.config` — jsonb, валидируется `@mobilio/config`'s `ProjectConfigSchema` при каждой
+записи; `projects.config_version` фиксирует, под какую версию схемы подогнан конкретный ряд
+(см. `CONFIG_SCHEMA_VERSION` там же) — на случай будущей миграции формы конфига.
+
+### Перенос старых данных (apps/api/scripts/migrate-legacy-projects.ts)
+
+Проекты старого файлового хранилища `apps/web` (`data/projects/<legacyId>/{config.json,icon.png}`,
+до Этапа 2) переносятся в организацию вручную, по одному разу, скриптом:
+
+```
+cd apps/api
+DATABASE_URL=... npx tsx scripts/migrate-legacy-projects.ts --org <orgId> [--dry-run] [--data-dir <path>]
+```
+
+Каждый `config.json` валидируется той же `parseProjectConfig`, что и обычное создание проекта;
+иконка прогоняется через тот же `sharp`-пайплайн (или заменяется сгенерированным буквенным
+аватаром, если `icon.png` нет/не читается). Идемпотентно — нового `uuid` проекту колонка
+`projects.legacy_id` (nullable, unique) помечает перенесённый старый id; повторный запуск находит
+совпадение и помечает его «пропущено», не дублирует строку. Отчёт — перенесено/пропущено/ошибки
+с причинами; битый `config.json` попадает в «ошибки» и не прерывает перенос остальных.
+`--dry-run` не пишет ни в БД, ни в object storage — только показывает, что бы перенёс настоящий
+запуск.
+
+## Сборки (apps/api/src/builds)
+
+Сборки создаются и отслеживаются через `api`; GitHub Actions — лишь текущий исполнитель, который
+общается с `api` по одноразовому токену конкретной сборки. Позже его заменит перепаковка шаблона
+(`packages/repacker`), поэтому весь код вне `apps/api/src/builds` знает только интерфейс
+`BuildRunner { dispatch(build: {id, token, baseUrl}): Promise<void> }` — не GitHub напрямую.
+`GithubActionsRunner` (REST `workflow_dispatch`) — единственная реальная реализация;
+`FakeRunner` — для тестов/локалки (`BUILD_RUNNER=fake`, см. `.env.example`), просто запоминает
+диспатч вместо реального вызова.
+
+Пользовательские эндпоинты (сессия + `OrgGuard` + `ProjectGuard`):
+
+```
+POST /orgs/:orgId/projects/:projectId/builds          — создать сборку → 201 {id, status:'queued'}
+GET  /orgs/:orgId/projects/:projectId/builds          — последние 20
+GET  /orgs/:orgId/projects/:projectId/builds/:buildId
+GET  /orgs/:orgId/projects/:projectId/builds/:buildId/ipa — 302 на подписанную ссылку (только status=done)
+```
+
+Одна активная (`queued`/`building`) сборка на проект — гарантирует не предварительная проверка, а
+частичный уникальный индекс (`builds_one_active_per_project`); вторая параллельная попытка ловит
+unique-violation от самой Postgres и превращается в `409 BUILD_IN_PROGRESS`. Создание сборки также
+ограничено rate-limit'ом по организации (10 в час, Redis fixed-window). Если `BuildRunner.dispatch`
+упал — сборка сразу помечается `failed`, ответ — `502 BUILD_DISPATCH_FAILED`.
+
+Эндпоинты раннера (`@Public()`, авторизация `Authorization: Bearer <buildToken>` через
+`BuildRunnerGuard`):
+
+```
+POST /builds/:id/start  { runId, runUrl }   — queued → building (повторный вызов идемпотентен)
+GET  /builds/:id/config                     — { config, templateVersion }
+GET  /builds/:id/icon                       — PNG потоком из object storage
+POST /builds/:id/ipa                        — потоковая загрузка .ipa → done, лимит 300 МБ
+POST /builds/:id/fail  { error }            — queued/building → failed
+```
+
+Переходы статуса — только `queued → building → done|failed` и `queued → failed`; любой другой —
+`409 INVALID_BUILD_STATE`. Токен (`sha256`-хеш в БД; сырой уходит раннеру только через
+`BuildRunner.dispatch()` — для GitHub Actions он же шифруется AES-256-GCM`'ом перед dispatch, см.
+ниже) живёт 2 часа, но очищается (`token_hash = NULL`) сразу при переходе в `done`/`failed` — раньше
+истечения TTL. RLS (`builds_token_select`/`builds_token_update`, см. `0009_builds_token_access.sql` +
+`0011_builds_token_update_tighten.sql`) пускает по `token_hash` + `token_expires_at > now()` +
+`status IN ('queued','building')` — те же условия в `USING`, а `WITH CHECK` — `status IN
+('building','done','failed') AND (token_hash IS NULL OR token_hash совпадает)`: разрешённые переходы
+двигают строку *вне* состояния, что требует `USING` (копировать его в `WITH CHECK` сломало бы ровно
+эти обновления), но `WITH CHECK` всё равно не безусловный `true` — подделать `token_hash` на чужой
+или откатить статус в `queued` через этот путь нельзя. Отдельный `BEFORE UPDATE`-триггер
+(`builds_immutable_fields`) не даёт поменять `id`/`org_id`/`project_id`/`created_at` вообще никаким
+`UPDATE`, независимо от того, какая RLS-политика его пропустила. У раннера нет пользовательской
+идентичности вообще — `runInBuildContext` (`packages/db/src/tenant-context.ts`) не выставляет
+`app.user_id` и не выставляет `app.org_id` (а значит не даёт раннеру видеть весь органайзер — только
+`app.lookup_token_hash` для поиска сборки, затем `app.build_project_id` из уже найденной строки, так
+что раннер видит/читает ровно один свой проект через `projects_build_runner_select`, не всю org).
+`BuildRunnerGuard` дополнительно сверяет хеши `timingSafeEqual` после самого запроса — защита в
+глубину, на случай если совпадение на стороне БД когда-нибудь ослабнет. Любая проблема с токеном
+(не найден, истёк, не тот статус) — одинаковый `404 BUILD_NOT_FOUND`, без разницы в коде ответа:
+раннер не должен уметь отличать «неверный токен» от «сборка уже завершена».
+
+Загрузка `.ipa` читает тело запроса как поток (Express не трогает `application/octet-stream`),
+проверяет magic bytes (`PK\x03\x04`) и 300 МБ лимит прямо во время стриминга (не после полной
+буферизации) через собственный `Transform` (`ipa-stream.ts`) — превышение лимита или неверная
+подпись возвращает `413 FILE_TOO_LARGE`/`400 INVALID_IPA` без сохранения в storage. У каждой попытки
+загрузки свой объектный ключ (`buildIpaKey(...) + '-' + uuid`) — если два запроса гонятся за один и
+тот же build (повторный вызов раннера, гонка), они никогда не пишут в один и тот же объект; только
+ключ победителя попадает в `ipa_key`. Финальное обновление статуса на `done` перечитывает текущий
+статус сборки в свежей транзакции прямо перед записью (а не держит одну транзакцию на всё время
+долгой загрузки), а сам `UPDATE` требует `status = 'building'` непосредственно в `WHERE` — иначе
+Postgres перепроверяет это условие только на старом снапшоте, и проигравший конкурентный вызов мог
+бы всё равно перезаписать `ipa_key` победителя. Если гонка проиграна — только что загруженный объект
+удаляется и ответ — `409 INVALID_BUILD_STATE`.
+
+Раннер за GitHub Actions шифрует сырой токен AES-256-GCM'ом (`BUILD_TOKEN_KEY`) перед тем, как он
+попадёт в `workflow_dispatch`'s input — тот виден в UI/аудит-логе GitHub, поэтому туда уходит только
+шифротекст (`buildTokenEnc`); воркфлоу расшифровывает его тем же ключом первым шагом после
+`setup-node` и сразу маскирует (`::add-mask::`). `apps/api` отказывается стартовать без
+`API_PUBLIC_URL`(`https://`)/`GITHUB_DISPATCH_TOKEN`/`GITHUB_REPO`/`BUILD_TOKEN_KEY`, когда
+`BUILD_RUNNER` не `fake` (`validateBuildEnv`, вызывается из `createApp()`) — и наоборот, отказывается
+стартовать с `BUILD_RUNNER=fake` при `NODE_ENV=production`.
+
+**Watchdog зависших сборок** (`apps/worker`, раз в 5 минут) — если раннер упал молча (сеть, краш
+воркфлоу) и никогда не позвонит в `/fail`, сборка осталась бы в `queued`/`building` навсегда,
+занимая единственный активный слот проекта (`builds_one_active_per_project`) без возможности собрать
+что-то новое. `public.fail_stuck_builds(batch)` (`0012_builds_watchdog.sql`) — та же схема, что у
+`cleanup_expired_drafts`: `SECURITY DEFINER`, владелец `mobilio_migrator`, `EXECUTE` только у
+`mobilio_app`. Переводит в `failed`/`error='timeout'` `queued`-сборки старше 30 минут (по
+`created_at`) и `building` — старше 60 минут (по `started_at`), пачками по 200
+(`apps/worker/src/builds-watchdog.ts`, та же схема батчинга, что у очистки черновиков). Тайм-ауты —
+константы в самом
+теле функции, не параметры: это осознанное эксплуатационное решение, которое должно проходить через
+миграцию, а не меняться тем, что воркер передаст при вызове.
+
+В отличие от `cleanup_expired_drafts` (`DELETE` — у удалённой строки нет «новой версии», которую
+нужно перепроверять), эта функция делает `UPDATE`, а Postgres требует, чтобы *результат* `UPDATE`
+тоже проходил `USING` политики (не только `WITH CHECK`), заново применённый к новой строке — поэтому
+`builds_watchdog`'s `USING` включает `'failed'` наравне с `'queued'`/`'building'`: функция всегда
+пишет именно `'failed'`, и новая строка должна остаться в этом же множестве, иначе сам `UPDATE` не
+проходит. `'done'` туда никогда не входит — этой политике нельзя видеть/трогать успешно
+завершённые сборки.
+
+## Черновики (apps/api/src/drafts, apps/worker)
+
+Бесплатное превью без регистрации: анонимный черновик живёт в отдельной таблице `drafts`
+(без `org_id`), доступ к нему — только по claim-токену, не по сессии.
+
+```
+POST /drafts                       — { url } → анализ сайта → создание черновика (rate limit по IP)
+GET  /drafts/me                    — текущий черновик (по cookie)
+PUT  /drafts/me                    — полная замена config
+POST /drafts/me/icon               — загрузка иконки (multipart, поле "icon")
+GET  /drafts/me/icon               — PNG потоком из object storage (см. «Проекты» выше — тот же
+                                      credentials-через-редирект довод, не редирект на подписанную
+                                      ссылку)
+POST /orgs/:orgId/drafts/claim     — переносит черновик в проект организации (после входа)
+```
+
+`POST /drafts` не требует входа (`@Public()`) — сырой токен (32 случайных байта, как у
+`invitations`) уходит только в httpOnly cookie (`mobilio_draft_token`, `sameSite: lax`,
+`secure` по умолчанию — см. `COOKIE_SECURE` ниже, 7 дней), в БД — только его sha256-хеш.
+`/drafts/me*` защищены `DraftGuard`: он читает cookie и резолвит черновик по хешу через
+`runInTokenLookupContext` — RLS сама отфильтровывает истёкшие черновики (см. ниже), так
+что отдельной проверки на expiry в guard'е не нужно.
+
+Rate limit на создание — Redis fixed-window (10 за 10 минут, `INCR` + `EXPIRE ... NX`),
+по `request.ip`, не по заголовку напрямую: Express сам решает, доверять ли
+`X-Forwarded-For`, через `app.set('trust proxy', TRUST_PROXY_HOPS)` в `create-app.ts`.
+`TRUST_PROXY_HOPS=0` (по умолчанию, локально) — заголовок игнорируется целиком, так что
+подмена `X-Forwarded-For` не даёт свежий лимит. В проде за Caddy — `TRUST_PROXY_HOPS=1`
+(см. `.env.example`). IPv6-клиенты ключуются по префиксу `/64` (провайдер обычно выдаёт
+один `/64` на клиента, а конкретный адрес внутри него может меняться от запроса к
+запросу) — иначе one IPv6 client получал бы свежий лимит на каждый адрес; IPv4 — по
+полному адресу. Если `request.ip` не удалось определить — 400, а не общий ключ.
+
+RLS на `drafts` — тем же паттерном, что у `invitations` (доступ по
+`app.lookup_token_hash`), `FOR ALL`, с дополнительным условием `expires_at > now()` (и в
+`USING`, и в `WITH CHECK`) — истёкший черновик невидим и неизменяем даже по верному
+токену. `FORCE ROW LEVEL SECURITY` остаётся включённым (как на всех RLS-таблицах в этой
+схеме, см. выше) — `mobilio_migrator` не получает освобождения владельца от собственных
+политик. Вместо этого отдельная политика `drafts_cleanup` (`FOR ALL`, `USING (expires_at
+< now())`) выдана `TO mobilio_migrator` — и только ему, не `PUBLIC`, не `mobilio_app`.
+Permissive-политики для одной роли ORятся, так что для `mobilio_migrator` это складывается
+с `drafts_token_access`; на `mobilio_app` политика вообще не действует.
+
+Фоновая очистка — SQL-функция `public.cleanup_expired_drafts(batch)`, `SECURITY DEFINER`
+с владельцем `mobilio_migrator` — выполняется под этой ролью и проходит через
+`drafts_cleanup`. Postgres по умолчанию выдаёт `EXECUTE` на новые функции роли `PUBLIC` —
+явный `REVOKE EXECUTE ... FROM PUBLIC` перед `GRANT ... TO mobilio_app` закрывает это,
+иначе любая роль с доступом к базе могла бы звать функцию напрямую. `SET search_path =
+public` защищает от переопределения search_path вызывающей сессией. `apps/worker` раз в
+час (`queue.upsertJobScheduler`, идемпотентно переживает перезапуски) вызывает её в цикле
+пачками по 500, пока не вернётся меньше 500 строк, и best-effort чистит иконки удалённых
+черновиков.
+
+`POST /orgs/:orgId/drafts/claim` (под `OrgGuard`) берёт claim-токен из той же cookie (не
+из тела запроса). Ровно один клейм при гонке: первой операцией в транзакции идёт
+`DELETE ... WHERE token_hash = $1 AND expires_at > now() RETURNING *` — только тот
+конкурентный вызов, чей `DELETE` реально вернул строку, продолжает до `INSERT` в
+`projects`; остальные получают 0 строк и 404, даже не добравшись до вставки. Иконка
+копируется в `projectIconKey` до открытия транзакции (сначала короткий read-only
+pre-read узнаёт id черновика); если иконки черновика нет — используется сгенерированный
+буквенный аватар (`generateLetterAvatar`), без 500. Если транзакция клейма проигрывает
+гонку или падает — скопированная иконка удаляется, чтобы не остался проект-сирота без
+реального клейма. При успехе иконка самого черновика удаляется best-effort (ошибка
+логируется, но не валит уже закоммиченный запрос).
+
+И `PUT /drafts/me`, и `PUT /orgs/:orgId/projects/:projectId` всегда перезатирают
+серверные поля конфига (`id`, `bundleId`, `trial`) значением из уже сохранённой строки —
+тело запроса может прислать что угодно в эти поля, оно будет проигнорировано.
+
+Загрузка иконки (`projects`, `drafts`) ограничена 2 МБ (`FileInterceptor`'s `limits`) —
+больше → `413 FILE_TOO_LARGE`.
+
+## CSRF (apps/api/src/common/csrf-middleware.ts)
+
+Сессионная и черновиковая cookie браузер прикладывает автоматически к любому запросу на свой
+origin — без защиты по `Origin` сторонний сайт мог бы заставить браузер жертвы выполнить мутацию
+от её же имени (POST/PUT/PATCH/DELETE). Особенно важно для загрузки иконки: `multipart/form-data`
+— «простой» CORS-запрос, без preflight, так что сам CORS тут вообще не защищает.
+
+Обычный Express-middleware (не часть Nest-роутинга — смонтирован в `create-app.ts` раньше него),
+для любого небезопасного метода требует, чтобы `Origin` запроса (резервный вариант — `Referer`,
+для редкого клиента без `Origin`) точно совпадал с `WEB_ORIGIN`; иначе — `403
+CSRF_ORIGIN_MISMATCH`. Исключения — ровно два:
+
+- `/api/auth/*` — свои роуты Better Auth, у которых уже свой механизм доверенных origin'ов;
+- `/builds/*` — раннер, авторизован `Bearer`-токеном, не cookie: подделать заголовок
+  `Authorization` чужим браузером автоматически нельзя так, как автоматически прикладывается
+  cookie, так что Origin-проверке тут нечего защищать.
+
+Прокси (`<slug>.<PREVIEW_PROXY_DOMAIN>/*`) в список исключений не входит и не нуждается — он
+смонтирован раньше этой мидлвари и обрабатывает свою зону целиком сам, никогда до CSRF-проверки
+не доходя.
+
+Тесты, не про сам CSRF (почти весь остальной `*.integration.spec.ts`), выставляют
+`CSRF_DISABLED_FOR_TESTING=true` перед `createApp()`, чтобы не обвешивать каждый свой запрос
+заголовком `Origin` — тот же паттерн, что у `SAFE_FETCH_ALLOW_LOCAL_FOR_TESTING` (см. ниже),
+отказывается работать при `NODE_ENV=production`. `csrf.integration.spec.ts` — единственный
+набор, что гоняет настоящую мидлварь.
+
+## Защита от SSRF (apps/api/src/net)
+
+Черновики (Этап 2) и анализ сайта принимают произвольный url от неавторизованного или
+только-аутентифицированного пользователя — без защиты это SSRF: сервер можно заставить
+обратиться к внутренней сети (`localhost`, Docker-сервисам вроде `minio`, cloud-metadata
+`169.254.169.254` и т.п.). `safeFetch` (`apps/api/src/net/safe-fetch.ts`) — единственный
+разрешённый способ сходить за пользовательским url; `eslint.config.js` запрещает прямой
+вызов `fetch` где-либо ещё в `apps/api/src` (кроме тестов и `resend-mail-sender.ts`, у
+которого url фиксированный, не пользовательский).
+
+Правила: только `http`/`https`, только порты 80/443, без логина/пароля в url; хост без
+точки (включая `localhost`, docker-имена типа `minio`) отбивается до DNS; все IP, в
+которые резолвится хост — не только первый — проверяются против списка запрещённых
+диапазонов (`apps/api/src/net/ip-policy.ts`):
+
+- IPv4: loopback (127/8), 10/8, 172.16/12, 192.168/16, 169.254/16 (включая cloud-metadata
+  169.254.169.254), 100.64/10 (CGNAT), 0/8, 224/4 и выше (multicast/reserved/broadcast),
+  192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24 (IETF/TEST-NET/benchmark);
+- IPv6: `::1`, весь `::/96` (включая `::` и устаревшую IPv4-совместимую форму — безусловно,
+  независимо от того, что в ней зашито), `::ffff:0:0/96` (IPv4-mapped) и `::ffff:0:0:0/96`
+  (IPv4-translated — на один блок «глубже», FFFF стоит на группу раньше, реально другой,
+  не пересекающийся /96) — оба безусловно, `fc00::/7`, `fe80::/10`, `fec0::/10`, `ff00::/8`,
+  `2001::/32` (Teredo), `100::/64` (discard-only). NAT64 (`64:ff9b::/96`), его local-use
+  вариант (`64:ff9b:1::/48`, RFC 8215) и 6to4 (`2002::/16`) — вложенный IPv4 извлекается и
+  проверяется теми же IPv4-правилами (не бан целиком, не доверие целиком).
+
+Соединение идёт на уже провалидированный адрес через собственный `lookup` в undici
+`Agent` — так что даже если DNS поменяет ответ между проверкой и реальным подключением
+(rebinding), сокет всё равно откроется на провалидированный адрес. Это проверяется не
+только юнит-тестами с подменённым резолвером (`safe-fetch.spec.ts`), но и отдельным
+тестом с настоящими сокетами (`safe-fetch.binding.spec.ts`): резолвер первый раз отдаёт
+адрес тестового сервера, при гипотетическом повторном вызове — другой («чужой») адрес;
+если `dispatcher` игнорируется и соединение само себя резолвит заново, тест падает.
+Редиректы — вручную (`redirect: 'manual'`), не больше 5, каждый новый адрес проходит ту
+же проверку, тело промежуточного ответа отменяется (`response.body?.cancel()`) перед
+следующим шагом. Общий таймаут, лимит размера тела с реальной остановкой чтения потока
+(не просто проверка `Content-Length`), проверка `Content-Type`. У `sharp` — явный
+`limitInputPixels` на иконках (decompression-bomb).
+
+Ошибки — стабильные коды (`UNSAFE_URL`, `SITE_UNREACHABLE`, `NOT_HTML`,
+`SITE_ERROR_STATUS`, `RESPONSE_TOO_LARGE`, `TOO_MANY_REDIRECTS`), не русский текст в
+`message` — `apps/web` со временем переводит по коду, не парсит текст ошибки.
+
+## Превью (apps/api/src/preview, apps/web/app/preview)
+
+Ссылка на превью — capability URL, как у черновиков: публикуется только `preview_links.slug_hash`
+(sha256 от самого slug'а); сам slug живёт только в URL, восстановить его из БД нельзя. Slug —
+128 случайных бит в нижнем регистре base32 без паддинга (26 символов, `[a-z2-7]`) — не произвольная
+строка: он сам становится DNS-меткой (см. «Прокси» ниже), так что обязан быть валидным как один
+label (без заглавных букв, `-`/`_`, точек — DNS и так регистронезависим, но алфавит сужен заранее,
+а не понадеялись на это). `POST /orgs/:orgId/projects/:projectId/preview-link` (сессия,
+owner/member) и `POST /drafts/me/preview-link` (анонимный claim-token, как и у черновиков)
+создают ссылку — пересоздание сначала отзывает старую (`revoked_at`) в той же транзакции, затем
+вставляет новую; партиционный уникальный индекс (`WHERE revoked_at IS NULL`) — страховка на
+случай двух параллельных пересозданий. Ссылка черновика умирает сама: `expires_at` равен
+`drafts.expires_at` на момент создания, а `preview_links.draft_id REFERENCES drafts.id ON DELETE
+CASCADE` означает, что клейм черновика (`DraftsService.claimDraft`, `DELETE FROM drafts ...`)
+атомически удаляет и его ссылку — отдельного кода отзыва для этого случая не нужно.
+
+RLS на `preview_links` — три независимых пути доступа, под разные личности вызывающего:
+владение проектом (`org_id = app.org_id`, как у любой org-таблицы), владение черновиком (тот же
+`app.lookup_token_hash`, что уже выставляет DraftGuard, через подзапрос к `drafts`), и публичное
+чтение по slug (`app.lookup_slug_hash`, SELECT-only, с проверкой `revoked_at IS NULL`/`expires_at`).
+`GET /preview/:slug` (`@Public()`, лимит 60/мин на IP — не защита от подбора slug'а, у него и так
+128 бит энтропии, а просто подушка) отдаёт `runInPreviewLookupContext` (`packages/db`) — он сам
+находит ссылку по хэшу и выставляет **либо** `app.preview_project_id`, **либо**
+`app.preview_draft_id` (никогда `app.org_id`/`app.lookup_token_hash` — этот вызывающий не член
+организации и не владелец черновика), открывая ровно один проект/черновик через отдельные
+SELECT-политики `projects_preview_select`/`drafts_preview_select`. Ответ — только то, что нужно
+оболочке: `name`, `theme`, `statusBar`, `tabs`, `iconUrl` (подписанный URL, 5 минут), `proxyBase`;
+никаких id организации/проекта/черновика и никакой остальной конфигурации.
+
+### Прокси (apps/api/src/preview/proxy)
+
+У каждого превью — **свой собственный origin**: `GET/HEAD https://<slug>.<PREVIEW_PROXY_DOMAIN>/<путь>`
+отдаёт содержимое реального сайта проекта/черновика так, будто оно открыто внутри приложения,
+причём именно под СВОИМ, а не общим с другими превью, origin'ом — куки/localStorage одного
+превью физически не видны другому, это гарантия самого браузера (same-origin policy), а не код,
+который можно забыть вызвать. `PREVIEW_PROXY_DOMAIN` (сам по себе, без slug'а-поддомена) обязан
+быть на **другом регистрируемом домене**, чем `WEB_ORIGIN` — `validatePreviewEnv` (через `tldts`,
+с учётом настоящего publicsuffix-списка, а не наивного «последние два лейбла») отказывается
+стартовать иначе; это верно транзитивно для любого поддомена `PREVIEW_PROXY_DOMAIN`, так что
+проверять нужно только сам домен. Host-based middleware в `create-app.ts`
+(`preview/proxy/proxy-middleware.ts`) — не NestJS-контроллер, а обычный Express-middleware,
+смонтированный раньше всего остального, — по заголовку `Host` решает, относится ли запрос к зоне
+прокси вообще (`preview/proxy/preview-host.ts`): бэрдомен `PREVIEW_PROXY_DOMAIN` сам по себе,
+поддомен неверной длины/алфавита, вложенный поддомен (`a.<slug>.<domain>`) — всё это 404, без
+падения в обычную маршрутизацию; валидный `<slug>.<domain>` — обслуживается прокси целиком, на
+любой путь; всё, что вне зоны прокси, уходит в обычный роутинг Nest как ни в чём не бывало.
+
+Разрешённые хосты для фетча — **только** из `source.url` самого проекта/черновика (сам хост +
+его поддомены + www-вариант), никогда не из `config.allowedDomains`: это поле редактируется
+владельцем проекта (`PUT /orgs/:orgId/projects/:projectId`), и доверие к нему позволило бы
+подставить произвольный третий сайт под свою же ссылку превью. Сам фетч идёт через
+`proxyFetch` (`apps/api/src/preview/proxy/proxy-fetch.ts`) — родственник `safeFetch` (см. выше),
+с тем же резолвом/pinning адресов, но с потоковым (не буферизованным) телом и собственным
+правилом редиректов: хоп за пределы allowlist не фолловится и не считается ошибкой, а
+превращается в `{kind: 'external-redirect'}` — пользователь получает простую страницу со ссылкой
+`target=_blank` на настоящий адрес. Лимиты: 10с таймаут, 10MB на ресурс (обрыв потока, не
+проверка `Content-Length`), допустимые `Content-Type`: html/css/js/json/images/fonts/svg — иначе
+415. Cookie клиента никогда не пересылается реальному сайту (просто не читается из запроса);
+из ответа вырезаются (`header-filter.ts`): `Set-Cookie`/`X-Frame-Options`/
+`Content-Security-Policy*`/`Strict-Transport-Security`/`Clear-Site-Data`, а также
+`Content-Encoding`/`Content-Length` (`fetch()` уже сам распаковал тело — эти два заголовка
+описывают сжатые байты, которых больше нет, пересылка как есть превратилась бы в попытку
+браузера распаковать уже распакованный текст ещё раз) и hop-by-hop-заголовки
+(`Connection`/`Keep-Alive`/`Transfer-Encoding`/`TE`/`Trailer`/`Upgrade`/`Proxy-Authenticate`/
+`Proxy-Authorization` — те, что имеют смысл только для соединения прокси↔реальный сайт, но
+никогда для браузер↔прокси). Вместо вырезанных безопасность-заголовков ставятся свои:
+`Content-Security-Policy: frame-ancestors <WEB_ORIGIN>`, `X-Robots-Tag: noindex, nofollow`,
+`Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: cross-origin`.
+
+HTML переписывается потоково (`parse5-html-rewriting-stream`): абсолютные ссылки на основной
+хост сайта (или его www-вариант) превращаются в голый path-absolute путь (`/<путь>`) — он и так
+резолвится правильно, раз страница уже отдаётся с собственного origin'а этого превью, `<base>`
+вставлять больше не нужно вообще; ссылки на другой разрешённый хост (поддомен/CDN) — через
+`?__mobilio_host=<поддомен>` (иначе путь не отличить от пути основного хоста). В начало `<body>`
+вставляется баннер «Preview · Mobilio» и скрипт-перехватчик кликов по внешним ссылкам
+(`target=_blank`). CSS — те же правила для `url(...)`. **JS не переписывается вообще** —
+сознательный компромисс: частично работающее превью лучше, чем хрупкий переписчик, который
+сломает чужой скрипт на части сайтов. Отсюда одно практическое ограничение: абсолютные URL,
+которые сайт строит в *собственном* JS (не в HTML/CSS разметке) на чужой, не входящий в allowlist
+хост, прокси не увидит и не перепишет. Относительные пути и `fetch('/...')` из любого JS при этом
+резолвятся правильно сами, без какого-либо вмешательства прокси — ровно потому, что страница уже
+находится на «правильном» (с точки зрения относительных ссылок) origin'е; то же для абсолютных
+путей внутри инлайновых `<style>` — они прокси вообще не касаются, и всё равно работают. Ответы
+5 минут кэшируются в Redis (ключ — **хэш** slug'а, не сам slug + путь + query — тот же sha256,
+что уже хранится как `preview_links.slug_hash`, чтобы capability-токен не оседал в Redis открытым
+текстом; только статус 200 и ≤2MB); лимит запросов — по slug и по IP отдельно (у одной загрузки
+страницы много ресурсов, так что лимит заметно мягче, чем у `drafts`/`builds`).
+
+### Wildcard DNS и TLS
+
+Нужен один wildcard-сертификат и одна wildcard A/CNAME-запись на `PREVIEW_PROXY_DOMAIN`
+(`*.usercontent-preview.example`, допустим) — не по сертификату/записи на каждый slug, что
+было бы и дорого, и медленно (сертификат нужен ДО того, как slug вообще сгенерирован).
+
+**Cloudflare** (прокси ↔ Cloudflare ↔ браузер): DNS → A-запись `*` на IP сервера, режим «Proxied»
+(оранжевое облако) — тогда TLS-терминация происходит на Cloudflare, им владеть сертификатом не
+нужно вовсе. SSL/TLS → Overview → «Full» (не «Flexible» — тот держит plaintext HTTP между
+Cloudflare и сервером, здесь это ничем не оправданный риск) либо «Full (strict)», если на сервере
+уже есть собственный, пусть даже самоподписанный, сертификат. Без прокси-режима (серое облако) —
+придётся отдельно выпускать wildcard-сертификат (например ACME DNS-01 через Cloudflare's API,
+`certbot`/`lego`/`caddy` все умеют) и терминировать TLS самому.
+
+Переменные: `PREVIEW_PROXY_DOMAIN=usercontent-preview.example`, `PREVIEW_PROXY_SCHEME=https`
+(дефолт, можно не указывать), `PREVIEW_PROXY_PORT` не указывать вовсе — реальный деплой всегда
+отвечает на дефолтном порту схемы (443) за обратным прокси.
+
+**Перед продом — подать `PREVIEW_PROXY_DOMAIN` в [Public Suffix List](https://publicsuffix.org/submit/)**
+(как это сделали GitHub Pages — `*.github.io`, Vercel — `*.vercel.app`, и любая другая платформа,
+где разные арендаторы получают поддомены одного домена). Это отдельный, более сильный уровень
+защиты, НЕ замена внедрённому в HTML перехватчику `document.cookie` (html-rewriter.ts) — тот
+защищает от сайта, который пытается явно выставить `Domain=<PREVIEW_PROXY_DOMAIN>`, а запись в PSL
+заставляет сам браузер считать каждый `<slug>.<PREVIEW_PROXY_DOMAIN>` отдельным
+«eTLD+1» — т.е. отдельным "site" для partitioning куки/localStorage/service workers/etc, а не
+просто поддоменом одного сайта. Без записи в PSL это разделение целиком держится на двух вещах:
+на встроенном перехватчике (который можно обойти только если на странице вообще нет JS-доступа к
+cookie, что не относится к делу) и на самом факте, что `PREVIEW_PROXY_DOMAIN` вообще не совпадает
+с `WEB_ORIGIN`. Подача в PSL — обычный PR в `publicsuffix/list` на GitHub, попадает в браузеры не
+сразу (Chrome/Firefox тянут обновлённый список с задержкой до нескольких недель), так что это шаг
+«сделать заранее», не «включить одной настройкой».
+
+**Локально, без какого-либо DNS/TLS вообще**: `*.localhost` (на любой глубине поддоменов,
+`<slug>.localhost` и `<slug>.preview.localhost` оба годятся) — современные браузеры (Chromium,
+Firefox) резолвят это в loopback сами, без записи в `/etc/hosts`/реальной DNS и без сертификата.
+
+### Чек-лист перед публичным запуском
+
+- [ ] **`PREVIEW_PROXY_DOMAIN` подан в [Public Suffix List](https://publicsuffix.org/submit/)**
+  (обязательно — см. раздел «Wildcard DNS и TLS» выше за подробным объяснением). Без этого
+  изоляция превью между собой держится только на встроенном в html-rewriter.ts перехватчике
+  `document.cookie`/`cookieStore.set`, который — честно — best-effort: он действует только на
+  *текущий* документ/реалм и не защищает от страницы, которая сама встраивает собственный
+  cross-origin `<iframe>` (у того свой `Document`/`window`, перехватчик их не трогает). Настоящая
+  граница изоляции — это (1) запись в PSL, заставляющая браузер считать каждый
+  `<slug>.PREVIEW_PROXY_DOMAIN` отдельным site, и (2) то, что прокси вообще никогда не
+  пересылает заголовок `Cookie` браузера на upstream-сайт (`proxy-fetch.ts`) — поданная в PSL
+  запись тянется в браузеры с задержкой до нескольких недель, так что это шаг «сделать заранее»,
+  а не «включить одной настройкой перед деплоем».
+`PREVIEW_PROXY_DOMAIN=preview.localhost` (не бэрый `localhost` — тот совпадёт с `WEB_ORIGIN`'ом
+по умолчанию), `PREVIEW_PROXY_SCHEME=http` (сертификата для `*.localhost` ни у кого нет),
+`PREVIEW_PROXY_PORT=<реальный порт apps/api>` — единственный случай, когда этот параметр нужен:
+в проде api всегда доступен на дефолтном порту схемы через обратный прокси, а локально — нет, и
+без него сгенерированная ссылка превью молча указывала бы на порт 80/443, где никто не слушает.
+
+### Веб-оболочка и редактор (apps/web)
+
+`/preview/[slug]` — публичная страница-оболочка: статус-бар, нижний таб-бар, активная вкладка —
+`<iframe sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox">`
+на `proxyBase + путь вкладки` (без `allow-forms`/`allow-top-navigation` — проксируемый сайт не
+может ни отправить форму куда-то вовне, ни увести родительский фрейм). На широких экранах —
+в рамке в виде iPhone, на мобильных — на весь экран с safe-area отступами; одно дерево
+разметки, не два отдельных под desktop/mobile.
+
+`components/editor/ProjectEditor.tsx` — один редактор (имя, тема, вкладки — добавить/удалить/
+переставить, фичи, иконка) с живым превью (та же `PreviewShell`, собранная локально из только
+что сохранённого конфига — без лишнего запроса на каждое сохранение), общий для черновика и
+проекта через адаптер (`ProjectEditorAdapter`, `components/editor/{Draft,Project}Adapter.ts` —
+разница только в том, какие эндпоинты `apiClient.ts` дёргать, сам редактор не знает, с чем
+работает):
+
+- `/try` — черновик, без входа: `/` создаёт черновик (`POST /drafts`) и редиректит сюда,
+  `DraftAdapter`. Кнопка «Сохранить как проект» ведёт на `/login?callbackUrl=/try` — после входа
+  (magic link/Google), при первом входе автоматически созданной личной организацией (см.
+  «Авторизация» выше), `POST /orgs/:orgId/drafts/claim` переносит черновик, редирект на
+  `/projects/:orgId/:projectId`.
+- `/projects` — список проектов текущей организации + переключатель организации (тот же
+  `localStorage`-ключ, что у переключателя в шапке). `/projects/:orgId/:projectId` — тот же
+  редактор, `ProjectAdapter`, плюс блок сборок (`components/editor/BuildsBlock.tsx`) — скрыт за
+  `NEXT_PUBLIC_ENABLE_BUILDS` (по умолчанию выключен, см. `.env.example`): до Ad Hoc/TestFlight
+  неподписанный `.ipa` клиенту бесполезен. `runUrl` (ссылка на запуск GitHub Actions) клиенту не
+  показывается — тип `BuildSummary` в `apiClient.ts` намеренно его не содержит, хотя сервер
+  отдаёт.
+
+Ошибки api (`{code, message}`) переводятся в одном месте — `lib/errorCodes.ts`'s
+`useApiErrorMessage()`, по таблице в `messages/{en,ru}.json`'s `errors`-неймспейсе, ключ — сам
+код; код без перевода падает на `UNKNOWN`. Интерфейс целиком на `next-intl` (`i18n/routing.ts`):
+английский — по умолчанию, без префикса в url (внешние ссылки превью/QR строятся на `apps/api`
+без понятия о локали и не должны ломаться); русский — по `/ru/...`.
+
+Старая страница-редактор `/p/[id]` (файловое хранилище, свой API) удалена целиком — старый путь
+отдаёт `410` со статической ссылкой на главную (`apps/web/app/p/[id]/route.ts`, вне
+`app/[locale]` намеренно: это Route Handler, не страница, так что ему не нужен locale-префикс —
+старая закладка/ссылка `/p/<id>` получает `410` сразу, без промежуточного редиректа на
+`/en/p/<id>`).
 
 ## Структура репозитория
 
 ```
 apps/shell/   — Expo-оболочка (SDK 57, expo-router)
-apps/web/     — Next.js App Router: сайт, анализ сайтов, API сборки, вход/выход, шапка
-apps/api/     — NestJS: auth (Better Auth), организации, health-check, очередь (BullMQ)
+apps/web/     — Next.js App Router: UI (`next-intl`, en/ru), чистый клиент к apps/api
+                (`lib/apiClient.ts`) — своей бизнес-логики/хранилища больше нет
+apps/api/     — NestJS: auth (Better Auth), организации, проекты, черновики, сборки (builds),
+                превью + прокси (preview), CSRF, health-check, очередь (BullMQ)
 apps/worker/  — BullMQ-воркер — каркас для следующих этапов
 packages/config/   — общая zod-схема конфига + утилиты (slug, bundleId, иконки)
 packages/db/       — Drizzle-схема, миграции, роли/RLS, TenantContext (см. выше)
+packages/storage/  — ObjectStorage-интерфейс + S3/MinIO-адаптер (см. выше)
 packages/repacker/ — пусто, заготовка под будущую логику репака
-data/projects/   — файловое хранилище проектов (в .gitignore)
-docker-compose.yml — Postgres, Redis, migrate (роли+миграции), api, worker
+data/projects/   — старое файловое хранилище apps/web (в .gitignore; больше не читается runtime-
+                    кодом — перенести в организацию через
+                    apps/api/scripts/migrate-legacy-projects.ts, см. «Перенос старых данных»)
+docker-compose.yml — Postgres, Redis, MinIO, migrate/createbucket (роли+миграции+бакет), api, worker
 .github/workflows/build-ipa.yml — сборка .ipa в GitHub Actions
 .github/workflows/ci.yml        — lint/typecheck/test на push+PR; Playwright E2E (создание .ipa +
                                    полный auth-флоу через реальный api) на PR в main

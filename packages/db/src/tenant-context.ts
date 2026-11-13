@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from './client';
+import { builds } from './schema/builds';
+import { previewLinks } from './schema/preview-links';
 
 export interface TenantIdentity {
   orgId: string;
@@ -59,6 +61,92 @@ export async function runInTokenLookupContext<T>(db: Db, tokenHash: string, fn: 
     const scoped = tx as unknown as Db;
     await scoped.execute(sql`select set_config('app.lookup_token_hash', ${tokenHash}, true)`);
     return storage.run(scoped, fn);
+  });
+}
+
+/**
+ * For claiming a draft into an org (packages/db/migrations' drafts RLS policy) — the
+ * move (insert into `projects`, delete from `drafts`) has to be one atomic transaction,
+ * and each table's RLS policy reads a different setting (projects: app.org_id; drafts:
+ * app.lookup_token_hash). Setting all three in the same transaction, rather than nesting
+ * two separate `runInTenantContext`/`runInTokenLookupContext` transactions, is what
+ * makes both tables' writes commit-or-rollback together.
+ */
+export async function runInClaimContext<T>(
+  db: Db,
+  params: { orgId: string; userId: string; tokenHash: string },
+  fn: () => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.org_id', ${params.orgId}, true)`);
+    await scoped.execute(sql`select set_config('app.user_id', ${params.userId}, true)`);
+    await scoped.execute(sql`select set_config('app.lookup_token_hash', ${params.tokenHash}, true)`);
+    return storage.run(scoped, fn);
+  });
+}
+
+/**
+ * For the build runner's token-authenticated callbacks (POST /builds/:id/start, GET
+ * .../config, GET .../icon, POST .../ipa, POST .../fail) — looks the build up by its
+ * token hash first (builds_token_select/update, see 0009_builds_token_access.sql, cover
+ * only a live queued/building row), then, once its project is known, sets
+ * app.build_project_id — NOT app.org_id — so the same transaction can also read that one
+ * project (icon/config) under projects_build_runner_select (0010_builds_runner_project_scope.sql).
+ * Deliberately narrower than runInTenantContext: the runner has no user identity and no
+ * legitimate reason to see any OTHER project, build, membership, or invitation in the
+ * same org — setting app.org_id here would have handed it org-wide read access via
+ * projects_org_isolation, far more than it needs. Returns undefined (instead of
+ * throwing) when no row matches, so callers 404 uniformly rather than distinguishing "no
+ * such token" from "found but already done".
+ */
+export async function runInBuildContext<T>(
+  db: Db,
+  tokenHash: string,
+  fn: (build: typeof builds.$inferSelect) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.lookup_token_hash', ${tokenHash}, true)`);
+    const [build] = await scoped.select().from(builds).where(eq(builds.tokenHash, tokenHash));
+    if (!build) {
+      return undefined;
+    }
+    await scoped.execute(sql`select set_config('app.build_project_id', ${build.projectId}, true)`);
+    return storage.run(scoped, () => fn(build));
+  });
+}
+
+/**
+ * For the public, unauthenticated GET /preview/:slug reader — no session, no draft
+ * cookie, just the slug's own hash. Looks the link up by slug_hash first
+ * (preview_links_slug_lookup, see 0014_preview_links_rls.sql, covers only a live
+ * not-revoked/not-expired row), then, once its owner is known, sets EITHER
+ * app.preview_project_id OR app.preview_draft_id — never app.org_id or
+ * app.lookup_token_hash, since this caller was never a member or a draft owner — so the
+ * same transaction can also read that one project or draft under
+ * projects_preview_select/drafts_preview_select. Returns undefined when no row matches,
+ * so the controller 404s uniformly rather than distinguishing "no such slug" from
+ * "revoked" from "expired".
+ */
+export async function runInPreviewLookupContext<T>(
+  db: Db,
+  slugHash: string,
+  fn: (link: typeof previewLinks.$inferSelect) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.lookup_slug_hash', ${slugHash}, true)`);
+    const [link] = await scoped.select().from(previewLinks).where(eq(previewLinks.slugHash, slugHash));
+    if (!link) {
+      return undefined;
+    }
+    if (link.projectId) {
+      await scoped.execute(sql`select set_config('app.preview_project_id', ${link.projectId}, true)`);
+    } else {
+      await scoped.execute(sql`select set_config('app.preview_draft_id', ${link.draftId}, true)`);
+    }
+    return storage.run(scoped, () => fn(link));
   });
 }
 

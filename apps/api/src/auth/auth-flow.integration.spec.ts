@@ -9,9 +9,14 @@ import { createApp } from '../create-app.js';
 // Only runs against real Postgres/Redis with a role-bootstrapped database (CI's build
 // job runs packages/db's migration pipeline against its services: containers first —
 // see .github/workflows/ci.yml). Locally this just skips, since plain `npm test`
-// shouldn't require live infrastructure.
+// shouldn't require live infrastructure. In CI, REQUIRE_LIVE_SERVICES=true turns a
+// missing env var into a hard failure instead of a silent skip — a misconfigured job
+// should never pass by quietly running 0 tests.
 const hasLiveServices =
   Boolean(process.env.DATABASE_URL) && Boolean(process.env.REDIS_URL) && Boolean(process.env.BETTER_AUTH_SECRET);
+if (!hasLiveServices && process.env.REQUIRE_LIVE_SERVICES === 'true') {
+  throw new Error('REQUIRE_LIVE_SERVICES=true but DATABASE_URL/REDIS_URL/BETTER_AUTH_SECRET are not set');
+}
 
 describe.skipIf(!hasLiveServices)('auth + organizations HTTP flow (live Postgres + Redis)', () => {
   let app: INestApplication;
@@ -21,11 +26,18 @@ describe.skipIf(!hasLiveServices)('auth + organizations HTTP flow (live Postgres
   beforeAll(async () => {
     mailLogFile = join(tmpdir(), `mobilio-mail-log-${Date.now()}.ndjson`);
     process.env.MAIL_LOG_FILE = mailLogFile;
+    // This suite is about auth/org flows, not CSRF — see csrf.integration.spec.ts for
+    // the dedicated, real-middleware coverage.
+    process.env.CSRF_DISABLED_FOR_TESTING = 'true';
 
     app = await createApp();
     await app.init();
 
     redis = new Redis(process.env.REDIS_URL!);
+  });
+
+  afterAll(() => {
+    delete process.env.CSRF_DISABLED_FOR_TESTING;
   });
 
   // Rate-limit buckets are keyed "<client-ip>|<path>" (sign-in and verify separately)

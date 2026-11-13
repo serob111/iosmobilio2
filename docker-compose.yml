@@ -32,6 +32,57 @@ services:
       timeout: 5s
       retries: 10
 
+  # cgr.dev/chainguard/minio, not Docker Hub's minio/minio or bitnami/minio — both of
+  # those now require registry auth to pull at all (MinIO Inc. and Bitnami locked their
+  # free images behind login in 2025); Chainguard's build is still anonymously pullable.
+  # It runs as a non-root user by default, which can't write to /data unless the
+  # container itself runs as root — hence `user: "0"` below (dev-only infra, not a prod
+  # concern). There's no accompanying `mc` client image left either (Chainguard's is
+  # gated, MinIO's and Bitnami's aren't pullable) — see the createbucket service, which
+  # creates the bucket via the AWS SDK directly instead.
+  #
+  # Pinned by digest, not `:latest` — Chainguard rebuilds `:latest` frequently (it's a
+  # rolling tag), so an unpinned reference here would make `docker compose up` silently
+  # pull a different image every so often. The trade-off is this digest needs a manual
+  # bump to pick up new patches; ci.yml uses the same digest for the same reason.
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:d88920d6a50bd0b088223b688be3b76c63e6205dbe494437f67ba1240ea12880
+    user: '0'
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: mobilio
+      MINIO_ROOT_PASSWORD: mobilio_minio_pw
+    ports:
+      # Same story as postgres/redis above — overridable in case of a local port clash.
+      - '${MINIO_HOST_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_HOST_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # No curl/wget in this image (Chainguard's minio is extremely minimal — see the
+      # comment above) — a bare TCP connect via bash's /dev/tcp is enough to know the
+      # server is accepting connections, which is all this gate needs.
+      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/9000']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the "mobilio" bucket if it doesn't exist yet, via packages/storage's
+  # ensure-bucket script (plain @aws-sdk/client-s3, no mc/aws-cli container needed).
+  createbucket:
+    build:
+      context: .
+      dockerfile: packages/storage/Dockerfile
+    environment:
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
+    depends_on:
+      minio:
+        condition: service_healthy
+
   # One-shot: bootstraps the mobilio_migrator/mobilio_app roles (if missing) and runs
   # Drizzle migrations (tables + RLS policies). api/worker wait for this to finish
   # successfully before starting, since the mobilio_app role they connect as doesn't
@@ -57,6 +108,46 @@ services:
       DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@postgres:5432/mobilio
       REDIS_URL: redis://redis:6379
       PORT: 3000
+      # S3_ENDPOINT (internal, container-to-container) is not reachable from a browser —
+      # S3_PUBLIC_ENDPOINT is what signed URLs actually point at. Defaults to
+      # MINIO_HOST_PORT's mapping; override if that's been changed in a root .env.
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: 'http://localhost:${MINIO_HOST_PORT:-9000}'
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
+      # "github" (the real default) needs GITHUB_DISPATCH_TOKEN/API_PUBLIC_URL/
+      # BUILD_TOKEN_KEY configured — validateBuildEnv refuses to start without them.
+      # Override to "github" with those set if you actually want this container
+      # dispatching real builds; local dev otherwise has no use for it.
+      BUILD_RUNNER: fake
+      # Everything below is required unconditionally (createApp() refuses to boot
+      # without it — see validatePreviewEnv/BETTER_AUTH_SECRET) — dev-only placeholder
+      # values, not meant for anything beyond this local Docker flow. apps/web still
+      # runs natively even in this "everything in Docker" variant (no web service/
+      # Dockerfile exists yet), so these are anchored to its native default port 3000.
+      BETTER_AUTH_SECRET: dev-only-not-a-real-secret
+      WEB_ORIGIN: http://localhost:3000
+      # Reachable from the browser, not api's own internal container port — this is
+      # what magic-link URLs/OAuth redirects and the preview proxy's own port get built
+      # from, so it must match the host-side mapping below (3001), not PORT (3000).
+      API_BASE_URL: http://localhost:3001
+      # The claim-token/session cookies default to Secure (HTTPS-only) — this flow is
+      # plain HTTP, so without this, drafts/sign-in would silently never persist a
+      # cookie at all. Same reasoning as apps/api/.env.example's own COOKIE_SECURE=false.
+      COOKIE_SECURE: 'false'
+      # Must be a different host from WEB_ORIGIN above — "preview.localhost" (not bare
+      # "localhost") resolves to loopback in Chromium/Firefox with no DNS/hosts-file
+      # entry needed, same convention as apps/api/.env.example and playwright.config.ts.
+      PREVIEW_PROXY_DOMAIN: preview.localhost
+      PREVIEW_PROXY_SCHEME: http
+      PREVIEW_PROXY_PORT: '3001'
+      # AES-256-GCM key for share-link slug encryption (preview-slug-crypto.ts) — any 32
+      # raw bytes, base64; this one decodes to the literal ASCII string
+      # "mobilio-dev-only-preview-slug-k!". Generate a real one for anything beyond this
+      # local Docker flow (`openssl rand -base64 32`).
+      PREVIEW_SLUG_KEY: bW9iaWxpby1kZXYtb25seS1wcmV2aWV3LXNsdWctayE=
     ports:
       - '3001:3000'
     depends_on:
@@ -64,6 +155,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      createbucket:
+        condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
 
@@ -73,9 +166,22 @@ services:
       dockerfile: apps/worker/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://mobilio_app:mobilio_app_pw@postgres:5432/mobilio
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: mobilio
+      S3_ACCESS_KEY_ID: mobilio
+      S3_SECRET_ACCESS_KEY: mobilio_minio_pw
+      S3_FORCE_PATH_STYLE: 'true'
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      createbucket:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres-data:
+  minio-data:

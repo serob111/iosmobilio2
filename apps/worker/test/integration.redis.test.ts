@@ -4,8 +4,13 @@ import IORedis from 'ioredis';
 
 // Only runs when a real Redis is reachable (CI sets REDIS_URL from its services:
 // container — see .github/workflows/ci.yml). Locally this just skips, since plain
-// `npm test` shouldn't require live infrastructure.
+// `npm test` shouldn't require live infrastructure. In CI, REQUIRE_LIVE_SERVICES=true
+// turns a missing env var into a hard failure instead of a silent skip — a
+// misconfigured job should never pass by quietly running 0 tests.
 const hasRedis = Boolean(process.env.REDIS_URL);
+if (!hasRedis && process.env.REQUIRE_LIVE_SERVICES === 'true') {
+  throw new Error('REQUIRE_LIVE_SERVICES=true but REDIS_URL is not set');
+}
 
 describe.skipIf(!hasRedis)('BullMQ (live redis)', () => {
   it('processes a real ping job end-to-end', async () => {

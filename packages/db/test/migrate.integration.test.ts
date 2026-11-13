@@ -12,11 +12,19 @@ const packageRoot = resolve(__dirname, '..');
 // postgres services: container per run — see .github/workflows/ci.yml — so the very
 // first `npm run db:migrate` there already is "migrations apply from scratch"; this
 // test re-asserts that formally and adds a second-run check). Locally this just skips.
+// In CI, REQUIRE_LIVE_SERVICES=true turns a missing env var into a hard failure instead
+// of a silent skip — a misconfigured job should never pass by quietly running 0 tests.
 const hasFullEnv =
   Boolean(process.env.POSTGRES_BOOTSTRAP_URL) &&
   Boolean(process.env.MOBILIO_MIGRATOR_PASSWORD) &&
   Boolean(process.env.MOBILIO_APP_PASSWORD) &&
   Boolean(process.env.MIGRATOR_DATABASE_URL);
+if (!hasFullEnv && process.env.REQUIRE_LIVE_SERVICES === 'true') {
+  throw new Error(
+    'REQUIRE_LIVE_SERVICES=true but POSTGRES_BOOTSTRAP_URL/MOBILIO_MIGRATOR_PASSWORD/' +
+      'MOBILIO_APP_PASSWORD/MIGRATOR_DATABASE_URL are not all set',
+  );
+}
 
 function runMigrate(): void {
   execFileSync('npx', ['tsx', 'src/migrate.ts'], {
@@ -57,6 +65,10 @@ describe.skipIf(!hasFullEnv)('db:migrate (live Postgres)', () => {
       expect(afterCount).toBe(beforeCount);
       expect(afterCount).toBeGreaterThan(0);
     },
+    // Runs the whole migration pipeline (now 19 files) twice against a real DB — close
+    // to Vitest's 5s default even in isolation, and the full monorepo suite's shared-DB
+    // contention pushed it over that once.
+    15_000,
   );
 
   it('mobilio_migrator owns every table and RLS is forced on every org_id table', async () => {
@@ -69,7 +81,7 @@ describe.skipIf(!hasFullEnv)('db:migrate (live Postgres)', () => {
 
     const rls = await migrator.db.execute(
       sql`select relname, relrowsecurity, relforcerowsecurity from pg_class
-          where relname in ('memberships', 'invitations', 'projects')`,
+          where relname in ('memberships', 'invitations', 'projects', 'drafts')`,
     );
     for (const row of rls.rows as Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>) {
       expect(row.relrowsecurity, `${row.relname} should have RLS enabled`).toBe(true);

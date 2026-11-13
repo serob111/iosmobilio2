@@ -93,3 +93,10 @@ export const ProjectConfigSchema = z
 
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 export type ProjectConfigInput = z.input<typeof ProjectConfigSchema>;
+
+/**
+ * Written alongside every stored `ProjectConfig` (see packages/db's `projects.config_version`
+ * and apps/api's ProjectsService) — bump this when ProjectConfigSchema's shape changes in a
+ * way existing rows won't satisfy, so a migration script knows which rows predate it.
+ */
+export const CONFIG_SCHEMA_VERSION = 1;

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link, useRouter } from "@/i18n/navigation";
 import { authClient } from "@/lib/authClient";
 import { fetchMe, type MeResponse } from "@/lib/apiClient";
 
 const CURRENT_ORG_STORAGE_KEY = "mobilio.currentOrgId";
 
 export default function Header() {
+  const t = useTranslations("header");
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null | "loading">("loading");
   const [currentOrgId, setCurrentOrgId] = useState<string>("");
@@ -52,15 +53,18 @@ export default function Header() {
           href="/login"
           className="rounded-full bg-[#17112E] px-5 py-2 text-sm font-semibold text-white hover:opacity-85"
         >
-          Войти
+          {t("signIn")}
         </Link>
       ) : (
         <div className="flex items-center gap-3">
+          <Link href="/projects" className="text-sm font-medium text-[#17112E] hover:underline">
+            {t("projects")}
+          </Link>
           {me.organizations.length > 0 ? (
             <select
               value={currentOrgId}
               onChange={(event) => handleOrgChange(event.target.value)}
-              aria-label="Организация"
+              aria-label="organization"
               className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-[#17112E] outline-none focus:border-[#4B2BE0]"
             >
               {me.organizations.map((org) => (
@@ -76,7 +80,7 @@ export default function Header() {
             onClick={handleLogout}
             className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-semibold text-[#17112E] hover:bg-zinc-50"
           >
-            Выйти
+            {t("signOut")}
           </button>
         </div>
       )}

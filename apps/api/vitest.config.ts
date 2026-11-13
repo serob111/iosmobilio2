@@ -9,6 +9,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    setupFiles: ['./test/setup.ts'],
     // Vitest runs test files in parallel by default; the live-Postgres/Redis
     // integration specs (auth-flow, organizations-race) share the same Redis rate-limit
     // buckets (Better Auth's secondaryStorage, keyed by path), so two of them running
@@ -19,10 +20,17 @@ export default defineConfig({
     fileParallelism: false,
     coverage: {
       provider: 'v8',
-      // Scoped to auth/organizations specifically (the Этап 1 spec's explicit
-      // threshold), not the whole app — health/queue/db predate this stage and aren't
-      // part of its coverage mandate, though they're reasonably covered regardless.
-      include: ['src/auth/**/*.ts', 'src/organizations/**/*.ts'],
+      // Scoped to the modules each stage's spec explicitly mandates a threshold for —
+      // health/queue/db predate Этап 1 and aren't part of either stage's coverage
+      // mandate, though they're reasonably covered regardless.
+      include: [
+        'src/auth/**/*.ts',
+        'src/organizations/**/*.ts',
+        'src/projects/**/*.ts',
+        'src/storage/**/*.ts',
+        'src/net/**/*.ts',
+        'src/drafts/**/*.ts',
+      ],
       exclude: ['src/**/*.spec.ts', 'src/**/*.d.ts', 'src/**/*.types.ts'],
       thresholds: {
         lines: 80,

@@ -1,4 +1,4 @@
-export { ProjectConfigSchema } from './schema';
+export { ProjectConfigSchema, CONFIG_SCHEMA_VERSION } from './schema';
 export type { ProjectConfig, ProjectConfigInput } from './schema';
 export { parseProjectConfig } from './parse';
 export type { ParseProjectConfigResult } from './parse';

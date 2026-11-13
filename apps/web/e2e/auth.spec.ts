@@ -1,69 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { Redis } from 'ioredis';
-import { MAIL_LOG_FILE } from './mailLog';
-
-interface LoggedMail {
-  to: string;
-  subject: string;
-  body: string;
-}
-
-function readMailLines(): string[] {
-  if (!existsSync(MAIL_LOG_FILE)) return [];
-  return readFileSync(MAIL_LOG_FILE, 'utf8').trim().split('\n').filter(Boolean);
-}
-
-/**
- * Only matches lines appended after `sinceLine` — without this, re-signing in with the
- * same email (e.g. the register-then-login-again test) can match the *first* sign-in's
- * already-consumed magic-link token instead of the second one, since both share the
- * same `to` address and the file is append-only across the whole test run.
- */
-async function waitForMail(to: string, bodyIncludes: string, sinceLine: number, timeoutMs = 10_000): Promise<LoggedMail> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const lines = readMailLines();
-    const match = lines
-      .slice(sinceLine)
-      .map((line) => JSON.parse(line) as LoggedMail)
-      .find((m) => m.to === to && m.body.includes(bodyIncludes));
-    if (match) return match;
-    if (Date.now() > deadline) {
-      throw new Error(`Timed out waiting for mail to ${to} containing "${bodyIncludes}"`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-}
-
-function extractUrl(body: string): string {
-  const [url] = body.match(/https?:\/\/\S+/) ?? [];
-  if (!url) throw new Error(`No URL found in mail body: ${body}`);
-  return url;
-}
-
-function redisClient(): Redis {
-  const redisUrl = process.env.E2E_API_REDIS_URL ?? 'redis://localhost:6380';
-  return new Redis(redisUrl);
-}
-
-// Rate-limit buckets are keyed "<client-ip>|<path>" and shared across the whole Redis
-// instance; this suite's own multi-sign-in flows accumulate toward them fast enough to
-// trip a limit within a single test otherwise. The ip prefix isn't fixed — it depends
-// on how the request reaches apps/api (a real browser through a real listening server
-// resolves differently than, say, an in-process test client) — so this matches by
-// suffix rather than hardcoding one. A targeted delete, not flushdb: this same Redis
-// also holds active sessions and in-flight magic-link tokens (Better Auth's
-// secondaryStorage), and a full flush risks wiping a different, still-valid session.
-async function resetRateLimitBuckets(): Promise<void> {
-  const redis = redisClient();
-  const keys = await redis.keys('*|/sign-in/magic-link');
-  keys.push(...(await redis.keys('*|/magic-link/verify')));
-  if (keys.length > 0) {
-    await redis.del(...keys);
-  }
-  await redis.quit();
-}
+import { extractUrl, readMailLines, resetRateLimitBuckets, waitForMail } from './helpers';
 
 async function signInByMagicLink(page: Page, email: string): Promise<void> {
   await resetRateLimitBuckets();
@@ -71,8 +7,8 @@ async function signInByMagicLink(page: Page, email: string): Promise<void> {
 
   await page.goto('/login');
   await page.getByPlaceholder('you@example.com').fill(email);
-  await page.getByRole('button', { name: 'Отправить ссылку для входа' }).click();
-  await page.getByText('Проверьте почту').waitFor();
+  await page.getByRole('button', { name: 'Send magic link' }).click();
+  await page.getByText('Check your email').waitFor();
 
   const mail = await waitForMail(email, '/api/auth/magic-link/verify', sinceLine);
   await resetRateLimitBuckets();
@@ -93,8 +29,8 @@ test.describe('auth', () => {
     const firstOrgName = await orgOption.first().textContent();
     expect(firstOrgName).toContain('workspace');
 
-    await page.getByRole('button', { name: 'Выйти' }).click();
-    await page.getByRole('link', { name: 'Войти' }).waitFor();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('link', { name: 'Sign in' }).waitFor();
 
     // Login again as the same (now existing, not new) user — same personal org, not a
     // second one created.
@@ -118,8 +54,12 @@ test.describe('auth', () => {
     const sinceLine = readMailLines().length;
 
     // No invite UI exists yet (out of Section 5's scope) — API calls reuse the same
-    // browser-context session cookie the page itself just established.
+    // browser-context session cookie the page itself just established. Unlike a real
+    // in-page fetch(), Playwright's request fixture doesn't attach an Origin header on
+    // its own, so it's set explicitly here to pass apps/api's CSRF Origin check the way
+    // a real browser-driven request naturally would.
     const inviteRes = await page.request.post(`http://localhost:3011/orgs/${orgId}/invitations`, {
+      headers: { Origin: 'http://localhost:3100' },
       data: { email: inviteeEmail, role: 'member' },
     });
     expect(inviteRes.ok()).toBe(true);
@@ -128,12 +68,13 @@ test.describe('auth', () => {
     const token = new URL(extractUrl(inviteMail.body)).searchParams.get('token');
     expect(token).toBeTruthy();
 
-    await page.getByRole('button', { name: 'Выйти' }).click();
-    await page.getByRole('link', { name: 'Войти' }).waitFor();
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('link', { name: 'Sign in' }).waitFor();
 
     await signInByMagicLink(page, inviteeEmail);
 
     const acceptRes = await page.request.post('http://localhost:3011/invitations/accept', {
+      headers: { Origin: 'http://localhost:3100' },
       data: { token },
     });
     expect(acceptRes.ok()).toBe(true);

@@ -5,7 +5,12 @@ import { HealthController } from './health.controller.js';
 // its services: containers — see .github/workflows/ci.yml). Locally this just skips,
 // since vitest doesn't load .env files and plain `npm test` shouldn't require live
 // services. Unlike health.controller.spec.ts, this file does NOT mock 'pg'/'ioredis'.
+// In CI, REQUIRE_LIVE_SERVICES=true turns a missing env var into a hard failure instead
+// of a silent skip — a misconfigured job should never pass by quietly running 0 tests.
 const hasLiveServices = Boolean(process.env.DATABASE_URL) && Boolean(process.env.REDIS_URL);
+if (!hasLiveServices && process.env.REQUIRE_LIVE_SERVICES === 'true') {
+  throw new Error('REQUIRE_LIVE_SERVICES=true but DATABASE_URL/REDIS_URL are not set');
+}
 
 describe.skipIf(!hasLiveServices)('HealthController (live services)', () => {
   it('reports both postgres and redis up against real services', async () => {

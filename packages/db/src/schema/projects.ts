@@ -1,14 +1,8 @@
 import { relations } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, timestamp, jsonb, index } from 'drizzle-orm/pg-core';
 import { uuidv7 } from 'uuidv7';
 import { organizations } from './tenant';
 
-/**
- * Empty for now — not read or written by any app code yet. Scaffolded here so RLS
- * (packages/db/migrations) and the tenant-isolation tests have a second org_id-scoped
- * table to prove the policy generalizes beyond `memberships`/`invitations`. Real
- * project data migrates from apps/web's file storage in Этап 2.
- */
 export const projects = pgTable(
   'projects',
   {
@@ -18,7 +12,18 @@ export const projects = pgTable(
       .references(() => organizations.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     sourceUrl: text('source_url').notNull(),
+    // Set only by apps/api/scripts/migrate-legacy-projects.ts, to the old file-storage
+    // project id (e.g. "p_7e8c8fb7b47e") it was migrated from — null for every
+    // project created normally through the app. The unique constraint is what makes a
+    // re-run of that script idempotent: inserting the same legacy id twice is a
+    // conflict it catches and reports as "skipped", not a duplicate row.
+    legacyId: text('legacy_id').unique(),
     config: jsonb('config').notNull(),
+    // Which version of @mobilio/config's ProjectConfigSchema `config` conforms to —
+    // written on every insert/update (see apps/api's ProjectsService). Lets a future
+    // schema change ship a one-off migration that only touches rows below the current
+    // version, instead of having to re-validate/guess the shape of every row's jsonb.
+    configVersion: integer('config_version').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
