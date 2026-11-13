@@ -56,7 +56,8 @@ describe.skipIf(!hasLiveServices)(
 
       redis = new Redis(process.env.REDIS_URL!);
       migrator = createDb(process.env.MIGRATOR_DATABASE_URL!);
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // msw@3.0.4's ListenOptions wraps SharedOptions in type-fest's PartialDeep, which mishandles onUnhandledRequest's function-in-union value type — the cast works around a type-only issue, not a real API mismatch.
+      server.listen({ onUnhandledRequest: 'bypass' } as Parameters<typeof server.listen>[0]);
     });
 
     async function resetRateLimitBuckets(): Promise<void> {

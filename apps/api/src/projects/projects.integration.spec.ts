@@ -63,7 +63,8 @@ describe.skipIf(!hasLiveServices)(
       // bypass, not error: this file's own requests to the live NestJS app (via supertest)
       // don't match any registered handler below and must pass through untouched — only
       // analyzeSite's one external fetch to the fake site url is actually mocked.
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // msw@3.0.4's ListenOptions wraps SharedOptions in type-fest's PartialDeep, which mishandles onUnhandledRequest's function-in-union value type — the cast works around a type-only issue, not a real API mismatch.
+      server.listen({ onUnhandledRequest: 'bypass' } as Parameters<typeof server.listen>[0]);
     });
 
     // See auth-flow.integration.spec.ts for why this is suffix-matched rather than a
