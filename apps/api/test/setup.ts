@@ -53,13 +53,13 @@ process.env.PREVIEW_SLUG_KEY ??= Buffer.alloc(32, 7).toString('base64');
 // in-process). A connect()-layer guard can't tell that apart from a real leak by
 // inspecting the call's arguments — matched or unmatched, mocked or genuinely bypassed,
 // the call looks identical. What *can* tell them apart is whether MSW's own machinery is
-// on the call stack at all — but that only works because every spec that talks to an
-// external host is required to use test/msw-policy.ts's onUnhandledRequest callback
-// (not the 'bypass'/'warn' string options, which let an unmatched request straight
-// through to this same real connect() with no way for this guard to tell it apart from
-// a matched one): that callback throws for anything outside this same allow-list,
-// BEFORE the request ever reaches the socket layer, so a request that actually arrives
-// here from inside MSW already passed that check.
+// on the call stack at all — but that only works because test/mocks/server.ts registers
+// test/msw-policy.ts's catch-all handler (http.all('*', ...)) as setupServer()'s own
+// initial handler: every request matches *something* now (a spec's own handler, or that
+// catch-all), which passthrough()es allowed-network-hosts.ts's hosts and
+// HttpResponse.error()s everything else, BEFORE the request ever reaches the socket
+// layer — so a request that actually arrives here from inside MSW already passed that
+// check.
 import net from 'node:net';
 import { isAllowedNetworkHost } from './allowed-network-hosts.js';
 
