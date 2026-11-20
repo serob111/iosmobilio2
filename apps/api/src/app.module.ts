@@ -14,6 +14,7 @@ import { PreviewModule } from './preview/preview.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { QueueModule } from './queue/queue.module.js';
 import { StorageModule } from './storage/storage.module.js';
+import { ShellReleasesModule } from './shell-releases/shell-releases.module.js';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { StorageModule } from './storage/storage.module.js';
     ProjectsModule,
     DraftsModule,
     BuildsModule,
+    ShellReleasesModule,
     PreviewModule,
     AuthModule,
     HealthModule,

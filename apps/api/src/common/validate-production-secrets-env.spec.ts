@@ -4,6 +4,7 @@ import { validateProductionSecretsEnv } from './validate-production-secrets-env.
 const VALID_SECRET = randomBytes(32).toString('base64url'); // 43 chars, well over the 32-char floor
 const DEV_AUTH_SECRET_PLACEHOLDER = 'dev-only-not-a-real-secret';
 const DEV_SLUG_KEY_PLACEHOLDER = 'bW9iaWxpby1kZXYtb25seS1wcmV2aWV3LXNsdWctayE=';
+const DEV_SHELL_RELEASE_SECRET_PLACEHOLDER = 'dev-only-shell-release-secret';
 
 describe('validateProductionSecretsEnv', () => {
   const originalEnv = { ...process.env };
@@ -16,6 +17,7 @@ describe('validateProductionSecretsEnv', () => {
     process.env.BETTER_AUTH_SECRET = VALID_SECRET;
     process.env.PREVIEW_SLUG_KEY = VALID_SECRET;
     process.env.BUILD_TOKEN_KEY = VALID_SECRET;
+    process.env.SHELL_RELEASE_SECRET = VALID_SECRET;
     process.env.COOKIE_SECURE = 'true';
   }
 
@@ -29,6 +31,7 @@ describe('validateProductionSecretsEnv', () => {
     process.env.BETTER_AUTH_SECRET = DEV_AUTH_SECRET_PLACEHOLDER;
     process.env.PREVIEW_SLUG_KEY = DEV_SLUG_KEY_PLACEHOLDER;
     process.env.BUILD_TOKEN_KEY = DEV_SLUG_KEY_PLACEHOLDER;
+    process.env.SHELL_RELEASE_SECRET = DEV_SHELL_RELEASE_SECRET_PLACEHOLDER;
     process.env.COOKIE_SECURE = 'false';
     expect(() => validateProductionSecretsEnv()).not.toThrow();
   });
@@ -85,6 +88,32 @@ describe('validateProductionSecretsEnv', () => {
     setValidProductionEnv();
     delete process.env.BUILD_TOKEN_KEY;
     expect(() => validateProductionSecretsEnv()).not.toThrow();
+  });
+
+  it('does not check SHELL_RELEASE_SECRET at all when it is unset (ShellReleaseAuthGuard rejects every request on its own)', () => {
+    setValidProductionEnv();
+    delete process.env.SHELL_RELEASE_SECRET;
+    expect(() => validateProductionSecretsEnv()).not.toThrow();
+  });
+
+  it('throws naming SHELL_RELEASE_SECRET, without printing its value, when it is apps/api/.env.example\'s placeholder', () => {
+    setValidProductionEnv();
+    process.env.SHELL_RELEASE_SECRET = DEV_SHELL_RELEASE_SECRET_PLACEHOLDER;
+    let error: unknown;
+    try {
+      validateProductionSecretsEnv();
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('SHELL_RELEASE_SECRET');
+    expect((error as Error).message).not.toContain(DEV_SHELL_RELEASE_SECRET_PLACEHOLDER);
+  });
+
+  it('throws naming SHELL_RELEASE_SECRET when it is shorter than 32 characters', () => {
+    setValidProductionEnv();
+    process.env.SHELL_RELEASE_SECRET = 'short-but-not-the-placeholder';
+    expect(() => validateProductionSecretsEnv()).toThrow(/SHELL_RELEASE_SECRET/);
   });
 
   it('throws naming COOKIE_SECURE, without printing any value, when it is exactly "false" in production', () => {

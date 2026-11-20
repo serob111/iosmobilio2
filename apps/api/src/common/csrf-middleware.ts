@@ -12,12 +12,15 @@ const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  *   never by a cookie. A CSRF defense exists to stop a browser from automatically
  *   attaching a cookie to a forged request; a bearer token in an Authorization header
  *   is never attached automatically, so there's nothing for this check to defend here.
+ * - /internal/shell-releases/* — ShellReleasesController, same reasoning as /builds/*
+ *   above: authorized by the static Bearer SHELL_RELEASE_SECRET (ShellReleaseAuthGuard),
+ *   called only by build-shell-base.yml, never by a browser.
  *
  * The preview proxy isn't in this list because it never reaches this middleware at
  * all — it's mounted ahead of everything else in create-app.ts and fully handles (or
  * passes through) any request whose Host header marks it as proxy territory.
  */
-const EXCLUDED_PREFIXES = ['/api/auth', '/builds/'];
+const EXCLUDED_PREFIXES = ['/api/auth', '/builds/', '/internal/shell-releases'];
 
 // Opt-in, env-gated escape hatch for integration tests that exercise some other
 // feature and don't individually set an Origin header on every mutating request —

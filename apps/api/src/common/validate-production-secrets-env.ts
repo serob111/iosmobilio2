@@ -17,17 +17,22 @@
 const KNOWN_DEV_PLACEHOLDER_VALUES = new Set([
   'dev-only-not-a-real-secret', // docker-compose.yml / apps/api/.env.example: BETTER_AUTH_SECRET
   'bW9iaWxpby1kZXYtb25seS1wcmV2aWV3LXNsdWctayE=', // docker-compose.yml: PREVIEW_SLUG_KEY
+  'dev-only-shell-release-secret', // apps/api/.env.example: SHELL_RELEASE_SECRET
 ]);
 
-const SECRET_ENV_VARS = ['BETTER_AUTH_SECRET', 'PREVIEW_SLUG_KEY', 'BUILD_TOKEN_KEY'] as const;
+const SECRET_ENV_VARS = ['BETTER_AUTH_SECRET', 'PREVIEW_SLUG_KEY', 'BUILD_TOKEN_KEY', 'SHELL_RELEASE_SECRET'] as const;
 
 // Better Auth's own secret, used to sign/encrypt session tokens — anything shorter is
 // trivially brute-forceable. PREVIEW_SLUG_KEY/BUILD_TOKEN_KEY have no entry here:
 // validatePreviewEnv()/validateBuildEnv() already require each to decode to exactly 32
 // raw bytes, unconditionally, in every environment — a minimum length check here would
-// just duplicate that.
+// just duplicate that. SHELL_RELEASE_SECRET has no such validator (it's not required to
+// be set at all — ShellReleaseAuthGuard just rejects every request when it's unset,
+// which is fine for a feature with no enabled/disabled flag of its own), so it gets a
+// length floor here instead.
 const MIN_SECRET_LENGTH: Partial<Record<(typeof SECRET_ENV_VARS)[number], number>> = {
   BETTER_AUTH_SECRET: 32,
+  SHELL_RELEASE_SECRET: 32,
 };
 
 export function validateProductionSecretsEnv(): void {

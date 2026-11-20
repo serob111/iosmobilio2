@@ -33,6 +33,7 @@ export default defineConfig({
         'src/builds/**/*.ts',
         'src/preview/**/*.ts',
         'src/common/**/*.ts',
+        'src/shell-releases/**/*.ts',
       ],
       exclude: ['src/**/*.spec.ts', 'src/**/*.d.ts', 'src/**/*.types.ts'],
       thresholds: {
@@ -48,6 +49,7 @@ export default defineConfig({
         'src/builds/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
         'src/preview/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
         'src/common/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
+        'src/shell-releases/**': { lines: 80, statements: 80, functions: 80, branches: 80 },
       },
     },
   },
