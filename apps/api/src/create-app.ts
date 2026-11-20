@@ -9,6 +9,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import { validateBuildEnv } from './builds/validate-build-env.js';
 import { validatePreviewEnv } from './preview/validate-preview-env.js';
 import { validateSafeFetchTestEnv } from './net/safe-fetch.js';
+import { validateProductionSecretsEnv } from './common/validate-production-secrets-env.js';
 import { createCsrfMiddleware, validateCsrfTestEnv } from './common/csrf-middleware.js';
 import { createPreviewProxyMiddleware } from './preview/proxy/proxy-middleware.js';
 import { PreviewLinkService } from './preview/preview-link.service.js';
@@ -28,6 +29,7 @@ export async function createApp(): Promise<INestApplication> {
   validatePreviewEnv();
   validateSafeFetchTestEnv();
   validateCsrfTestEnv();
+  validateProductionSecretsEnv();
 
   // Better Auth needs the raw, unparsed request body (it parses JSON itself from the
   // Fetch API Request it builds) — bodyParser:false + mounting its handler before

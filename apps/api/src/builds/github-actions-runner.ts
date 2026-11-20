@@ -38,7 +38,14 @@ export class GithubActionsRunner implements BuildRunner {
       },
       body: JSON.stringify({
         ref,
-        inputs: { buildId: build.id, buildTokenEnc, baseUrl: build.baseUrl },
+        // useTestConfig defaults to true in build-ipa.yml (so a manual, no-inputs run from
+        // the GitHub UI safely builds the test fixture) — the REST workflow_dispatch API
+        // applies that default whenever an input is omitted, it does not leave it "unset"
+        // for the workflow to infer from the other inputs being present. Every real,
+        // api-dispatched build must say so explicitly, or it silently builds the test
+        // fixture and skips every apps/api callback step (Report build started, Upload
+        // .ipa to apps/api, Report failure) — all gated on this same flag.
+        inputs: { buildId: build.id, buildTokenEnc, baseUrl: build.baseUrl, useTestConfig: 'false' },
       }),
     });
     if (!res.ok) {

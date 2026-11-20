@@ -7,6 +7,7 @@ import { useProjectConfig } from '../src/config/ConfigContext';
 import { TabBar } from '../src/components/TabBar';
 import { WebViewScreen } from '../src/components/WebViewScreen';
 import { ContactsScreen } from '../src/components/ContactsScreen';
+import { useRegisterPushOnMount } from '../src/notifications/useRegisterPushOnMount';
 
 const TRIAL_BANNER_KEY = 'mobilio.trial_banner_last_shown';
 
@@ -15,6 +16,8 @@ export default function MainScreen() {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
   const [showTrialBanner, setShowTrialBanner] = useState(false);
+
+  useRegisterPushOnMount(config);
 
   useEffect(() => {
     if (!config.trial) return;

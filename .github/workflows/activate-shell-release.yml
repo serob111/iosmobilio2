@@ -1,0 +1,33 @@
+name: activate-shell-release
+run-name: activate shell release ${{ inputs.version }}
+
+# Deliberately its own workflow, not a step of build-shell-base.yml — a base build that
+# finishes CI should never go live on its own; someone has to look at its checks/
+# manifest (the build-shell-base.yml run's own summary, or GET /internal/shell-releases)
+# and decide this specific version is the one every new repack should use from now on.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact version to activate (must already be registered by build-shell-base.yml)."
+        required: true
+        type: string
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Activate
+        env:
+          API_PUBLIC_URL: ${{ vars.API_PUBLIC_URL }}
+          SHELL_RELEASE_SECRET: ${{ secrets.SHELL_RELEASE_SECRET }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -z "$API_PUBLIC_URL" ] || [ -z "$SHELL_RELEASE_SECRET" ]; then
+            echo "API_PUBLIC_URL/SHELL_RELEASE_SECRET repository variables/secrets are not configured" >&2
+            exit 1
+          fi
+          curl --fail -X POST \
+            -H "Authorization: Bearer $SHELL_RELEASE_SECRET" \
+            "$API_PUBLIC_URL/internal/shell-releases/$VERSION/activate"
+          echo "Activated shell release $VERSION"

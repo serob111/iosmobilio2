@@ -1,65 +1,43 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
-import fs from 'fs';
-
-type ProjectOverrides = {
-  name: string;
-  slug: string;
-  scheme: string;
-  bundleIdentifier: string;
-  splashBackgroundColor: string;
-  icon?: string;
-};
+import { withMobilioBundleResources } from './plugins/withMobilioBundleResources';
+import { withMobilioIcons } from './plugins/withMobilioIcons';
 
 /**
- * In CI, CONFIG_PATH points at the project's config.json (downloaded from apps/web) and
- * ICON_PATH at its icon.png — this is what lets one shell template become each user's
- * uniquely-named, uniquely-identified app without hand-editing anything per build.
- * Without CONFIG_PATH (local dev / Expo Go), this returns null and nothing changes.
+ * This is the *base* — one compiled shell, the same for every client (see
+ * README/docs for the repack pipeline). Nothing here varies per project: name,
+ * bundleIdentifier, scheme, icons and splash are all fixed, "neutral" values. Every
+ * client-specific value (name, bundle id, icon, splash color/image, entitlements'
+ * real aps-environment/associated-domains) is written by repack (packages/repacker)
+ * directly into the already-*built* .app — never by this config, and never read from
+ * CONFIG_PATH/ICON_PATH env vars (that CI-time-bake approach predates the repack
+ * pipeline and no longer exists).
  */
-function loadProjectOverrides(): ProjectOverrides | null {
-  const configPath = process.env.CONFIG_PATH;
-  if (!configPath) return null;
-  try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const config = JSON.parse(raw) as {
-      name: string;
-      slug: string;
-      bundleId: string;
-      theme?: { background?: string };
-    };
-    const iconPath = process.env.ICON_PATH;
-    return {
-      name: config.name,
-      slug: config.slug,
-      scheme: config.slug,
-      bundleIdentifier: config.bundleId,
-      splashBackgroundColor: config.theme?.background ?? '#FFFFFF',
-      icon: iconPath && fs.existsSync(iconPath) ? iconPath : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
 export default ({ config }: ConfigContext) => {
-  const overrides = loadProjectOverrides();
-
   // Cast (not annotate) the return: newArchEnabled and some other valid app-config
   // fields lag behind in the published ExpoConfig type, and annotating the function's
   // return type instead would trigger excess-property errors on every one of them.
   return {
     ...config,
-    name: overrides?.name ?? 'Mobilio',
-    slug: overrides?.slug ?? 'mobilio-shell',
-    scheme: overrides?.scheme ?? 'mobilio',
+    name: 'Mobilio',
+    slug: 'mobilio-shell',
+    scheme: 'mobilio',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: overrides?.icon ?? './assets/icon.png',
+    icon: './assets/icon.png',
     userInterfaceStyle: 'light',
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
-      bundleIdentifier: overrides?.bundleIdentifier ?? 'am.mobilio.trial.demo',
+      bundleIdentifier: 'am.mobilio.shell.base',
+      // Template values — repack overwrites both with this client's real domains and
+      // 'production' before signing (see packages/repacker's entitlements step). The
+      // capability itself (Associated Domains, Push Notifications) still has to be
+      // enabled on the App ID in Apple's portal per-client; packages/apple's
+      // ensureBundleId does that.
+      entitlements: {
+        'aps-environment': 'development',
+        'com.apple.developer.associated-domains': [],
+      },
     },
     android: {
       adaptiveIcon: {
@@ -78,11 +56,17 @@ export default ({ config }: ConfigContext) => {
       'expo-router',
       'expo-status-bar',
       'expo-web-browser',
+      'expo-notifications',
+      withMobilioBundleResources,
+      withMobilioIcons,
       [
         'expo-splash-screen',
         {
-          backgroundColor: overrides?.splashBackgroundColor ?? '#FFFFFF',
-          image: './assets/splash-icon.png',
+          // Neutral on purpose (see app/_layout.tsx's SplashScreen.preventAutoHideAsync
+          // + src/components/BrandSplash.tsx) — no client color/logo belongs in the
+          // native launch screen; the system default background shows for the instant
+          // between process launch and BrandSplash's own first paint, which reads the
+          // real color/image from mobilio/config.json/splash.png at runtime instead.
         },
       ],
     ],

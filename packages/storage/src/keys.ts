@@ -6,6 +6,18 @@ function assertUuid(value: string, argName: string): void {
   }
 }
 
+// shell_releases has no org/project id to double as path-traversal protection the way
+// orgId/projectId do above — version comes straight off a git tag/workflow input, so
+// it gets its own allowlist instead: no "/", no "..", no leading dot, nothing but a
+// plain version-ish token.
+const SAFE_VERSION_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
+
+function assertSafeVersion(value: string, argName: string): void {
+  if (!SAFE_VERSION_PATTERN.test(value)) {
+    throw new Error(`${argName} must be a safe version string, got: ${value}`);
+  }
+}
+
 /**
  * Centralized so every caller (projects, drafts, builds modules) agrees on layout —
  * drift here would mean one module writes to a key another never looks for. Arguments
@@ -29,4 +41,14 @@ export function buildIpaKey(orgId: string, projectId: string, buildId: string): 
 export function draftIconKey(draftId: string): string {
   assertUuid(draftId, 'draftId');
   return `drafts/${draftId}/icon.png`;
+}
+
+export function shellReleaseIpaKey(version: string): string {
+  assertSafeVersion(version, 'version');
+  return `shell-base/${version}/base.ipa`;
+}
+
+export function shellReleaseManifestKey(version: string): string {
+  assertSafeVersion(version, 'version');
+  return `shell-base/${version}/manifest.json`;
 }

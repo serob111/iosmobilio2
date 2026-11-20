@@ -62,7 +62,11 @@ function isActiveShareLinkConflict(error: unknown): boolean {
   );
 }
 
-type ShareLinkLookup = { status: 'ok'; url: string } | { status: 'none' } | { status: 'broken'; rowId: string };
+type ShareLinkLookup =
+  | { status: 'ok'; url: string }
+  | { status: 'none' }
+  | { status: 'broken'; rowId: string }
+  | { status: 'expired'; rowId: string };
 
 @Injectable()
 export class PreviewLinkService {
@@ -90,7 +94,12 @@ export class PreviewLinkService {
       .from(schema.previewLinks)
       .where(and(ownerWhere(owner), eq(schema.previewLinks.kind, 'share'), isNull(schema.previewLinks.revokedAt)));
     if (!row) return { status: 'none' };
-    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return { status: 'none' };
+    // Expired is not the same as absent: the partial unique index backing "one active
+    // share per project/draft" (preview_links_one_active_share_per_project/_draft, 0017)
+    // only checks revoked_at IS NULL — it has no idea about expires_at — so a row that's
+    // merely expired still occupies that slot and must be revoked before a replacement
+    // can be inserted, exactly like a 'broken' row already is.
+    if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return { status: 'expired', rowId: row.id };
     if (!row.slugEnc) {
       this.logger.warn({ previewLinkId: row.id }, 'active share link has no slug_enc');
       return { status: 'broken', rowId: row.id };
@@ -188,7 +197,7 @@ export class PreviewLinkService {
     return runInTenantContext(this.dbService.db, { orgId, userId }, async () => {
       const lookup = await this.lookupActiveShareLink({ projectId, orgId });
       if (lookup.status === 'ok') return { url: lookup.url };
-      if (lookup.status === 'broken') await this.revokeActiveShareLink({ projectId, orgId });
+      if (lookup.status === 'broken' || lookup.status === 'expired') await this.revokeActiveShareLink({ projectId, orgId });
       return this.insertShareLinkOrReread({ projectId, orgId });
     });
   }
@@ -197,7 +206,7 @@ export class PreviewLinkService {
     return runInTokenLookupContext(this.dbService.db, tokenHash, async () => {
       const lookup = await this.lookupActiveShareLink({ draftId });
       if (lookup.status === 'ok') return { url: lookup.url };
-      if (lookup.status === 'broken') await this.revokeActiveShareLink({ draftId });
+      if (lookup.status === 'broken' || lookup.status === 'expired') await this.revokeActiveShareLink({ draftId });
       return this.insertShareLinkOrReread({ draftId }, draftExpiresAt);
     });
   }

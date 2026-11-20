@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, timestamp, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, bigint, timestamp, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { uuidv7 } from 'uuidv7';
 import { organizations } from './tenant';
 import { projects } from './projects';
@@ -26,7 +26,12 @@ export const builds = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     status: buildStatus('status').notNull().default('queued'),
     // GitHub Actions run id/url — unknown until the workflow is actually dispatched.
-    runId: integer('run_id'),
+    // bigint, not integer: GitHub's run ids have long since exceeded int4's ~2.1 billion
+    // ceiling (e.g. 43268190556). mode: 'number' (not 'bigint'/JS BigInt) is safe — run
+    // ids are comfortably within Number.MAX_SAFE_INTEGER — and keeps runId a plain
+    // number everywhere it's already used (BuildSummary, JSON responses) with no
+    // BigInt-serialization ripple effects.
+    runId: bigint('run_id', { mode: 'number' }),
     runUrl: text('run_url'),
     error: text('error'),
     // Which apps/shell template commit/version this build ran against.

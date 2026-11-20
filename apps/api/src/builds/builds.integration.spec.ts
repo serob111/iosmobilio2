@@ -62,7 +62,10 @@ describe.skipIf(!hasLiveServices)(
       fakeRunner = app.get(FakeRunner);
 
       redis = new Redis(process.env.REDIS_URL!);
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     // Each test signs in once via magic-link, and Better Auth's own sign-in rate limit
@@ -187,7 +190,11 @@ describe.skipIf(!hasLiveServices)(
         const startRes = await request(app.getHttpServer())
           .post(`/builds/${buildId}/start`)
           .set(...bearer(rawToken))
-          .send({ runId: 123, runUrl: 'https://github.com/example/example/actions/runs/123' })
+          // A real-looking run id, not a toy value: GitHub Actions run ids have long since
+          // exceeded int4's ~2.1 billion ceiling (packages/db/migrations/0019), and this
+          // would 500 on a "value out of range for type integer" if that column ever
+          // regressed back to integer.
+          .send({ runId: 43268190556, runUrl: 'https://github.com/example/example/actions/runs/43268190556' })
           .expect(201);
         expect(startRes.body.status).toBe('building');
 
@@ -195,7 +202,11 @@ describe.skipIf(!hasLiveServices)(
         await request(app.getHttpServer())
           .post(`/builds/${buildId}/start`)
           .set(...bearer(rawToken))
-          .send({ runId: 123, runUrl: 'https://github.com/example/example/actions/runs/123' })
+          // A real-looking run id, not a toy value: GitHub Actions run ids have long since
+          // exceeded int4's ~2.1 billion ceiling (packages/db/migrations/0019), and this
+          // would 500 on a "value out of range for type integer" if that column ever
+          // regressed back to integer.
+          .send({ runId: 43268190556, runUrl: 'https://github.com/example/example/actions/runs/43268190556' })
           .expect(201);
 
         const configRes = await request(app.getHttpServer())
@@ -369,14 +380,41 @@ describe.skipIf(!hasLiveServices)(
         const oversized = Buffer.alloc(300 * 1024 * 1024 + 1, 1);
         oversized.set(ZIP_HEADER, 0);
 
+        // Samples RSS while the upload is in flight — if ipa-stream.ts's validation
+        // Transform or the S3 multipart upload ever materialized the whole 300MB+ body
+        // at once (instead of streaming it through, a few MB at a time), RSS would grow
+        // by roughly the file's own size. The test's own oversized buffer above is a
+        // separate, client-side allocation (how supertest's .send() has to work) — this
+        // is specifically about what the server does with it as it arrives.
+        if (global.gc) global.gc();
+        const baselineRss = process.memoryUsage().rss;
+        let peakRss = baselineRss;
+        const rssPoll = setInterval(() => {
+          peakRss = Math.max(peakRss, process.memoryUsage().rss);
+        }, 200);
+
         const res = await request(app.getHttpServer())
           .post(`/builds/${buildId}/ipa`)
           .set(...bearer(rawToken))
           .set('Content-Type', 'application/octet-stream')
           .send(oversized);
+        clearInterval(rssPoll);
 
         expect(res.status).toBe(413);
         expect(res.body.error.code).toBe('FILE_TOO_LARGE');
+
+        // supertest's client and the Nest app under test share this one process, so
+        // `oversized` itself (~300MB, allocated above) is already counted in this
+        // growth, with normal V8/GC noise on top (observed 400-480MB across repeated
+        // runs for that ~300MB allocation alone) — that's expected and not what's under
+        // test. What this bounds is whatever the *server* does on top of that:
+        // ipa-stream.ts's validation Transform streams one chunk at a time, and
+        // putStream's multipart upload holds at most partSize*queueSize per part in
+        // flight (8MB*8=64MB here) — never the whole body a second time. A real
+        // full-buffering bug downstream would add *another* ~300MB on top of the
+        // client's own allocation, pushing this past 600MB; the noise alone never does.
+        const rssGrowthMb = (peakRss - baselineRss) / (1024 * 1024);
+        expect(rssGrowthMb).toBeLessThan(600);
 
         // The failed upload didn't leave the build stuck "building" forever from the
         // runner's point of view, nor silently marked done.

@@ -64,6 +64,13 @@ const FeaturesSchema = z
     share: z.boolean().default(true),
     deepLinks: z.boolean().default(false),
     pullToRefresh: z.boolean().default(true),
+    // Gates the shell's own expo-notifications registration (apps/shell/app/_layout.tsx)
+    // — the native module and its Info.plist/entitlements capability ship in every
+    // build regardless (app.config.ts's plugin list is the same for every client), only
+    // the JS-side registration call is conditional. Additive and defaulted, so existing
+    // stored configs (written before this field existed) keep parsing — no
+    // CONFIG_SCHEMA_VERSION bump needed.
+    push: z.boolean().default(false),
   })
   .default({});
 

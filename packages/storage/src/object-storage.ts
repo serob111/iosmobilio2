@@ -102,6 +102,13 @@ export class S3ObjectStorage implements ObjectStorage {
     const upload = new Upload({
       client: this.client,
       params: { Bucket: this.bucket, Key: key, Body: body, ContentType: contentType },
+      // lib-storage's defaults (partSize 5MB, queueSize 4) were sized for the smallest
+      // part S3 allows, not for throughput — a 300MB .ipa at 5MB/part is 60 sequential
+      // part uploads with only 4 ever in flight at once. Larger parts mean fewer
+      // round trips for the same payload; more in-flight parts means the ones that
+      // remain overlap instead of queueing behind each other.
+      partSize: 8 * 1024 * 1024,
+      queueSize: 8,
     });
     await upload.done();
   }

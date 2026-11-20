@@ -56,7 +56,10 @@ describe.skipIf(!hasLiveServices)(
 
       redis = new Redis(process.env.REDIS_URL!);
       migrator = createDb(process.env.MIGRATOR_DATABASE_URL!);
-      server.listen({ onUnhandledFrame: 'bypass' });
+      // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+      // actual policy (every request now matches either this file's own handlers or
+      // the shared catch-all baked into test/mocks/server.ts).
+      server.listen();
     });
 
     async function resetRateLimitBuckets(): Promise<void> {
@@ -67,6 +70,11 @@ describe.skipIf(!hasLiveServices)(
       // in the same vitest run — fileParallelism:false means they all run in one
       // process) — the draft-backed describe block alone calls POST /drafts five times.
       keys.push(...(await redis.keys('draft-rate-limit:*')));
+      // preview-rate-limit:* (PreviewRateLimitService, 60 GET /preview/:slug per minute,
+      // keyed by client IP not by slug) is shared across every test in this file too —
+      // without resetting it, a test that deliberately exhausts the budget would leave
+      // every later test in this file 429ing instead of 200ing.
+      keys.push(...(await redis.keys('preview-rate-limit:*')));
       if (keys.length > 0) {
         await redis.del(...keys);
       }
@@ -354,6 +362,52 @@ describe.skipIf(!hasLiveServices)(
         expect(stillActive.body.url).toBe(shareRes.body.url);
       });
 
+      it('GET .../preview-link 404s (PREVIEW_LINK_NOT_FOUND) once the active link has expired', async () => {
+        mockSite();
+        const cookie = await signInByMagicLink(`itest-preview-expired-${Date.now()}@example.com`);
+        const me = await request(app.getHttpServer()).get('/me').set('Cookie', cookie).expect(200);
+        const orgId = me.body.organizations[0].id as string;
+        const userId = me.body.user.id as string;
+        const createRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects`)
+          .set('Cookie', cookie)
+          .send({ url: 'https://preview-itest.example/' })
+          .expect(201);
+        const projectId = createRes.body.id as string;
+
+        const linkRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        const firstSlug = slugFromUrl(linkRes.body.url as string);
+
+        // Distinct from "404s once the link has expired" (draft-backed, below): that one
+        // exercises GET /preview/:slug's own expiry filtering; this backdates the same
+        // row and hits lookupActiveShareLink's explicit expiresAt check instead, via the
+        // owner-authenticated GET .../preview-link endpoint — a different code path.
+        await runInTenantContext(migrator.db, { orgId, userId }, () =>
+          getTenantDb()
+            .update(schema.previewLinks)
+            .set({ expiresAt: new Date(Date.now() - 1000) })
+            .where(eq(schema.previewLinks.projectId, projectId)),
+        );
+
+        const getRes = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(404);
+        expect(getRes.body.error.code).toBe('PREVIEW_LINK_NOT_FOUND');
+
+        // An expired (not merely revoked/broken) active link is treated as "none" —
+        // POST creates a fresh one rather than trying to revoke-then-insert.
+        const postRes = await request(app.getHttpServer())
+          .post(`/orgs/${orgId}/projects/${projectId}/preview-link`)
+          .set('Cookie', cookie)
+          .expect(201);
+        const newSlug = slugFromUrl(postRes.body.url as string);
+        expect(newSlug).not.toBe(firstSlug);
+      });
+
       it('404s creating a preview link for a project the caller\'s org does not own', async () => {
         mockSite();
         const ownerCookie = await signInByMagicLink(`itest-preview-owner-${Date.now()}@example.com`);
@@ -496,6 +550,27 @@ describe.skipIf(!hasLiveServices)(
 
         await request(app.getHttpServer()).get(`/preview/${slug}`).expect(404);
       });
+    });
+
+    it('rate-limits GET /preview/:slug at 60/min per client, independent of which slug is requested', async () => {
+      mockSite();
+      const draftRes = await request(app.getHttpServer())
+        .post('/drafts')
+        .send({ url: 'https://preview-itest.example/' })
+        .expect(201);
+      const draftCookie = draftCookieFrom(draftRes);
+      const linkRes = await request(app.getHttpServer())
+        .post('/drafts/me/preview-link')
+        .set('Cookie', draftCookie)
+        .expect(201);
+      const slug = slugFromUrl(linkRes.body.url as string);
+
+      for (let i = 0; i < 60; i++) {
+        await request(app.getHttpServer()).get(`/preview/${slug}`).expect(200);
+      }
+      const res = await request(app.getHttpServer()).get(`/preview/${slug}`);
+      expect(res.status).toBe(429);
+      expect(res.body.error.message).toMatch(/Слишком много запросов/);
     });
   },
 );

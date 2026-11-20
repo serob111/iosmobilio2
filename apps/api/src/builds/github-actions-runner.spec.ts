@@ -9,11 +9,28 @@ const BUILD_TOKEN_KEY = randomBytes(32).toString('base64');
 describe('GithubActionsRunner', () => {
   const originalEnv = { ...process.env };
 
-  // msw@3.0.4's ListenOptions wraps SharedOptions in type-fest's PartialDeep, which mishandles onUnhandledRequest's function-in-union value type — the cast works around a type-only issue, not a real API mismatch.
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' } as Parameters<typeof server.listen>[0]));
+  // No listen()-time option needed — see test/msw-policy.ts for why, and for the
+  // actual policy (every request now matches either this file's own handlers or the
+  // shared catch-all baked into test/mocks/server.ts).
+  beforeAll(() => server.listen());
   afterAll(() => server.close());
   beforeEach(() => {
     process.env.BUILD_TOKEN_KEY = BUILD_TOKEN_KEY;
+    // GitHub Actions injects its own real GITHUB_WORKFLOW ("ci", this repo's workflow
+    // name)/GITHUB_REF (the PR's merge ref) as ambient env for every job — never unset
+    // on a real runner, unlike a local dev machine. `afterEach`'s `process.env =
+    // {...originalEnv}` below restores to the snapshot taken at module load, which (in
+    // CI) already contains those real values — so a `delete` inside one test's own body
+    // (see "defaults GITHUB_WORKFLOW..." below) doesn't stay deleted for the *next*
+    // test. Clearing them here, before every test, is what actually makes
+    // dispatch()'s `?? 'build-ipa.yml'`/`?? 'main'` fallback trigger reliably: without
+    // this, a test that never sets/deletes them itself silently dispatches to
+    // `workflows/ci/dispatches` with `ref: refs/pull/.../merge` in CI — a URL no test's
+    // own mocked handler matches, which MSW's `onUnhandledRequest: 'error'` turns into
+    // a generic "fetch failed", previously misdiagnosed as a request escaping MSW
+    // entirely to the real api.github.com.
+    delete process.env.GITHUB_WORKFLOW;
+    delete process.env.GITHUB_REF;
   });
   afterEach(() => {
     server.resetHandlers();
@@ -37,7 +54,9 @@ describe('GithubActionsRunner', () => {
     process.env.GITHUB_REF = 'main';
 
     let capturedAuth: string | null = null;
-    let capturedBody: { ref: string; inputs: { buildId: string; buildTokenEnc: string; baseUrl: string } } | undefined;
+    let capturedBody:
+      | { ref: string; inputs: { buildId: string; buildTokenEnc: string; baseUrl: string; useTestConfig: string } }
+      | undefined;
     server.use(
       http.post(
         'https://api.github.com/repos/serob111/iosmobilio2/actions/workflows/build-ipa.yml/dispatches',
@@ -56,6 +75,11 @@ describe('GithubActionsRunner', () => {
     expect(capturedBody?.ref).toBe('main');
     expect(capturedBody?.inputs.buildId).toBe('build-1');
     expect(capturedBody?.inputs.baseUrl).toBe('https://example.com');
+    // build-ipa.yml's useTestConfig input defaults to true (so a manual, no-inputs run
+    // from the GitHub UI safely builds the test fixture) — the REST dispatch API applies
+    // that default whenever an input is omitted, so every real dispatch must say 'false'
+    // explicitly or it silently builds the test fixture and skips every apps/api callback.
+    expect(capturedBody?.inputs.useTestConfig).toBe('false');
     // Never the raw token itself in the dispatch body — only a ciphertext that decrypts
     // back to it with the same BUILD_TOKEN_KEY the workflow's own secret would hold.
     expect(capturedBody?.inputs.buildTokenEnc).not.toBe('raw-token-value');
@@ -98,14 +122,14 @@ describe('GithubActionsRunner', () => {
     );
 
     const runner = new GithubActionsRunner();
-    // Case-insensitive: MSW's Node interceptor doesn't reliably engage for every
-    // fetch() in every environment (observed escaping to the real, publicly-reachable
-    // api.github.com in CI, which correctly 401s a bogus token with "Bad credentials" —
-    // capitalized, unlike this test's own mocked "bad credentials" body) — this still
-    // asserts the actual thing under test (dispatch() surfaces the status+body on a
-    // non-2xx response) regardless of which one actually answered.
+    // Exact, case-sensitive match against this test's own mocked body — the previous
+    // case-insensitive version was papering over a real test-isolation bug (GITHUB_WORKFLOW/
+    // GITHUB_REF leaking in from GitHub Actions' own ambient env, see the beforeEach
+    // comment above) that made this request miss every test's mocked handler in CI, not
+    // an MSW/fetch interception problem. With that fixed, this request always hits this
+    // test's own handler and nothing else.
     await expect(
       runner.dispatch({ id: 'build-1', token: 'raw-token', baseUrl: 'https://example.com' }),
-    ).rejects.toThrow(/401.*bad credentials/is);
+    ).rejects.toThrow(/401.*bad credentials/s);
   });
 });

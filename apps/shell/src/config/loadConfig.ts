@@ -1,100 +1,51 @@
 import { File, Paths } from 'expo-file-system';
 import { parseProjectConfig, type ProjectConfig } from '@mobilio/config';
-import { apiBaseUrl, isStandaloneNative } from '../lib/env';
+import { isStandaloneNative } from '../lib/env';
 import { pushLog } from '../lib/debugLog';
 import { demoConfig } from './demoConfig';
-import generatedConfigJson from './generated.config.json';
+
+export type LoadConfigResult =
+  | { status: 'ok'; config: ProjectConfig }
+  | { status: 'missing' }
+  | { status: 'invalid'; errors: string[] };
 
 /**
- * CI writes the project's real config here before building, and the shell statically
- * imports it — Metro bundles it like any JSON import, no native file-system plumbing
- * needed. Ships as `{}` in the repo; non-empty only in a build CI produced.
+ * `mobilio/config.json` is the *only* source of a client's config in a shipped app —
+ * repack (packages/repacker) writes it into the .app bundle as a folder-reference
+ * resource (withMobilioBundleResources, apps/shell/plugins) after swapping in that
+ * client's name/bundleId/icons/splash. There is no fallback to a build-time-baked JS
+ * value or a live API call: the old generated.config.json (baked into the JS bundle at
+ * CI build time) and the /api/projects/:id remote fetch both predate the repack
+ * pipeline and that endpoint no longer exists at all.
  */
-function readGeneratedConfig(): ProjectConfig | null {
-  if (!generatedConfigJson || Object.keys(generatedConfigJson).length === 0) return null;
-  const parsed = parseProjectConfig(generatedConfigJson);
-  if (!parsed.success) {
-    pushLog('error', 'config', 'generated.config.json failed validation', parsed.errors);
-    return null;
-  }
-  return parsed.data;
-}
-
-/**
- * Reads `mobilio/config.json` from the app bundle via expo-file-system. Superseded by
- * `readGeneratedConfig` above (the real CI pipeline bakes config into the JS bundle at
- * build time instead) — kept only as a lower-priority fallback, not currently exercised
- * by anything that writes to this path.
- */
-async function readBundledConfig(): Promise<ProjectConfig | null> {
-  if (!isStandaloneNative) return null;
+export async function readBundledConfig(): Promise<LoadConfigResult> {
   try {
     const file = new File(Paths.bundle, 'mobilio', 'config.json');
     if (!file.exists) {
       pushLog('warn', 'config', 'No bundled mobilio/config.json found');
-      return null;
+      return { status: 'missing' };
     }
     const raw = await file.text();
     const parsed = parseProjectConfig(JSON.parse(raw));
     if (!parsed.success) {
       pushLog('error', 'config', 'Bundled config failed validation', parsed.errors);
-      return null;
+      return { status: 'invalid', errors: parsed.errors };
     }
-    return parsed.data;
+    return { status: 'ok', config: parsed.data };
   } catch (error) {
     pushLog('error', 'config', 'Failed to read bundled config', String(error));
-    return null;
+    return { status: 'invalid', errors: [String(error)] };
   }
 }
 
-async function fetchRemoteConfig(projectId: string): Promise<ProjectConfig | null> {
-  try {
-    const res = await fetch(`${apiBaseUrl}/api/projects/${projectId}`);
-    if (!res.ok) {
-      pushLog('warn', 'config', `Remote config fetch failed with status ${res.status}`);
-      return null;
-    }
-    const json = await res.json();
-    const parsed = parseProjectConfig(json);
-    if (!parsed.success) {
-      pushLog('error', 'config', 'Remote config failed validation', parsed.errors);
-      return null;
-    }
-    return parsed.data;
-  } catch (error) {
-    pushLog('warn', 'config', 'Remote config fetch threw', String(error));
-    return null;
+/**
+ * Expo Go and the web preview have no .app bundle to read mobilio/config.json from at
+ * all — demoConfig is the only thing that makes sense there, not an error state.
+ */
+export async function loadProjectConfig(): Promise<LoadConfigResult> {
+  if (!isStandaloneNative) {
+    pushLog('info', 'config', 'Not a standalone native build — using demo config');
+    return { status: 'ok', config: demoConfig };
   }
-}
-
-export function getProjectIdFromParams(params: Record<string, unknown>): string | null {
-  const value = params.project;
-  if (typeof value === 'string' && value.length > 0) return value;
-  if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
-  return null;
-}
-
-export async function loadProjectConfig(projectId: string | null): Promise<ProjectConfig> {
-  const generated = readGeneratedConfig();
-  if (generated) {
-    pushLog('info', 'config', 'Loaded config from generated.config.json');
-    return generated;
-  }
-
-  const bundled = await readBundledConfig();
-  if (bundled) {
-    pushLog('info', 'config', 'Loaded config from app bundle');
-    return bundled;
-  }
-
-  if (projectId) {
-    const remote = await fetchRemoteConfig(projectId);
-    if (remote) {
-      pushLog('info', 'config', `Loaded config for project ${projectId} from API`);
-      return remote;
-    }
-  }
-
-  pushLog('info', 'config', 'Falling back to demo config');
-  return demoConfig;
+  return readBundledConfig();
 }

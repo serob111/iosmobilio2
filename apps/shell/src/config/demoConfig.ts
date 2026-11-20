@@ -26,7 +26,7 @@ export const demoConfig: ProjectConfig = {
       mapUrl: 'https://maps.google.com',
     },
   },
-  features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
+  features: { offline: true, share: true, deepLinks: false, pullToRefresh: true, push: false },
   allowedDomains: ['example.com'],
   trial: true,
 };
