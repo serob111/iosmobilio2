@@ -9,7 +9,7 @@ vi.mock('../src/lib/debugLog', () => ({ pushLog: mockPushLog }));
 
 const mockNotifications = vi.hoisted(() => ({
   requestPermissionsAsync: vi.fn(),
-  getExpoPushTokenAsync: vi.fn(),
+  getDevicePushTokenAsync: vi.fn(),
 }));
 vi.mock('expo-notifications', () => mockNotifications);
 
@@ -33,35 +33,47 @@ describe('maybeRegisterForPushNotifications', () => {
     mockEnv.isStandaloneNative = true;
     mockPushLog.mockClear();
     mockNotifications.requestPermissionsAsync.mockReset();
-    mockNotifications.getExpoPushTokenAsync.mockReset();
+    mockNotifications.getDevicePushTokenAsync.mockReset();
   });
 
   it('never calls the notifications API when config.features.push is false', async () => {
     const { maybeRegisterForPushNotifications } = await import('../src/notifications/registerPush');
-    await maybeRegisterForPushNotifications(configWith(false));
+    const result = await maybeRegisterForPushNotifications(configWith(false));
     expect(mockNotifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
   });
 
   it('never calls the notifications API outside a standalone native build, even with push enabled', async () => {
     mockEnv.isStandaloneNative = false;
     const { maybeRegisterForPushNotifications } = await import('../src/notifications/registerPush');
-    await maybeRegisterForPushNotifications(configWith(true));
+    const result = await maybeRegisterForPushNotifications(configWith(true));
     expect(mockNotifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
   });
 
-  it('requests permission and fetches a token when push is enabled and permission is granted', async () => {
+  it('returns the raw APNs device token (not an Expo push token) when permission is granted', async () => {
     mockNotifications.requestPermissionsAsync.mockResolvedValue({ status: 'granted' });
-    mockNotifications.getExpoPushTokenAsync.mockResolvedValue({ data: 'ExponentPushToken[abc]' });
+    mockNotifications.getDevicePushTokenAsync.mockResolvedValue({ type: 'ios', data: 'deadbeef-apns-token' });
     const { maybeRegisterForPushNotifications } = await import('../src/notifications/registerPush');
-    await maybeRegisterForPushNotifications(configWith(true));
-    expect(mockNotifications.getExpoPushTokenAsync).toHaveBeenCalled();
+    const result = await maybeRegisterForPushNotifications(configWith(true));
+    expect(mockNotifications.getDevicePushTokenAsync).toHaveBeenCalled();
+    expect(result).toEqual({ token: 'deadbeef-apns-token', platform: 'ios' });
   });
 
   it('does not fetch a token when permission is denied', async () => {
     mockNotifications.requestPermissionsAsync.mockResolvedValue({ status: 'denied' });
     const { maybeRegisterForPushNotifications } = await import('../src/notifications/registerPush');
-    await maybeRegisterForPushNotifications(configWith(true));
-    expect(mockNotifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
+    const result = await maybeRegisterForPushNotifications(configWith(true));
+    expect(mockNotifications.getDevicePushTokenAsync).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined for a non-ios device push token type instead of mislabeling it', async () => {
+    mockNotifications.requestPermissionsAsync.mockResolvedValue({ status: 'granted' });
+    mockNotifications.getDevicePushTokenAsync.mockResolvedValue({ type: 'android', data: 'fcm-token' });
+    const { maybeRegisterForPushNotifications } = await import('../src/notifications/registerPush');
+    const result = await maybeRegisterForPushNotifications(configWith(true));
+    expect(result).toBeUndefined();
   });
 
   it('does not throw when the notifications API itself throws', async () => {
