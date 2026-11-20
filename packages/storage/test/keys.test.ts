@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildIpaKey, draftIconKey, projectIconKey } from '../src/keys';
+import { buildIpaKey, draftIconKey, projectIconKey, shellReleaseIpaKey, shellReleaseManifestKey } from '../src/keys';
 
 const ORG_ID = '01a16033-3d3b-718f-b2f4-9508ec870bab';
 const PROJECT_ID = '01a16033-3d3b-718f-b2f4-9508ec870bac';
@@ -35,5 +35,21 @@ describe('object storage key builders', () => {
 
   it('rejects a non-uuid draftId', () => {
     expect(() => draftIconKey('not-a-uuid')).toThrow(/draftId must be a uuid/);
+  });
+
+  it('shellReleaseIpaKey nests under shell-base/<version> — no org/project at all, it is a single global base build', () => {
+    expect(shellReleaseIpaKey('1.2.3')).toBe('shell-base/1.2.3/base.ipa');
+  });
+
+  it('rejects a version containing a path separator — would otherwise escape the shell-base/<version> prefix', () => {
+    expect(() => shellReleaseIpaKey('../../etc')).toThrow(/version must be a safe version string/);
+  });
+
+  it('rejects an empty version', () => {
+    expect(() => shellReleaseIpaKey('')).toThrow(/version must be a safe version string/);
+  });
+
+  it('shellReleaseManifestKey sits alongside base.ipa under the same version prefix', () => {
+    expect(shellReleaseManifestKey('1.2.3')).toBe('shell-base/1.2.3/manifest.json');
   });
 });
