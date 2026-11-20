@@ -116,11 +116,20 @@ jobs:
           curl -fsS -H "Authorization: Bearer $BUILD_TOKEN" \
             "$BASE_URL/builds/$BUILD_ID/icon" -o apps/shell/assets/project-icon.png
 
+      # withMobilioBundleResources/withMobilioIcons (apps/shell/plugins) always copy
+      # from these two fixed source locations — src/config/demo-bundle/config.json and
+      # assets/icon.png — regardless of caller; there's no CONFIG_PATH/ICON_PATH env var
+      # for them to read anymore (removed along with generated.config.json — see Этап 3
+      # ФАЗА 1). Overwriting the demo bundle's own files with this build's real config
+      # is what makes the *same* plugins that build-shell-base.yml uses for the base
+      # produce a real per-client mobilio/config.json here instead — no plugin code
+      # path differs between "build the base" and "build one real client app" below
+      # this step. splash.png is left as the base's own default: there is no per-project
+      # splash asset in apps/api yet, only the icon upload used below.
       - name: Bake config into the shell
         run: |
-          cp apps/shell/project.config.json apps/shell/src/config/generated.config.json
-          echo "CONFIG_PATH=$GITHUB_WORKSPACE/apps/shell/project.config.json" >> "$GITHUB_ENV"
-          echo "ICON_PATH=$GITHUB_WORKSPACE/apps/shell/assets/project-icon.png" >> "$GITHUB_ENV"
+          cp apps/shell/project.config.json apps/shell/src/config/demo-bundle/config.json
+          cp apps/shell/assets/project-icon.png apps/shell/assets/icon.png
           echo "Resolved config:"
           cat apps/shell/project.config.json
 
@@ -173,7 +182,7 @@ jobs:
         id: package
         run: |
           APP_PATH=$(find apps/shell/ios/build/App.xcarchive/Products/Applications -maxdepth 1 -name "*.app" | head -1)
-          SLUG=$(node -pe "JSON.parse(require('fs').readFileSync(process.env.CONFIG_PATH,'utf8')).slug")
+          SLUG=$(node -pe "JSON.parse(require('fs').readFileSync('apps/shell/project.config.json','utf8')).slug")
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
           zip -qr "${SLUG}.ipa" Payload
@@ -181,6 +190,14 @@ jobs:
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
           echo "ipa_path=$GITHUB_WORKSPACE/${SLUG}.ipa" >> "$GITHUB_OUTPUT"
 
+      # NOTE: CFBundleIdentifier/CFBundleDisplayName below are always the *base's* own
+      # fixed values (am.mobilio.shell.base / "Mobilio") — app.config.ts hardcodes them
+      # unconditionally now (Этап 3 ФАЗА 1), the same as build-shell-base.yml's output.
+      # A real per-client App Store submission needs its own distinct bundle id/display
+      # name, which nothing in this workflow (or anywhere else yet) produces — a gap
+      # that's still open, not solved by baking project.config.json's content into
+      # mobilio/config.json below. See the Этап 3 ФАЗА 2 report for why this is
+      # deliberately left unresolved here rather than papered over.
       - name: Verify .ipa
         run: |
           IPA_PATH="${{ steps.package.outputs.ipa_path }}"
@@ -188,11 +205,11 @@ jobs:
           echo "IPA size: $(du -h "$IPA_PATH" | cut -f1)"
           echo "CFBundleDisplayName: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_PATH/Info.plist")"
           echo "CFBundleIdentifier: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
-          PROJECT_NAME=$(node -pe "JSON.parse(require('fs').readFileSync(process.env.CONFIG_PATH,'utf8')).name")
-          if grep -a -q "$PROJECT_NAME" "$APP_PATH/main.jsbundle" 2>/dev/null; then
-            echo "generated.config.json content found baked into main.jsbundle"
+          if [ -f "$APP_PATH/mobilio/config.json" ] && grep -a -q "$(node -pe "JSON.parse(require('fs').readFileSync('apps/shell/project.config.json','utf8')).slug")" "$APP_PATH/mobilio/config.json"; then
+            echo "mobilio/config.json present in the .app and matches this build's project config"
           else
-            echo "::warning::Could not confirm config content inside main.jsbundle (informational only, Hermes bytecode layout may not preserve a plain grep match)"
+            echo "::error::mobilio/config.json missing or does not match the resolved project config"
+            exit 1
           fi
 
       - name: Upload .ipa artifact

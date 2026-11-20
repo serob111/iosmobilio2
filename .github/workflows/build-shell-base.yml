@@ -1,0 +1,181 @@
+name: build-shell-base
+run-name: build shell base ${{ inputs.version || '' }}
+
+# Builds apps/shell exactly once per version, on macOS — the only thing packages/repacker
+# (a later phase) ever repacks per client is this one .app, never a fresh compile. A
+# fresh compile from this workflow is only needed again for a new base version or for a
+# future App Store build (Apple requires a compiled Assets.car, which Linux can't
+# produce — see withMobilioIcons.js's own doc comment).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0). Required for a manual run — ignored (derived from the tag) when triggered by a shell-v* push."
+        required: false
+        type: string
+  push:
+    tags:
+      - 'shell-v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/shell-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/shell-v}"
+          else
+            VERSION="${{ inputs.version }}"
+            if [ -z "$VERSION" ]; then
+              echo "version input is required for a manual (non-tag) run" >&2
+              exit 1
+            fi
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Building shell base version: $VERSION"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Select Xcode (Expo SDK 57 needs Xcode 26.4+)
+        run: |
+          LATEST_XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "Selecting $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE"
+          xcodebuild -version
+          xcodebuild -version | head -1 > xcode-version.txt
+
+      - name: Prebuild iOS project
+        working-directory: apps/shell
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            apps/shell/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('apps/shell/ios/Podfile') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Pod install
+        working-directory: apps/shell/ios
+        run: pod install
+
+      - name: Determine workspace and scheme
+        working-directory: apps/shell/ios
+        run: |
+          WORKSPACE=$(ls -d *.xcworkspace | head -1)
+          # Same reasoning as build-ipa.yml: per-pod schemes also show up in
+          # `xcodebuild -list`, so the app's own scheme is identified by name, not
+          # position — it always matches the workspace's base name for a fresh
+          # single-target Expo prebuild.
+          SCHEME="${WORKSPACE%.xcworkspace}"
+          echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+          echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
+          echo "Workspace: $WORKSPACE / Scheme: $SCHEME"
+
+      - name: Archive (unsigned)
+        working-directory: apps/shell/ios
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Package base.ipa
+        id: package
+        run: |
+          APP_PATH=$(find apps/shell/ios/build/App.xcarchive/Products/Applications -maxdepth 1 -name "*.app" | head -1)
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -qr base.ipa Payload
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "ipa_path=$GITHUB_WORKSPACE/base.ipa" >> "$GITHUB_OUTPUT"
+
+      - name: Verify .app structure
+        run: node .github/scripts/verify-shell-base.mjs "${{ steps.package.outputs.app_path }}" checks.json
+
+      - name: Build manifest.json
+        id: manifest
+        run: |
+          IPA_PATH="${{ steps.package.outputs.ipa_path }}"
+          APP_PATH="${{ steps.package.outputs.app_path }}"
+          SHA256=$(shasum -a 256 "$IPA_PATH" | awk '{print $1}')
+          XCODE_VERSION=$(cat xcode-version.txt)
+          # Everything under Frameworks/*.framework plus the main executable itself —
+          # the full list of Mach-O binaries rcodesign will need to sign individually,
+          # innermost first, once packages/repacker (a later phase) re-signs this .app
+          # per client.
+          NESTED_BUNDLES=$(find "$APP_PATH/Frameworks" -maxdepth 1 -name "*.framework" 2>/dev/null | xargs -I{} basename {} | node -pe "JSON.stringify(require('fs').readFileSync(0, 'utf8').trim().split('\n').filter(Boolean))")
+          node -e "
+            const fs = require('fs');
+            const manifest = {
+              shellVersion: process.env.VERSION,
+              gitSha: '${{ github.sha }}',
+              xcodeVersion: process.argv[1],
+              sha256: process.argv[2],
+              nestedBundles: JSON.parse(process.argv[3]),
+              checks: JSON.parse(fs.readFileSync('checks.json', 'utf8')),
+            };
+            fs.writeFileSync('manifest.json', JSON.stringify(manifest, null, 2));
+            console.log(JSON.stringify(manifest, null, 2));
+          " "$XCODE_VERSION" "$SHA256" "$NESTED_BUNDLES"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifacts
+        if: always() && steps.package.outputs.ipa_path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-base-${{ env.VERSION }}
+          path: |
+            ${{ steps.package.outputs.ipa_path }}
+            manifest.json
+            checks.json
+            build.log
+          retention-days: 90
+
+      - name: Register release with apps/api
+        if: ${{ success() }}
+        env:
+          API_PUBLIC_URL: ${{ vars.API_PUBLIC_URL }}
+          SHELL_RELEASE_SECRET: ${{ secrets.SHELL_RELEASE_SECRET }}
+        run: |
+          if [ -z "$API_PUBLIC_URL" ] || [ -z "$SHELL_RELEASE_SECRET" ]; then
+            echo "::warning::API_PUBLIC_URL/SHELL_RELEASE_SECRET not configured — skipping registration. The .app and manifest.json are still available as workflow artifacts above."
+            exit 0
+          fi
+          curl --fail -X POST \
+            -H "Authorization: Bearer $SHELL_RELEASE_SECRET" -H "Content-Type: application/octet-stream" \
+            --data-binary "@${{ steps.package.outputs.ipa_path }}" \
+            "$API_PUBLIC_URL/internal/shell-releases/$VERSION/ipa"
+          node -e "
+            const manifest = JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'));
+            require('fs').writeFileSync('register-body.json', JSON.stringify({
+              version: process.env.VERSION,
+              sha256: manifest.sha256,
+              manifest,
+            }));
+          "
+          curl --fail -X POST \
+            -H "Authorization: Bearer $SHELL_RELEASE_SECRET" -H "Content-Type: application/json" \
+            --data-binary @register-body.json \
+            "$API_PUBLIC_URL/internal/shell-releases"
+          echo "Registered shell release $VERSION (inactive — activate separately via activate-shell-release.yml)"
