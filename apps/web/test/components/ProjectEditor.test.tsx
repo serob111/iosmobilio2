@@ -79,7 +79,7 @@ function baseConfig(overrides: Partial<ProjectConfig> = {}): ProjectConfig {
     source: { type: "url", url: "https://example.test" },
     theme: { primary: "#4B2BE0", background: "#FFFFFF", statusBar: "dark" },
     tabs: [{ title: "Home", icon: "home", path: "/" }],
-    features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
+    features: { offline: true, share: true, deepLinks: false, pullToRefresh: true, push: false },
     allowedDomains: ["example.test"],
     trial: true,
     ...overrides,

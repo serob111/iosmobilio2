@@ -40,7 +40,7 @@ const SAMPLE_CONFIG = {
   source: { type: 'url' as const, url: 'https://sample.example' },
   theme: { primary: '#4B2BE0', background: '#FFFFFF', statusBar: 'dark' as const },
   tabs: [{ title: 'Home', icon: 'home', path: '/' }],
-  features: { offline: true, share: true, deepLinks: false, pullToRefresh: true },
+  features: { offline: true, share: true, deepLinks: false, pullToRefresh: true, push: false },
   allowedDomains: ['sample.example'],
   trial: true,
 };
