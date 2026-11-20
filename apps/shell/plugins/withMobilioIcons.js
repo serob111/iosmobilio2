@@ -1,6 +1,18 @@
+const fs = require('node:fs');
 const path = require('node:path');
 const sharp = require('sharp');
 const { withDangerousMod, withInfoPlist, withXcodeProject } = require('@expo/config-plugins');
+
+// Relative to <platformProjectRoot>/<projectName> — where Expo's prebuild puts a
+// single-size (1024x1024, "universal" idiom) asset-catalog app icon by default,
+// wired up via the ASSETCATALOG_COMPILER_APPICON_NAME build setting below. Confirmed
+// on a real macOS archive (not assumed): even with CFBundleIconName deleted from the
+// static Info.plist, Xcode's actool still compiled this catalog and merged its own
+// partial Info.plist fragment on top at build time, silently overwriting
+// CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconFiles with a single actool-derived
+// entry instead of the four files this plugin actually ships. Removing the catalog
+// and clearing the build setting is what stops that merge from happening at all.
+const APP_ICON_APPICONSET_PATH = ['Images.xcassets', 'AppIcon.appiconset'];
 
 /**
  * [filename, pixel size] — CFBundleIconFiles entries, not an asset catalog. repack
@@ -63,6 +75,12 @@ const withMobilioIcons = (config) => {
             .toFile(path.join(cfg.modRequest.platformProjectRoot, filename)),
         ),
       );
+      const appIconSetDir = path.join(
+        cfg.modRequest.platformProjectRoot,
+        cfg.modRequest.projectName,
+        ...APP_ICON_APPICONSET_PATH,
+      );
+      fs.rmSync(appIconSetDir, { recursive: true, force: true });
       return cfg;
     },
   ]);
@@ -78,8 +96,12 @@ const withMobilioIcons = (config) => {
     for (const [filename] of ICON_FILES) {
       project.addResourceFile(filename, { target });
     }
+    // Without this, actool has no icon set left to compile (the appiconset directory
+    // is already gone), but the build setting pointing at it would still make Xcode
+    // try — and fail, or at best no-op in a way this shouldn't depend on.
+    project.updateBuildProperty('ASSETCATALOG_COMPILER_APPICON_NAME', '""');
     return cfg;
   });
 };
 
-module.exports = { withMobilioIcons, applyMobilioIconsToInfoPlist, ICON_FILES };
+module.exports = { withMobilioIcons, applyMobilioIconsToInfoPlist, ICON_FILES, APP_ICON_APPICONSET_PATH };

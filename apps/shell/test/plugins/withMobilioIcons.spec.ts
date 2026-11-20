@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line @typescript-eslint/no-var-requires -- plain-JS plugin, see withMobilioIcons.js's own top comment for why
-const { applyMobilioIconsToInfoPlist, ICON_FILES } = require('../../plugins/withMobilioIcons.js');
+const { applyMobilioIconsToInfoPlist, ICON_FILES, APP_ICON_APPICONSET_PATH } = require('../../plugins/withMobilioIcons.js');
 
 describe('applyMobilioIconsToInfoPlist', () => {
   it('removes CFBundleIconName and sets CFBundleIcons/CFBundleIcons~ipad from CFBundleIconFiles — snapshot', () => {
@@ -40,5 +40,14 @@ describe('applyMobilioIconsToInfoPlist', () => {
       'AppIcon76x76@2x~ipad.png',
       'AppIcon83.5x83.5@2x~ipad.png',
     ]);
+  });
+
+  it('APP_ICON_APPICONSET_PATH points at Expo\'s default single-size asset catalog icon set', () => {
+    // Confirmed on a real macOS archive (not assumed): leaving this catalog in place —
+    // even with CFBundleIconName deleted from the static Info.plist — let Xcode's
+    // actool compile it and merge its own partial Info.plist on top at build time,
+    // silently overwriting CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconFiles with a
+    // single actool-derived entry instead of this plugin's four real files.
+    expect(APP_ICON_APPICONSET_PATH).toEqual(['Images.xcassets', 'AppIcon.appiconset']);
   });
 });
