@@ -77,6 +77,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Test GitHub Actions helper scripts
+        run: npm run test:gh-scripts
+
       # apps/api/src/preview/proxy/compression.integration.spec.ts launches a real
       # Chromium (the `playwright` package, not @playwright/test) to prove gzip/br/
       # deflate decompression + the proxy's own *.localhost subdomain routing work in

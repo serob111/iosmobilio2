@@ -17,6 +17,19 @@ jobs:
   activate:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node .github/scripts/shell-version.mjs validate "$VERSION"
+
       - name: Activate
         env:
           API_PUBLIC_URL: ${{ vars.API_PUBLIC_URL }}
