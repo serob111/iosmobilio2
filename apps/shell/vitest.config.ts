@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['test/**/*.spec.ts'],
+    include: ['test/**/*.spec.ts', 'test/**/*.spec.tsx'],
     coverage: {
       provider: 'v8',
       // The config plugins' *pure* helpers (mobilioBundleDir/mobilioResourcePath,
@@ -14,7 +14,13 @@ export default defineConfig({
       // more meaningfully than a synthetic in-memory Xcode project fixture would (and
       // was — see the Phase 1 report), so it's not double-counted against this
       // threshold.
-      include: ['src/config/loadConfig.ts', 'src/components/brandSplashData.ts', 'src/notifications/registerPush.ts'],
+      include: [
+        'src/config/loadConfig.ts',
+        'src/config/launchDestination.ts',
+        'src/components/brandSplashData.ts',
+        'src/notifications/registerPush.ts',
+        'src/notifications/useRegisterPushOnMount.ts',
+      ],
       thresholds: {
         lines: 80,
         statements: 80,
