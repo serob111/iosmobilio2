@@ -49,11 +49,23 @@ function pixelDimension(filePath, key) {
 
 const info = readInfoPlistAsJson();
 
-const iconFiles = info.CFBundleIcons?.CFBundlePrimaryIcon?.CFBundleIconFiles ?? [];
+// withMobilioIcons.js's own applyMobilioIconsToInfoPlist deliberately gives the two
+// idioms different file lists, matching Apple's convention for a supportsTablet app:
+// CFBundleIcons (iPhone target) lists only the iPhone sizes; CFBundleIcons~ipad (iPad
+// target) lists the iPhone sizes *plus* the iPad-only ones, since an iPad can run the
+// app in either iPhone-compatibility or native iPad mode. The iPad variant is the one
+// that must list all four files — checking CFBundleIcons for all four here (an earlier
+// version of this script did) would always fail against a correctly-built .app.
+const iphoneFiles = info.CFBundleIcons?.CFBundlePrimaryIcon?.CFBundleIconFiles ?? [];
+const ipadFiles = info['CFBundleIcons~ipad']?.CFBundlePrimaryIcon?.CFBundleIconFiles ?? [];
+const allExpectedFiles = Object.keys(EXPECTED_ICON_SIZES);
 check(
   'info-plist-icon-keys',
-  !('CFBundleIconName' in info) && iconFiles.length === Object.keys(EXPECTED_ICON_SIZES).length,
-  `CFBundleIconName present=${'CFBundleIconName' in info}, CFBundleIconFiles=[${iconFiles.join(', ')}]`,
+  !('CFBundleIconName' in info) &&
+    iphoneFiles.length > 0 &&
+    allExpectedFiles.every((f) => ipadFiles.includes(f)) &&
+    ipadFiles.length === allExpectedFiles.length,
+  `CFBundleIconName present=${'CFBundleIconName' in info}, CFBundleIcons=[${iphoneFiles.join(', ')}], CFBundleIcons~ipad=[${ipadFiles.join(', ')}]`,
 );
 
 for (const [filename, expectedSize] of Object.entries(EXPECTED_ICON_SIZES)) {
