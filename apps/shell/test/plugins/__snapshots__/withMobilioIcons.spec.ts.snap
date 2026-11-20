@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`applyMobilioIconsToInfoPlist > removes CFBundleIconName and sets CFBundleIcons/CFBundleIcons~ipad from CFBundleIconFiles — snapshot 1`] = `
+{
+  "CFBundleDisplayName": "Mobilio",
+  "CFBundleIcons": {
+    "CFBundlePrimaryIcon": {
+      "CFBundleIconFiles": [
+        "AppIcon60x60@2x.png",
+        "AppIcon60x60@3x.png",
+      ],
+    },
+  },
+  "CFBundleIcons~ipad": {
+    "CFBundlePrimaryIcon": {
+      "CFBundleIconFiles": [
+        "AppIcon60x60@2x.png",
+        "AppIcon60x60@3x.png",
+        "AppIcon76x76@2x~ipad.png",
+        "AppIcon83.5x83.5@2x~ipad.png",
+      ],
+    },
+  },
+  "CFBundleIdentifier": "am.mobilio.shell.base",
+}
+`;

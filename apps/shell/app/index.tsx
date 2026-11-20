@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConfigState } from '../src/config/ConfigContext';
+import { BrandSplash } from '../src/components/BrandSplash';
+import { ErrorScreen } from '../src/components/ErrorScreen';
 
 const ONBOARDING_SEEN_KEY = 'mobilio.onboarding_seen_v1';
 
@@ -25,17 +26,13 @@ export default function IndexGate() {
     };
   }, [state.status, onboardingEnabled]);
 
+  if (state.status === 'error') {
+    return <ErrorScreen reason={state.reason} />;
+  }
+
   if (destination === null) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <BrandSplash />;
   }
 
   return <Redirect href={destination} />;
 }
-
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-});

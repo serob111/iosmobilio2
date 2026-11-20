@@ -4,12 +4,14 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useProjectConfig } from '../src/config/ConfigContext';
+import { t } from '../src/i18n';
 
 const ONBOARDING_SEEN_KEY = 'mobilio.onboarding_seen_v1';
 
 export default function OnboardingScreen() {
   const config = useProjectConfig();
   const router = useRouter();
+  const strings = t('onboarding');
   const slides = config.nativeScreens?.onboarding?.slides ?? [];
   const [index, setIndex] = useState(0);
 
@@ -29,7 +31,7 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Pressable onPress={finish} style={styles.skip} accessibilityRole="button">
-        <Text style={styles.skipText}>Пропустить</Text>
+        <Text style={styles.skipText}>{strings.skip}</Text>
       </Pressable>
 
       <View style={styles.content}>
@@ -54,7 +56,7 @@ export default function OnboardingScreen() {
         onPress={() => (isLast ? finish() : setIndex((i) => i + 1))}
         accessibilityRole="button"
       >
-        <Text style={styles.nextButtonText}>{isLast ? 'Начать' : 'Далее'}</Text>
+        <Text style={styles.nextButtonText}>{isLast ? strings.start : strings.next}</Text>
       </Pressable>
     </SafeAreaView>
   );

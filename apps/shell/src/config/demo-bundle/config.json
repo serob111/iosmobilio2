@@ -1,0 +1,14 @@
+{
+  "id": "demo",
+  "name": "Mobilio Demo",
+  "slug": "mobilio-demo",
+  "bundleId": "am.mobilio.shell.base",
+  "source": { "type": "url", "url": "https://mobilio.am" },
+  "theme": { "primary": "#2563EB", "background": "#FFFFFF", "statusBar": "dark" },
+  "tabs": [
+    { "title": "Mobilio", "icon": "home", "path": "/" }
+  ],
+  "features": { "offline": true, "share": true, "deepLinks": false, "pullToRefresh": true, "push": false },
+  "allowedDomains": ["mobilio.am"],
+  "trial": true
+}
