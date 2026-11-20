@@ -10,6 +10,21 @@ const { withDangerousMod, withXcodeProject } = require('@expo/config-plugins');
 const MOBILIO_DIR_NAME = 'mobilio';
 
 /**
+ * Xcode's PRODUCT_NAME (default: the project/target name, "Mobilio") drives both the
+ * .app wrapper's own filename *and* CFBundleExecutable — the compiled binary Xcode
+ * writes is named after it, landing at Mobilio.app/Mobilio. On any case-insensitive
+ * filesystem (every one this actually builds on), that path and Mobilio.app/mobilio —
+ * where this plugin's own Copy Bundle Resources phase puts the mobilio/ folder — are
+ * the *same* directory entry. Confirmed as a real, build-breaking collision on a real
+ * macOS CI run (not assumed): the resource copy ran first, so the linker's later
+ * attempt to write the executable there failed with "open() failed, errno=21 (Is a
+ * directory)". Overriding PRODUCT_NAME alone — not app.config.ts's `name`, which still
+ * drives the user-visible CFBundleDisplayName/CFBundleName — sidesteps the collision
+ * without touching the "mobilio/config.json" path contract loadConfig.ts depends on.
+ */
+const PRODUCT_NAME_OVERRIDE = 'MobilioShell';
+
+/**
  * Where the dangerous mod actually writes mobilio/config.json + splash.png on disk —
  * nested under the app's own source folder (`<projectName>/`), not directly under
  * platformProjectRoot. Pulled out as its own function because getting this wrong is
@@ -79,8 +94,17 @@ const withMobilioBundleResources = (config) => {
     // reference (sourceTree "<group>", type folder) instead of treating this as a
     // single file with an undetectable extension-based type.
     project.addResourceFile(mobilioResourcePath(cfg.modRequest.projectName), { target, lastKnownFileType: 'folder' });
+    // See PRODUCT_NAME_OVERRIDE's own comment above — this is the fix for the real
+    // Mobilio.app/Mobilio vs Mobilio.app/mobilio collision.
+    project.updateProductName(PRODUCT_NAME_OVERRIDE);
     return cfg;
   });
 };
 
-module.exports = { withMobilioBundleResources, mobilioBundleDir, mobilioResourcePath, MOBILIO_DIR_NAME };
+module.exports = {
+  withMobilioBundleResources,
+  mobilioBundleDir,
+  mobilioResourcePath,
+  MOBILIO_DIR_NAME,
+  PRODUCT_NAME_OVERRIDE,
+};
