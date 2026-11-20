@@ -155,20 +155,49 @@ jobs:
             echo "::warning::API_PUBLIC_URL/SHELL_RELEASE_SECRET not configured — skipping registration. The .app and manifest.json are still available as workflow artifacts above."
             exit 0
           fi
-          curl --fail -X POST \
+
+          # Not --fail here specifically: a 409 means this exact version is already
+          # registered (uploadIpa's only 409 condition) — a re-run of this same tag
+          # after an earlier run already fully succeeded, not a real error. Every
+          # *other* non-2xx still fails the step below, same as --fail would.
+          UPLOAD_STATUS=$(curl -s -o upload-response.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $SHELL_RELEASE_SECRET" -H "Content-Type: application/octet-stream" \
             --data-binary "@${{ steps.package.outputs.ipa_path }}" \
-            "$API_PUBLIC_URL/internal/shell-releases/$VERSION/ipa"
+            "$API_PUBLIC_URL/internal/shell-releases/$VERSION/ipa")
+
+          if [ "$UPLOAD_STATUS" = "409" ]; then
+            echo "Version $VERSION is already registered — nothing more to do (idempotent retry)."
+            exit 0
+          fi
+          if [ "$UPLOAD_STATUS" -lt 200 ] || [ "$UPLOAD_STATUS" -ge 300 ]; then
+            echo "::error::Upload failed with status $UPLOAD_STATUS: $(cat upload-response.json)"
+            exit 1
+          fi
+
+          UPLOAD_ID=$(node -pe "JSON.parse(require('fs').readFileSync('upload-response.json', 'utf8')).uploadId")
+
           node -e "
-            const manifest = JSON.parse(require('fs').readFileSync('manifest.json', 'utf8'));
-            require('fs').writeFileSync('register-body.json', JSON.stringify({
-              version: process.env.VERSION,
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+            fs.writeFileSync('register-body.json', JSON.stringify({
+              version: process.argv[1],
               sha256: manifest.sha256,
               manifest,
+              uploadId: process.argv[2],
             }));
-          "
-          curl --fail -X POST \
+          " "$VERSION" "$UPLOAD_ID"
+
+          REGISTER_STATUS=$(curl -s -o register-response.json -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $SHELL_RELEASE_SECRET" -H "Content-Type: application/json" \
             --data-binary @register-body.json \
-            "$API_PUBLIC_URL/internal/shell-releases"
-          echo "Registered shell release $VERSION (inactive — activate separately via activate-shell-release.yml)"
+            "$API_PUBLIC_URL/internal/shell-releases")
+
+          if [ "$REGISTER_STATUS" -lt 200 ] || [ "$REGISTER_STATUS" -ge 300 ]; then
+            echo "::error::Register failed with status $REGISTER_STATUS: $(cat register-response.json)"
+            exit 1
+          fi
+          if [ "$REGISTER_STATUS" = "200" ]; then
+            echo "Shell release $VERSION already registered with a matching sha256 — no change (idempotent retry)."
+          else
+            echo "Registered shell release $VERSION (inactive — activate separately via activate-shell-release.yml)"
+          fi

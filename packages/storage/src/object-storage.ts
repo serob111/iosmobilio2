@@ -1,6 +1,8 @@
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -37,6 +39,10 @@ export interface ObjectStorage {
    * what a user should see save to their Downloads folder as).
    */
   signedUrl(key: string, expiresInSeconds: number, filename?: string): Promise<string>;
+  /** Server-side copy (S3 CopyObject) — no bytes pass through this process. */
+  copy(sourceKey: string, destKey: string): Promise<void>;
+  /** Lists every object under `prefix`, across as many pages as it takes. */
+  list(prefix: string): Promise<Array<{ key: string; lastModified: Date }>>;
 }
 
 export type S3StorageConfig = {
@@ -159,6 +165,40 @@ export class S3ObjectStorage implements ObjectStorage {
       ResponseContentDisposition: filename ? contentDisposition(filename) : undefined,
     });
     return getSignedUrl(this.presignClient, command, { expiresIn: expiresInSeconds });
+  }
+
+  async copy(sourceKey: string, destKey: string): Promise<void> {
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        Key: destKey,
+        // CopySource is "<bucket>/<key>", with the key itself URL-encoded — an
+        // unencoded "/" or other reserved character in the source key would otherwise
+        // be parsed as part of the path structure rather than the key's own content.
+        CopySource: `${this.bucket}/${encodeURIComponent(sourceKey)}`,
+      }),
+    );
+  }
+
+  async list(prefix: string): Promise<Array<{ key: string; lastModified: Date }>> {
+    const objects: Array<{ key: string; lastModified: Date }> = [];
+    let continuationToken: string | undefined;
+    do {
+      const res = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      for (const object of res.Contents ?? []) {
+        if (object.Key && object.LastModified) {
+          objects.push({ key: object.Key, lastModified: object.LastModified });
+        }
+      }
+      continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+    } while (continuationToken);
+    return objects;
   }
 }
 

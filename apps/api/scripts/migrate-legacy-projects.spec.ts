@@ -34,6 +34,12 @@ function fakeStorage(): { storage: ObjectStorage; puts: Array<{ key: string; bod
     signedUrl: async () => {
       throw new Error('not used by this script');
     },
+    copy: async () => {
+      throw new Error('not used by this script');
+    },
+    list: async () => {
+      throw new Error('not used by this script');
+    },
   };
   return { storage, puts };
 }
@@ -209,6 +215,12 @@ describe.skipIf(!hasLiveServices)('migrate-legacy-projects (live Postgres)', () 
       },
       delete: async () => {},
       signedUrl: async () => {
+        throw new Error('not used by this script');
+      },
+      copy: async () => {
+        throw new Error('not used by this script');
+      },
+      list: async () => {
         throw new Error('not used by this script');
       },
     };

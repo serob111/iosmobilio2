@@ -94,6 +94,45 @@ describe.skipIf(!hasLiveS3)('S3ObjectStorage (live MinIO)', () => {
     expect(disposition).toContain("filename*=UTF-8''%D0%BC%D0%BE%D0%B9%20%D1%84%D0%B0%D0%B9%D0%BB.ipa");
   });
 
+  it('copy duplicates an object server-side, and both keys read back independently', async () => {
+    const sourceKey = `test/s3-object-storage-copy-src-${Date.now()}.txt`;
+    const destKey = `test/s3-object-storage-copy-dest-${Date.now()}.txt`;
+    await storage.put(sourceKey, Buffer.from('copy me'), 'text/plain');
+
+    await storage.copy(sourceKey, destKey);
+
+    const source = await storage.get(sourceKey);
+    const dest = await storage.get(destKey);
+    expect(source.toString('utf8')).toBe('copy me');
+    expect(dest.toString('utf8')).toBe('copy me');
+
+    await storage.delete(sourceKey);
+    await storage.delete(destKey);
+  });
+
+  it('list returns every object under a prefix, each with a lastModified date', async () => {
+    const prefix = `test/s3-object-storage-list-${Date.now()}/`;
+    const keyA = `${prefix}a.txt`;
+    const keyB = `${prefix}b.txt`;
+    await storage.put(keyA, Buffer.from('a'), 'text/plain');
+    await storage.put(keyB, Buffer.from('b'), 'text/plain');
+
+    const objects = await storage.list(prefix);
+
+    expect(objects.map((o) => o.key).sort()).toEqual([keyA, keyB]);
+    for (const object of objects) {
+      expect(object.lastModified).toBeInstanceOf(Date);
+    }
+
+    await storage.delete(keyA);
+    await storage.delete(keyB);
+  });
+
+  it('list returns an empty array for a prefix with no objects', async () => {
+    const objects = await storage.list(`test/s3-object-storage-list-empty-${Date.now()}/`);
+    expect(objects).toEqual([]);
+  });
+
   // S3_PUBLIC_ENDPOINT exists because, inside docker-compose, api/worker reach MinIO at
   // the internal `http://minio:9000` for put/get/delete, but a signed URL is handed to a
   // browser, which can't resolve that hostname — it needs the host-mapped address

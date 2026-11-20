@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildIpaKey, draftIconKey, projectIconKey, shellReleaseIpaKey, shellReleaseManifestKey } from '../src/keys';
+import {
+  buildIpaKey,
+  draftIconKey,
+  projectIconKey,
+  shellReleaseIpaKey,
+  shellReleaseManifestKey,
+  shellReleaseUploadKey,
+} from '../src/keys';
 
 const ORG_ID = '01a16033-3d3b-718f-b2f4-9508ec870bab';
 const PROJECT_ID = '01a16033-3d3b-718f-b2f4-9508ec870bac';
@@ -51,5 +58,15 @@ describe('object storage key builders', () => {
 
   it('shellReleaseManifestKey sits alongside base.ipa under the same version prefix', () => {
     expect(shellReleaseManifestKey('1.2.3')).toBe('shell-base/1.2.3/manifest.json');
+  });
+
+  const UPLOAD_ID = '01a16033-3d3b-718f-b2f4-9508ec870baf';
+
+  it('shellReleaseUploadKey nests under the same version prefix, distinct from the permanent key', () => {
+    expect(shellReleaseUploadKey('1.2.3', UPLOAD_ID)).toBe(`shell-base/1.2.3/base.ipa.upload-${UPLOAD_ID}`);
+  });
+
+  it('rejects a non-uuid uploadId', () => {
+    expect(() => shellReleaseUploadKey('1.2.3', 'not-a-uuid')).toThrow(/uploadId must be a uuid/);
   });
 });

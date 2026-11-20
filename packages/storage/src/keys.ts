@@ -48,6 +48,18 @@ export function shellReleaseIpaKey(version: string): string {
   return `shell-base/${version}/base.ipa`;
 }
 
+/**
+ * Where uploadIpa() first streams a new version's .ipa — never shellReleaseIpaKey()
+ * itself. register() only promotes it there (storage.copy) after independently
+ * re-hashing this object and confirming it matches the sha256 the caller claims,
+ * so the permanent key never holds unverified content, even transiently.
+ */
+export function shellReleaseUploadKey(version: string, uploadId: string): string {
+  assertSafeVersion(version, 'version');
+  assertUuid(uploadId, 'uploadId');
+  return `shell-base/${version}/base.ipa.upload-${uploadId}`;
+}
+
 export function shellReleaseManifestKey(version: string): string {
   assertSafeVersion(version, 'version');
   return `shell-base/${version}/manifest.json`;

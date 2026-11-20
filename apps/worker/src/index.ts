@@ -7,6 +7,7 @@ import { createDb } from '@mobilio/db';
 import { createObjectStorageFromEnv } from '@mobilio/storage';
 import { processPingJob, type PingJobData } from './processors';
 import { cleanupExpiredDrafts } from './drafts-cleanup';
+import { cleanupStaleShellReleaseUploads } from './shell-releases-cleanup';
 import { cleanupExpiredEditorPreviewLinks } from './preview-links-cleanup';
 import { failStuckBuilds } from './builds-watchdog';
 
@@ -62,6 +63,12 @@ const worker = new Worker(
     if (job.name === DRAFTS_CLEANUP_JOB_NAME) {
       const result = await cleanupExpiredDrafts(db, storage);
       logger.info({ jobId: job.id, ...result }, 'drafts cleanup job processed');
+      // Rides along on this existing hourly scheduler rather than its own — a day's
+      // staleness threshold has no need for a dedicated interval, and this is already
+      // the "sweep stale storage objects" job. See shell-releases-cleanup.ts's own doc
+      // comment for what it's cleaning up and why.
+      const shellReleaseUploadsResult = await cleanupStaleShellReleaseUploads(storage);
+      logger.info({ jobId: job.id, ...shellReleaseUploadsResult }, 'stale shell-release uploads cleanup processed');
       return result;
     }
     if (job.name === BUILDS_WATCHDOG_JOB_NAME) {
