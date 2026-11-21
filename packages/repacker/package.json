@@ -25,7 +25,6 @@
   },
   "dependencies": {
     "@mobilio/config": "*",
-    "bplist-parser": "^0.6.0",
     "plist": "^5.1.2",
     "sharp": "^0.35.5",
     "yauzl": "^3.4.0",
