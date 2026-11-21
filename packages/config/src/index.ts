@@ -6,3 +6,5 @@ export { deriveBundleId } from './bundleId';
 export { slugify } from './slug';
 export { SUPPORTED_ICONS } from './icons';
 export type { SupportedIcon } from './icons';
+export { PLANS, PLAN_ORDER, DONE_FOR_YOU_PUBLISHING_PRICE_USD, APPLE_DEVELOPER_PROGRAM_PRICE_USD, planPriceForPeriod } from './plans';
+export type { Plan, PlanId, PlanPrice, BillingPeriod } from './plans';

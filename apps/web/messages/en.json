@@ -24,6 +24,104 @@
     "submit": "Show preview",
     "submitLoading": "Analyzing your site…"
   },
+  "landing": {
+    "nav": {
+      "how": "How it works",
+      "features": "Features",
+      "pricing": "Pricing",
+      "faq": "FAQ",
+      "startFree": "Start free"
+    },
+    "hero": {
+      "titleLine1": "Any website.",
+      "titleLine2": "A real iPhone app.",
+      "subtitle": "Stores, restaurants, studios. Paste your link and watch it become an app you can put on the App Store.",
+      "badgePush": "Push notifications included",
+      "badgeNoMac": "No Mac needed"
+    },
+    "howItWorks": {
+      "title": "Three steps.",
+      "titleHighlight": "No code.",
+      "subtitle": "From your link to a real app on the App Store, without a Mac or a developer.",
+      "step1Title": "Paste your link",
+      "step1Body": "We read your name, logo, colors and menu and build a preview in seconds.",
+      "step2Title": "Try it on your iPhone",
+      "step2Body": "Install a real build from a link, with your icon on the home screen.",
+      "step3Title": "Go live on the App Store",
+      "step3Body": "We prepare everything and guide you through Apple review on your own account."
+    },
+    "features": {
+      "title": "A real app, not a website in a box",
+      "pushTitle": "Push notifications",
+      "pushBody": "Sales, order updates and news on the lock screen, sent from your dashboard.",
+      "reviewTitle": "Apple review handled",
+      "reviewBody": "Every app is checked against App Store rules before it is sent. The hard part is on us.",
+      "noMacTitle": "No Mac, no Xcode",
+      "noMacBody": "Everything happens in your browser. We build, sign and package the app.",
+      "syncTitle": "Always in sync",
+      "syncBody": "Change products and prices on your site. The app shows it right away.",
+      "nativeTitle": "Native tabs and screens",
+      "nativeBody": "A real tab bar, onboarding, offline screen and settings, built in.",
+      "languagesTitle": "Many languages",
+      "languagesBody": "Your App Store page in several languages, so more countries can find you."
+    },
+    "stores": {
+      "badge": "For online stores",
+      "title": "Built to bring buyers back",
+      "subtitle": "Your store one tap away on the home screen. Customers stay signed in, carts are saved, and your messages land where people look most.",
+      "bullet1": "Flash sales and new arrivals by push",
+      "bullet2": "Abandoned cart reminders",
+      "bullet3": "Order status updates",
+      "bullet4": "Works with Shopify, WooCommerce and custom stores",
+      "message1": "Still thinking it over? Your bag is waiting.",
+      "message2": "Your order has shipped. Track it in the app.",
+      "message3": "New spring lamps just dropped. 20% off today."
+    },
+    "pricingTeaser": {
+      "title": "Try free. Pay when you are sure.",
+      "subtitle": "See your app first. Upgrade only when you love it.",
+      "previewTagline": "See your app on the site and on your phone.",
+      "previewFeature1": "App preview in seconds",
+      "previewFeature2": "Edit name, icon, colors, tabs",
+      "previewFeature3": "Open on your phone by QR code",
+      "previewCta": "Start free",
+      "testOnIphoneBadge": "Most popular",
+      "testOnIphoneUnit": "one-time",
+      "testOnIphoneTagline": "A real build on your own iPhone, with your icon on the home screen.",
+      "testOnIphoneFeature1": "Install from a link, no computer",
+      "testOnIphoneFeature2": "Push notifications included",
+      "testOnIphoneFeature3": "Credited toward publishing",
+      "testOnIphoneCta": "Get it on my iPhone",
+      "launchUnit": "per month",
+      "launchTagline": "Your app live on the App Store, under your own name.",
+      "launchFeature1": "App Store submission and review help",
+      "launchFeature2": "Unlimited push campaigns",
+      "launchFeature3": "Updates for new iOS versions",
+      "launchCta": "Publish my app",
+      "disclaimer": "Publishing needs your own Apple Developer account. Apple charges {price} per year directly."
+    },
+    "faq": {
+      "title": "Questions",
+      "q1": "Do I need a Mac or Xcode?",
+      "a1": "No. You do everything in the browser. We build and sign the app on our side.",
+      "q2": "Do I need an Apple Developer account?",
+      "a2": "Only to publish on the App Store. The preview and the iPhone test work without one.",
+      "q3": "What if Apple rejects my app?",
+      "a3": "We explain the reason in plain words, make the changes with you and submit again.",
+      "q4": "Will changes on my site show up in the app?",
+      "a4": "Yes, right away. A new build is only needed when you change the icon, name or tabs."
+    },
+    "finalCta": {
+      "title": "Ready to see your app?",
+      "subtitle": "Paste your website. No sign-up needed for the preview."
+    },
+    "footer": {
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "contact": "Contact",
+      "copyright": "© {year} Mobilio"
+    }
+  },
   "editor": {
     "nameLabel": "App name",
     "replaceIcon": "Replace icon",
@@ -109,6 +207,82 @@
     "downloadIpa": "Download .ipa",
     "disclaimer": "This .ipa is unsigned — you'll need to sideload and sign it yourself before installing.",
     "error": "Build error"
+  },
+  "pricing": {
+    "title": "Pay when your app is real",
+    "subtitle": "Preview is free forever. Test on your iPhone once, then publish with a monthly plan. Cancel any time.",
+    "billingPeriodLabel": "Billing period",
+    "monthly": "Monthly",
+    "yearly": "Yearly · save 20%",
+    "perMonth": "/ month",
+    "perYear": "/ year",
+    "once": "once",
+    "billedMonthly": "Billed monthly",
+    "billedYearly": "Billed yearly",
+    "foundingOfferBanner": "<b>Founding customers:</b> lock in {price}/month for as long as you stay.",
+    "mostPopular": "Most popular",
+    "startFree": "Start free",
+    "testMyApp": "Test my app",
+    "publishMyApp": "Publish my app",
+    "chooseGrowth": "Choose Growth",
+    "chooseAgency": "Choose Agency",
+    "preview": {
+      "name": "Preview",
+      "tagline": "See your site as an app.",
+      "feature1": "Unlimited previews",
+      "feature2": "Share a preview link",
+      "feature3": "Open in Mobilio Preview app",
+      "feature4": "Edit tabs, colors, icon"
+    },
+    "testOnIphone": {
+      "name": "Test on iPhone",
+      "tagline": "A real build from a link.",
+      "feature1": "Up to 2 iPhones",
+      "feature2": "Your icon and launch screen",
+      "feature3": "Rebuild as often as you like",
+      "feature4": "Counts toward your first month"
+    },
+    "launch": {
+      "name": "Launch",
+      "tagline": "One app on the App Store.",
+      "feature1": "1 published app",
+      "feature2": "App Store submission and updates",
+      "feature3": "Push notifications",
+      "feature4": "Help if Apple asks for changes"
+    },
+    "growth": {
+      "name": "Growth",
+      "tagline": "A few brands or regions.",
+      "feature1": "Up to 3 published apps",
+      "feature2": "Scheduled push campaigns",
+      "feature3": "3 teammates",
+      "feature4": "Priority support"
+    },
+    "agency": {
+      "name": "Agency",
+      "tagline": "Apps for your clients.",
+      "feature1": "Up to 10 published apps",
+      "feature2": "Publish to each client's Apple account",
+      "feature3": "Unbranded preview links",
+      "feature4": "Unlimited teammates"
+    },
+    "addOn": {
+      "title": "Done-for-you publishing · {price} once",
+      "body": "We fill in your store listing, privacy labels and screenshots, submit to Apple and handle review questions. Works with any paid plan.",
+      "cta": "Talk to us"
+    },
+    "legalNote": "Publishing needs your own Apple Developer Program membership, {price}/year paid to Apple. Prices in USD; taxes added at checkout by Paddle.",
+    "faq": {
+      "title": "Questions",
+      "q1": "Will Apple accept an app made from my website?",
+      "a1": "Apple rejects apps that are only a website in a frame. Mobilio adds native tabs, push notifications, an offline screen and a native launch experience, and checks your app before submission. If Apple asks for changes, we help you fix them and resubmit.",
+      "q2": "Do I need to update the app when my website changes?",
+      "a2": "No. Content comes from your website, so new products and prices show up right away. You only rebuild when you change the icon, tabs or app settings.",
+      "q3": "Who owns the app?",
+      "a3": "You do. It's published under your Apple Developer account, with your name as the seller.",
+      "q4": "What happens if I cancel?",
+      "a4": "Your app stays on the App Store and keeps showing your website. You can't ship new versions or send push notifications until you subscribe again."
+    }
   },
   "errors": {
     "INVALID_URL": "That doesn't look like a valid URL.",

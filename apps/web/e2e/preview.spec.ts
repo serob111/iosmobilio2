@@ -104,8 +104,11 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
   });
 
   await page.goto('/');
-  await page.getByPlaceholder("Your site's address, e.g. example.com").fill('e2e-test-site.example');
-  await page.getByRole('button', { name: 'Show preview' }).click();
+  // Scoped to the hero (#top) — the landing page repeats this same form in its final CTA
+  // band too, so an unscoped locator is ambiguous (see journey.spec.ts for the same fix).
+  const hero = page.locator('#top');
+  await hero.getByPlaceholder("Your site's address, e.g. example.com").fill('e2e-test-site.example');
+  await hero.getByRole('button', { name: 'Show preview' }).click();
   await page.waitForURL('**/try');
 
   const homeFrame = page.frameLocator('iframe[title="Главная"]');

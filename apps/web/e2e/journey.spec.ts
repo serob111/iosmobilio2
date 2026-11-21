@@ -62,9 +62,15 @@ async function runFullJourney(page: Page, locale: Locale): Promise<void> {
   const site = await startSite();
   try {
     // --- home -> enter the test site's url -> draft editor ---
+    // The landing page repeats the same "paste your site" form in the hero and again in
+    // the final CTA band (same copy, same translated button label, both equally real —
+    // not a case of one being a dead decorative duplicate). Scoped to #top (the hero) so
+    // this exercises one specific instance instead of hitting Playwright's strict-mode
+    // "which one?" ambiguity.
     await page.goto(localePath(locale, '/'));
-    await page.getByPlaceholder(t.home.urlPlaceholder).fill(`http://127.0.0.1:${site.port}/`);
-    await page.getByRole('button', { name: t.home.submit }).click();
+    const hero = page.locator('#top');
+    await hero.getByPlaceholder(t.home.urlPlaceholder).fill(`http://127.0.0.1:${site.port}/`);
+    await hero.getByRole('button', { name: t.home.submit }).click();
     await page.waitForURL('**/try');
 
     // --- change theme color + a tab's title ---
