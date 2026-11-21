@@ -155,6 +155,20 @@
       "when": 1795191145443,
       "tag": "0021_shell_releases_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1795294586614,
+      "tag": "0022_provisioning_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1795294600000,
+      "tag": "0023_provisioning_profiles_rls",
+      "breakpoints": true
     }
   ]
 }

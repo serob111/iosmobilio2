@@ -5,3 +5,4 @@ export * from './builds';
 export * from './drafts';
 export * from './preview-links';
 export * from './shell-releases';
+export * from './provisioning-profiles';
