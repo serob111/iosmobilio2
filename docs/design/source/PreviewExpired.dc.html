@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Preview link no longer works</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 28px 24px 32px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column">
+<span style="align-self: center; font-family: 'Unbounded', system-ui, sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.02em">mobilio</span>
+<div style="flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 18px; text-align: center">
+<span aria-hidden="true" style="width: 96px; height: 96px; border-radius: 28px; background: #E7DFFF; display: flex; align-items: center; justify-content: center"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4B2BE0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"></path><path d="M4 4l16 16"></path></svg></span>
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; line-height: 1.15; font-weight: 800; letter-spacing: -0.03em">This preview link no longer works</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #55506A">The owner turned it off or made a new one. Ask them for the latest link.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<a href="FinalMobile.dc.html" style="height: 54px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font-size: 16px; font-weight: 700; text-decoration: none">Make an app from your website</a>
+<span style="text-align: center; font-size: 13px; line-height: 1.5; color: #55506A">Is this your app? <a href="SignIn.dc.html">Sign in</a> to share a new link.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

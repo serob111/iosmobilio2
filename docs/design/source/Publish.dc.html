@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Publish to the App Store</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F3F0FF}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+</style>
+</helmet>
+<div style="min-height: 1300px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif">
+
+<header style="background: #FFFFFF; border-bottom: 1px solid #E4DFF5">
+<div style="max-width: 1320px; margin: 0 auto; padding: 14px clamp(16px, 3vw, 32px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px">
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -0.02em">mobilio</span>
+<nav aria-label="Breadcrumb" style="display: flex; align-items: center; gap: 8px; font-size: 15px; color: #55506A"><a href="Projects.dc.html" style="color: #55506A; text-decoration: none">My apps</a><span aria-hidden="true">/</span><a href="ProjectDesktop.dc.html" style="color: #55506A; text-decoration: none">Lumen</a><span aria-hidden="true">/</span><span style="font-weight: 600; color: #17112E">App Store</span></nav>
+</div>
+<span style="font-size: 14px; color: #55506A">Draft saved</span>
+</div>
+</header>
+
+<main style="max-width: 1180px; margin: 0 auto; padding: 36px clamp(16px, 3vw, 32px) 64px; display: flex; flex-direction: column; gap: 24px">
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 800; letter-spacing: -0.03em">Publish Lumen</h1>
+<p style="margin: 0; max-width: 680px; font-size: 17px; line-height: 1.5; color: #55506A">Your app goes out under your own Apple Developer account. Apple reviews every app, usually within 1–3 days.</p>
+</div>
+
+<ol aria-label="Steps" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+<li aria-current="{{t.current}}"><button type="button" onClick="{{t.pick}}" style="width: 100%; min-height: 60px; padding: 0 16px; border: 0; border-radius: 18px; background: {{t.bg}}; color: {{t.fg}}; font: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 12px; text-align: left"><span style="flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: {{t.dotBg}}; color: {{t.dotFg}}; font-size: 13px; display: flex; align-items: center; justify-content: center">{{t.mark}}</span>{{t.label}}</button></li>
+</sc-for>
+</ol>
+
+<section style="padding: clamp(20px, 3vw, 32px); border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 22px">
+
+<sc-if value="{{s1}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">Connect your Apple account</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px">
+<div style="padding: 20px; border-radius: 20px; border: 2px solid #4B2BE0; background: #F7F5FD; display: flex; flex-direction: column; gap: 8px"><span style="font-weight: 700">I have an Apple Developer account</span><span style="font-size: 14px; line-height: 1.45; color: #55506A">Create an App Store Connect API key with the App Manager role and paste it below. We never see your Apple ID password.</span></div>
+<div style="padding: 20px; border-radius: 20px; border: 1.5px solid #E4DFF5; display: flex; flex-direction: column; gap: 8px"><span style="font-weight: 700">I don't have one yet</span><span style="font-size: 14px; line-height: 1.45; color: #55506A">Enroll at developer.apple.com. Apple charges $99 per year. Companies need a D-U-N-S number, which can take a few days.</span><a href="https://developer.apple.com/programs/enroll/" style="font-size: 14px; font-weight: 600">Enroll with Apple →</a></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-issuer" style="font-size: 13px; font-weight: 600; color: #55506A">Issuer ID</label><input id="pb-issuer" type="text" placeholder="69a6de7e-…" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-key" style="font-size: 13px; font-weight: 600; color: #55506A">Key ID</label><input id="pb-key" type="text" placeholder="2X9R4HXF34" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 13px; font-weight: 600; color: #55506A">Private key (.p8)</span><button type="button" style="height: 48px; border: 1.5px dashed #CFC6F2; border-radius: 12px; background: transparent; font: inherit; font-size: 15px; font-weight: 600; color: #4B2BE0">Upload .p8 file</button></div>
+</div>
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: #55506A">The key is encrypted and used only to create and upload this app. You can revoke it in App Store Connect at any time.</p>
+<button type="button" onClick="{{next}}" style="align-self: flex-start; height: 52px; padding: 0 26px; border: 0; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700">Check and continue</button>
+</div>
+</sc-if>
+
+<sc-if value="{{s2}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">Store listing</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="pb-name" style="font-size: 13px; font-weight: 600; color: #55506A">App name</label><span style="font-size: 13px; color: #55506A">5 / 30</span></div><input id="pb-name" type="text" value="Lumen" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="pb-sub" style="font-size: 13px; font-weight: 600; color: #55506A">Subtitle</label><span style="font-size: 13px; color: #55506A">23 / 30</span></div><input id="pb-sub" type="text" value="Designer lamps, shipped" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px"><label for="pb-desc" style="font-size: 13px; font-weight: 600; color: #55506A">Description</label><textarea id="pb-desc" rows="4" style="padding: 12px 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; line-height: 1.5; color: #17112E; resize: vertical">Shop lamps and lighting from Lumen. Save favorites, track your orders and get notified when new collections drop.</textarea></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; justify-content: space-between"><label for="pb-kw" style="font-size: 13px; font-weight: 600; color: #55506A">Keywords</label><span style="font-size: 13px; color: #55506A">44 / 100</span></div><input id="pb-kw" type="text" value="lamps,lighting,decor,interior,desk lamp" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-cat" style="font-size: 13px; font-weight: 600; color: #55506A">Category</label><select id="pb-cat" style="height: 48px; padding: 0 12px; border: 1.5px solid #E4DFF5; border-radius: 12px; background: #FFFFFF; font: inherit; font-size: 16px; color: #17112E"><option>Shopping</option><option>Lifestyle</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-sup" style="font-size: 13px; font-weight: 600; color: #55506A">Support URL</label><input id="pb-sup" type="url" value="https://lumenstore.com/help" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-priv" style="font-size: 13px; font-weight: 600; color: #55506A">Privacy policy URL</label><input id="pb-priv" type="url" value="https://lumenstore.com/privacy" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px"><span style="font-size: 13px; font-weight: 600; color: #55506A">Screenshots · made from your app, 6.9" and 6.5"</span><button type="button" style="min-height: 32px; border: 0; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #4B2BE0">Retake</button></div>
+<div style="display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px">
+<sc-for list="{{shots}}" as="sh" hint-placeholder-count="5">
+<div style="flex: 0 0 auto; width: 120px; height: 250px; border-radius: 18px; background: {{sh.bg}}; display: flex; flex-direction: column; padding: 12px; box-sizing: border-box; gap: 8px"><span style="font-size: 12px; font-weight: 700; line-height: 1.2; color: {{sh.fg}}">{{sh.caption}}</span><span style="flex: 1 1 auto; border-radius: 10px; background: rgba(255,255,255,0.85)"></span></div>
+</sc-for>
+</div>
+</div>
+<button type="button" onClick="{{next}}" style="align-self: flex-start; height: 52px; padding: 0 26px; border: 0; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700">Continue</button>
+</div>
+</sc-if>
+
+<sc-if value="{{s3}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">Privacy and review</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px">
+<fieldset style="margin: 0; padding: 20px; border: 1.5px solid #E4DFF5; border-radius: 20px; display: flex; flex-direction: column; gap: 12px">
+<legend style="padding: 0 6px; font-weight: 700">What does your website collect?</legend>
+<label style="min-height: 44px; display: flex; align-items: center; gap: 12px; font-size: 15px"><input type="checkbox" checked style="width: 22px; height: 22px; accent-color: #4B2BE0">Name, email and address (for orders)</label>
+<label style="min-height: 44px; display: flex; align-items: center; gap: 12px; font-size: 15px"><input type="checkbox" checked style="width: 22px; height: 22px; accent-color: #4B2BE0">Purchase history</label>
+<label style="min-height: 44px; display: flex; align-items: center; gap: 12px; font-size: 15px"><input type="checkbox" style="width: 22px; height: 22px; accent-color: #4B2BE0">Analytics or ad tracking</label>
+<span style="font-size: 13px; line-height: 1.45; color: #55506A">This fills in Apple's App Privacy labels. Answer for your website, since the app shows it.</span>
+</fieldset>
+<fieldset style="margin: 0; padding: 20px; border: 1.5px solid #E4DFF5; border-radius: 20px; display: flex; flex-direction: column; gap: 12px">
+<legend style="padding: 0 6px; font-weight: 700">Sign-in for Apple's reviewer</legend>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-demo-u" style="font-size: 13px; font-weight: 600; color: #55506A">Demo account email</label><input id="pb-demo-u" type="email" value="review@lumenstore.com" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pb-demo-p" style="font-size: 13px; font-weight: 600; color: #55506A">Demo account password</label><input id="pb-demo-p" type="password" value="placeholder" style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+<span style="font-size: 13px; line-height: 1.45; color: #55506A">Only needed if parts of your site need an account. Create a separate test account.</span>
+</fieldset>
+</div>
+<div style="padding: 20px; border-radius: 20px; background: #F7F5FD; display: flex; flex-direction: column; gap: 12px">
+<span style="font-weight: 700">Ready-for-review check</span>
+<sc-for list="{{checks}}" as="c" hint-placeholder-count="5">
+<div style="display: flex; align-items: flex-start; gap: 12px; font-size: 15px; line-height: 1.45"><span aria-hidden="true" style="flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; background: {{c.bg}}; color: {{c.fg}}; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center">{{c.mark}}</span><span><b>{{c.title}}</b> <span style="color: #55506A">{{c.text}}</span></span></div>
+</sc-for>
+</div>
+<button type="button" onClick="{{next}}" style="align-self: flex-start; height: 52px; padding: 0 26px; border: 0; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700">Continue</button>
+</div>
+</sc-if>
+
+<sc-if value="{{s4}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">{{submitTitle}}</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px">
+<div style="padding: 16px; border-radius: 18px; background: #F7F5FD; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #55506A">Apple account</span><span style="font-weight: 700">Lumen Store LLC</span></div>
+<div style="padding: 16px; border-radius: 18px; background: #F7F5FD; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #55506A">Bundle ID</span><span style="font-weight: 700">com.lumenstore.app</span></div>
+<div style="padding: 16px; border-radius: 18px; background: #F7F5FD; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #55506A">Version</span><span style="font-weight: 700">1.0 (1)</span></div>
+<div style="padding: 16px; border-radius: 18px; background: #F7F5FD; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; color: #55506A">Price</span><span style="font-weight: 700">Free</span></div>
+</div>
+<sc-if value="{{notSubmitted}}" hint-placeholder-val="{{ true }}">
+<div style="padding: 22px; border-radius: 22px; background: #17112E; color: #FFFFFF; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<span style="max-width: 560px; font-size: 15px; line-height: 1.5; color: #CFC8E6">We build a release version, upload it to your App Store Connect and send it to Apple for review. You'll get an email at every step.</span>
+<button type="button" onClick="{{submit}}" style="height: 52px; padding: 0 26px; border: 0; border-radius: 999px; background: #D7FF4F; color: #17112E; font: inherit; font-size: 16px; font-weight: 700">Submit for review</button>
+</div>
+</sc-if>
+<sc-if value="{{submitted}}" hint-placeholder-val="{{ false }}">
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0">
+<sc-for list="{{timeline}}" as="tl" hint-placeholder-count="5">
+<li style="display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; min-height: 60px">
+<span style="display: flex; flex-direction: column; align-items: center"><span style="width: 28px; height: 28px; border-radius: 50%; background: {{tl.bg}}; color: {{tl.fg}}; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center">{{tl.mark}}</span><span style="flex: 1 1 auto; width: 2px; background: #E4DFF5"></span></span>
+<span style="display: flex; flex-direction: column; gap: 2px; padding-top: 3px"><span style="font-weight: 700; color: {{tl.titleColor}}">{{tl.title}}</span><span style="font-size: 14px; color: #55506A">{{tl.text}}</span></span>
+</li>
+</sc-for>
+</ol>
+</sc-if>
+</div>
+</sc-if>
+
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { step: 1, submitted: false };
+}
+renderVals() {
+const s = this.state;
+const names = ['Apple account', 'Store listing', 'Privacy and review', 'Submit'];
+const checks = [
+{ ok: true, title: 'Native tab bar.', text: 'Four tabs from your site menu.' },
+{ ok: true, title: 'Push notifications on.', text: 'Apple looks for features a website alone can’t offer.' },
+{ ok: true, title: 'Offline screen.', text: 'Shown instead of a blank page.' },
+{ ok: true, title: 'Outside links open in Safari.', text: 'Only your domains stay in the app.' },
+{ ok: false, title: 'Sign in with Apple.', text: 'Needed only if your site offers Google or Facebook sign-in. Not detected.' }
+];
+const tl = [
+{ title: 'Building release', text: 'Done in 12 min' },
+{ title: 'Uploaded to App Store Connect', text: 'Today, 14:20' },
+{ title: 'Waiting for review', text: 'Usually less than 24 h' },
+{ title: 'In review', text: 'Apple is testing the app' },
+{ title: 'Ready for sale', text: 'Live on the App Store' }
+];
+return {
+tabs: names.map((n, i) => {
+const k = i + 1;
+const done = s.step > k || (k === 4 && s.submitted);
+const cur = s.step === k;
+return {
+label: n,
+mark: done ? '✓' : String(k),
+current: cur ? 'step' : 'false',
+bg: cur ? '#17112E' : '#FFFFFF',
+fg: cur ? '#FFFFFF' : '#17112E',
+dotBg: done ? '#D7FF4F' : (cur ? '#4B2BE0' : '#F0EEF6'),
+dotFg: done ? '#17112E' : (cur ? '#FFFFFF' : '#55506A'),
+pick: () => this.setState({ step: k })
+};
+}),
+s1: s.step === 1, s2: s.step === 2, s3: s.step === 3, s4: s.step === 4,
+next: () => this.setState({ step: Math.min(4, s.step + 1) }),
+shots: [
+{ caption: 'Lamps that glow softer', bg: '#E8794A', fg: '#FFFFFF' },
+{ caption: 'Find your light', bg: '#17112E', fg: '#FFFFFF' },
+{ caption: 'Track every order', bg: '#F4EFE6', fg: '#17112E' },
+{ caption: 'Save favorites', bg: '#E7DFFF', fg: '#17112E' },
+{ caption: 'New drops first', bg: '#0E7C66', fg: '#FFFFFF' }
+],
+checks: checks.map((c) => ({ title: c.title, text: c.text, mark: c.ok ? '✓' : '–', bg: c.ok ? '#DDF3EC' : '#F0EEF6', fg: c.ok ? '#0A5E4D' : '#55506A' })),
+notSubmitted: !s.submitted,
+submitted: s.submitted,
+submit: () => this.setState({ submitted: true }),
+submitTitle: s.submitted ? 'Submitted to Apple' : 'Check and submit',
+timeline: tl.map((t, i) => {
+const done = i < 2;
+const cur = i === 2;
+return {
+title: t.title, text: t.text,
+mark: done ? '✓' : String(i + 1),
+bg: done ? '#D7FF4F' : (cur ? '#4B2BE0' : '#F0EEF6'),
+fg: done ? '#17112E' : (cur ? '#FFFFFF' : '#55506A'),
+titleColor: done || cur ? '#17112E' : '#55506A'
+};
+})
+};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobilio pricing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F3F0FF}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+details summary{cursor:pointer;list-style:none}
+details summary::-webkit-details-marker{display:none}
+</style>
+</helmet>
+<div style="min-height: 1560px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif">
+
+<header style="max-width: 1320px; margin: 0 auto; padding: 22px clamp(16px, 3vw, 32px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<a href="FinalDesktop.dc.html" style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: #17112E; text-decoration: none">mobilio</a>
+<nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; font-size: 15px; font-weight: 600">
+<a href="FinalDesktop.dc.html" style="color: #55506A; text-decoration: none">How it works</a>
+<a href="Pricing.dc.html" aria-current="page" style="color: #17112E; text-decoration: none">Pricing</a>
+<a href="SignIn.dc.html" style="color: #55506A; text-decoration: none">Sign in</a>
+<a href="FinalDesktop.dc.html" style="height: 44px; padding: 0 18px; display: flex; align-items: center; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; text-decoration: none">Try free</a>
+</nav>
+</header>
+
+<main style="max-width: 1320px; margin: 0 auto; padding: 32px clamp(16px, 3vw, 32px) 80px; display: flex; flex-direction: column; gap: 40px">
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
+<h1 style="margin: 0; max-width: 820px; font-family: 'Unbounded', system-ui, sans-serif; font-size: clamp(34px, 5vw, 56px); line-height: 1.05; font-weight: 800; letter-spacing: -0.035em">Pay when your app is real</h1>
+<p style="margin: 0; max-width: 600px; font-size: 18px; line-height: 1.5; color: #55506A">Preview is free forever. Test on your iPhone once, then publish with a monthly plan. Cancel any time.</p>
+<div role="radiogroup" aria-label="Billing period" style="display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: #FFFFFF; border: 1.5px solid #E4DFF5">
+<button type="button" role="radio" aria-checked="{{monthlyChecked}}" onClick="{{setMonthly}}" style="height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: {{monthlyBg}}; color: {{monthlyFg}}; font: inherit; font-size: 15px; font-weight: 600">Monthly</button>
+<button type="button" role="radio" aria-checked="{{yearlyChecked}}" onClick="{{setYearly}}" style="height: 44px; padding: 0 20px; border: 0; border-radius: 999px; background: {{yearlyBg}}; color: {{yearlyFg}}; font: inherit; font-size: 15px; font-weight: 600">Yearly · save 20%</button>
+</div>
+</div>
+
+<div style="padding: 18px 22px; border-radius: 22px; background: #D7FF4F; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+<span style="font-size: 16px; line-height: 1.45"><b>Founding customers:</b> Launch for $29/month, locked in for as long as you stay. First 50 workspaces.</span>
+<span style="font-size: 14px; font-weight: 700">[SPOTS LEFT] of 50 left</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 16px; align-items: stretch">
+
+<div style="padding: 26px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 17px; font-weight: 700">Preview</span><span style="font-size: 14px; line-height: 1.45; color: #55506A">See your site as an app.</span></div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.03em">$0</span></div>
+<a href="FinalDesktop.dc.html" style="height: 48px; display: flex; align-items: center; justify-content: center; border: 1.5px solid #E4DFF5; border-radius: 999px; color: #17112E; font-size: 15px; font-weight: 700; text-decoration: none">Start free</a>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+<li>Unlimited previews</li><li>Share a preview link</li><li>Open in Mobilio Preview app</li><li>Edit tabs, colors, icon</li>
+</ul>
+</div>
+
+<div style="padding: 26px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 17px; font-weight: 700">Test on iPhone</span><span style="font-size: 14px; line-height: 1.45; color: #55506A">A real build from a link.</span></div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.03em">$29</span><span style="font-size: 15px; color: #55506A">once</span></div>
+<a href="AdHoc.dc.html" style="height: 48px; display: flex; align-items: center; justify-content: center; border: 1.5px solid #E4DFF5; border-radius: 999px; color: #17112E; font-size: 15px; font-weight: 700; text-decoration: none">Test my app</a>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+<li>Up to 2 iPhones</li><li>Your icon and launch screen</li><li>Rebuild as often as you like</li><li>Counts toward your first month</li>
+</ul>
+</div>
+
+<div style="position: relative; padding: 26px; border-radius: 28px; background: #17112E; color: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<span style="position: absolute; top: -13px; left: 26px; height: 26px; padding: 0 12px; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 12px; font-weight: 700; display: flex; align-items: center">Most popular</span>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 17px; font-weight: 700">Launch</span><span style="font-size: 14px; line-height: 1.45; color: #CFC8E6">One app on the App Store.</span></div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.03em">{{launchPrice}}</span><span style="font-size: 15px; color: #CFC8E6">/ month</span></div>
+<span style="margin-top: -12px; font-size: 13px; color: #CFC8E6">{{periodNote}}</span>
+<a href="SignIn.dc.html" style="height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 15px; font-weight: 700; text-decoration: none">Publish my app</a>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+<li>1 published app</li><li>App Store submission and updates</li><li>Push notifications</li><li>Help if Apple asks for changes</li>
+</ul>
+</div>
+
+<div style="padding: 26px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 17px; font-weight: 700">Growth</span><span style="font-size: 14px; line-height: 1.45; color: #55506A">A few brands or regions.</span></div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.03em">{{growthPrice}}</span><span style="font-size: 15px; color: #55506A">/ month</span></div>
+<span style="margin-top: -12px; font-size: 13px; color: #55506A">{{periodNote}}</span>
+<a href="SignIn.dc.html" style="height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Choose Growth</a>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+<li>Up to 3 published apps</li><li>Scheduled push campaigns</li><li>3 teammates</li><li>Priority support</li>
+</ul>
+</div>
+
+<div style="padding: 26px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 17px; font-weight: 700">Agency</span><span style="font-size: 14px; line-height: 1.45; color: #55506A">Apps for your clients.</span></div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; font-weight: 800; letter-spacing: -0.03em">{{agencyPrice}}</span><span style="font-size: 15px; color: #55506A">/ month</span></div>
+<span style="margin-top: -12px; font-size: 13px; color: #55506A">{{periodNote}}</span>
+<a href="SignIn.dc.html" style="height: 48px; display: flex; align-items: center; justify-content: center; border: 1.5px solid #E4DFF5; border-radius: 999px; color: #17112E; font-size: 15px; font-weight: 700; text-decoration: none">Choose Agency</a>
+<ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.4">
+<li>Up to 10 published apps</li><li>Publish to each client's Apple account</li><li>Unbranded preview links</li><li>Unlimited teammates</li>
+</ul>
+</div>
+</div>
+
+<div style="padding: 24px 28px; border-radius: 24px; background: #FFFFFF; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px; max-width: 720px"><span style="font-size: 17px; font-weight: 700">Done-for-you publishing · $299 once</span><span style="font-size: 15px; line-height: 1.45; color: #55506A">We fill in your store listing, privacy labels and screenshots, submit to Apple and handle review questions. Works with any paid plan.</span></div>
+<a href="#contact" style="height: 48px; padding: 0 22px; display: flex; align-items: center; border: 1.5px solid #E4DFF5; border-radius: 999px; color: #17112E; font-size: 15px; font-weight: 700; text-decoration: none">Talk to us</a>
+</div>
+
+<p style="margin: 0; text-align: center; font-size: 14px; line-height: 1.5; color: #55506A">Publishing needs your own Apple Developer Program membership, $99/year paid to Apple. Prices in USD; taxes added at checkout by Paddle.</p>
+
+<section style="display: flex; flex-direction: column; gap: 12px; max-width: 820px; width: 100%; margin: 0 auto">
+<h2 style="margin: 0 0 8px; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">Questions</h2>
+<details style="padding: 18px 22px; border-radius: 20px; background: #FFFFFF"><summary style="min-height: 28px; font-size: 16px; font-weight: 700">Will Apple accept an app made from my website?</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: #55506A">Apple rejects apps that are only a website in a frame. Mobilio adds native tabs, push notifications, an offline screen and a native launch experience, and checks your app before submission. If Apple asks for changes, we help you fix them and resubmit.</p></details>
+<details style="padding: 18px 22px; border-radius: 20px; background: #FFFFFF"><summary style="min-height: 28px; font-size: 16px; font-weight: 700">Do I need to update the app when my website changes?</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: #55506A">No. Content comes from your website, so new products and prices show up right away. You only rebuild when you change the icon, tabs or app settings.</p></details>
+<details style="padding: 18px 22px; border-radius: 20px; background: #FFFFFF"><summary style="min-height: 28px; font-size: 16px; font-weight: 700">Who owns the app?</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: #55506A">You do. It's published under your Apple Developer account, with your name as the seller.</p></details>
+<details style="padding: 18px 22px; border-radius: 20px; background: #FFFFFF"><summary style="min-height: 28px; font-size: 16px; font-weight: 700">What happens if I cancel?</summary><p style="margin: 12px 0 0; font-size: 15px; line-height: 1.55; color: #55506A">Your app stays on the App Store and keeps showing your website. You can't ship new versions or send push notifications until you subscribe again.</p></details>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { yearly: false };
+}
+renderVals() {
+const y = this.state.yearly;
+return {
+monthlyChecked: y ? 'false' : 'true',
+yearlyChecked: y ? 'true' : 'false',
+monthlyBg: y ? 'transparent' : '#17112E',
+monthlyFg: y ? '#55506A' : '#FFFFFF',
+yearlyBg: y ? '#17112E' : 'transparent',
+yearlyFg: y ? '#FFFFFF' : '#55506A',
+setMonthly: () => this.setState({ yearly: false }),
+setYearly: () => this.setState({ yearly: true }),
+launchPrice: y ? '$39' : '$49',
+growthPrice: y ? '$79' : '$99',
+agencyPrice: y ? '$239' : '$299',
+periodNote: y ? 'Billed yearly' : 'Billed monthly'
+};
+}
+}
+</script>
+</body>
+</html>

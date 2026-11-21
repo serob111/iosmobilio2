@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Install Lumen on iPhone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<sc-if value="{{onPage}}" hint-placeholder-val="{{ true }}">
+<div style="flex: 1 1 auto; display: flex; flex-direction: column">
+<div style="padding: 20px 20px 0; display: flex; justify-content: center"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -0.02em">mobilio</span></div>
+<div style="flex: 1 1 auto; padding: 36px 24px 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center">
+<span style="width: 112px; height: 112px; border-radius: 26px; background: #E8794A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 50px; font-weight: 800; box-shadow: 0 18px 40px rgba(232,121,74,0.35)">L</span>
+<h1 style="margin: 8px 0 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 28px; font-weight: 800; letter-spacing: -0.03em">Lumen</h1>
+<span style="font-size: 15px; color: #55506A">Test build 1.0 (4) · for Anna's iPhone</span>
+<button type="button" onClick="{{install}}" style="width: 100%; height: 56px; margin-top: 12px; border: 0; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font: inherit; font-size: 17px; font-weight: 700">Install</button>
+<div style="width: 100%; padding: 16px; box-sizing: border-box; border-radius: 18px; background: #FFFFFF; display: flex; flex-direction: column; gap: 10px; text-align: left; font-size: 14px; line-height: 1.45">
+<span style="font-weight: 700">After you tap Install</span>
+<span style="color: #55506A">Go to your home screen and wait for the icon to finish loading. Then open Lumen like any app.</span>
+</div>
+<div style="width: 100%; padding: 16px; box-sizing: border-box; border-radius: 18px; background: #FFF0DC; color: #7F3F00; text-align: left; font-size: 14px; line-height: 1.45">Says "Unable to install"? This iPhone isn't registered yet. Ask the app owner to add it.</div>
+</div>
+<p style="margin: 0; padding: 0 24px 28px; text-align: center; font-size: 12px; line-height: 1.5; color: #55506A">A private test build, not from the App Store. Works until [EXPIRY DATE].</p>
+</div>
+</sc-if>
+
+<sc-if value="{{onDialog}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; inset: 0; background: rgba(10,6,30,0.4); display: flex; align-items: center; justify-content: center; padding: 0 48px">
+<div role="dialog" aria-modal="true" aria-labelledby="ah-dlg" style="width: 100%; border-radius: 16px; overflow: hidden; background: rgba(245,244,248,0.97); text-align: center">
+<div style="padding: 20px 18px 16px; display: flex; flex-direction: column; gap: 4px">
+<span id="ah-dlg" style="font-size: 16px; font-weight: 700; line-height: 1.3">install.[YOUR DOMAIN] would like to install "Lumen"</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #D6D3DE">
+<button type="button" onClick="{{cancel}}" style="height: 48px; border: 0; border-right: 1px solid #D6D3DE; background: transparent; font: inherit; font-size: 16px; color: #2F6FE0">Cancel</button>
+<button type="button" onClick="{{confirm}}" style="height: 48px; border: 0; background: transparent; font: inherit; font-size: 16px; font-weight: 700; color: #2F6FE0">Install</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{onHome}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1 1 auto; padding: 72px 26px 24px; background: linear-gradient(170deg, #3B2D7A, #1C163A); display: flex; flex-direction: column">
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px 16px">
+<sc-for list="{{icons}}" as="ic" hint-placeholder-count="8">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px"><span style="position: relative; width: 62px; height: 62px; border-radius: 15px; background: {{ic.bg}}; opacity: {{ic.opacity}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800">{{ic.letter}}</span><span style="font-size: 11px; color: #FFFFFF">{{ic.label}}</span></div>
+</sc-for>
+</div>
+<div role="status" style="margin-top: auto; padding: 16px; border-radius: 20px; background: rgba(255,255,255,0.14); color: #FFFFFF; font-size: 14px; line-height: 1.45">{{homeNote}}</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { step: 'page', loaded: false };
+}
+componentWillUnmount() {
+clearTimeout(this.t);
+}
+renderVals() {
+const s = this.state;
+const icons = [
+{ letter: 'M', label: 'Mail', bg: '#2F6FE0' },
+{ letter: 'C', label: 'Calendar', bg: '#E0453A' },
+{ letter: 'P', label: 'Photos', bg: '#D9A21B' },
+{ letter: 'M', label: 'Maps', bg: '#2E9E5B' },
+{ letter: 'N', label: 'Notes', bg: '#C9A227' },
+{ letter: 'W', label: 'Weather', bg: '#3A86C8' },
+{ letter: 'S', label: 'Settings', bg: '#6B6680' },
+{ letter: 'L', label: s.loaded ? 'Lumen' : 'Loading…', bg: '#E8794A', lumen: true }
+];
+return {
+onPage: s.step === 'page' || s.step === 'dialog',
+onDialog: s.step === 'dialog',
+onHome: s.step === 'home',
+install: () => this.setState({ step: 'dialog' }),
+cancel: () => this.setState({ step: 'page' }),
+confirm: () => {
+this.setState({ step: 'home', loaded: false });
+clearTimeout(this.t);
+this.t = setTimeout(() => this.setState({ loaded: true }), 2200);
+},
+icons: icons.map((i) => ({ letter: i.letter, label: i.label, bg: i.bg, opacity: i.lumen && !s.loaded ? 0.45 : 1 })),
+homeNote: s.loaded ? 'Lumen is installed. Tap it to open.' : 'Installing Lumen. Keep this iPhone online for a moment.'
+};
+}
+}
+</script>
+</body>
+</html>

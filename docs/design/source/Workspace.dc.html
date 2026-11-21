@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create your workspace</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F3F0FF}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+@keyframes mbSpin{to{transform:rotate(360deg)}}
+.mb-spin{animation:mbSpin 0.9s linear infinite}
+@media (prefers-reduced-motion: reduce){.mb-spin{animation:none !important}}
+</style>
+</helmet>
+<div style="min-height: 900px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<header style="padding: 28px clamp(16px, 5vw, 80px); display: flex; justify-content: space-between; align-items: center; gap: 16px">
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.02em">mobilio</span>
+<span style="font-size: 14px; color: #55506A">anna@lumenstore.com</span>
+</header>
+
+<main style="flex: 1 1 auto; display: flex; justify-content: center; padding: 24px 16px 64px">
+<div style="width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 20px">
+
+<sc-if value="{{isForm}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 20px">
+<span style="font-size: 14px; font-weight: 600; color: #4B2BE0">Step 1 of 1</span>
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 40px; line-height: 1.1; font-weight: 800; letter-spacing: -0.03em">Name your workspace</h1>
+<p style="margin: 0; font-size: 17px; line-height: 1.5; color: #55506A">Your apps, builds and billing live in a workspace. You can invite teammates later.</p>
+
+<div style="padding: 28px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="ws-name" style="font-size: 13px; font-weight: 600; color: #55506A">Workspace name</label>
+<input id="ws-name" type="text" value="Lumen Store" style="height: 52px; padding: 0 16px; border: 1.5px solid #E4DFF5; border-radius: 14px; font: inherit; font-size: 17px; color: #17112E">
+<span style="font-size: 13px; color: #55506A">Usually your company or brand.</span>
+</div>
+<fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 10px">
+<legend style="padding: 0; margin-bottom: 10px; font-size: 13px; font-weight: 600; color: #55506A">Which fits you best?</legend>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<sc-for list="{{roles}}" as="r" hint-placeholder-count="3">
+<button type="button" aria-pressed="{{r.pressed}}" onClick="{{r.pick}}" style="min-height: 44px; padding: 0 18px; border-radius: 999px; border: {{r.border}}; background: {{r.bg}}; color: #17112E; font: inherit; font-size: 15px; font-weight: 600">{{r.label}}</button>
+</sc-for>
+</div>
+</fieldset>
+<div style="padding: 16px; border-radius: 18px; background: #F7F5FD; display: flex; align-items: center; gap: 14px">
+<span style="flex: 0 0 auto; width: 48px; height: 48px; border-radius: 13px; background: #E8794A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800">L</span>
+<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700">Lumen</span><span style="font-size: 14px; color: #55506A">lumenstore.com · draft from this browser</span></div>
+<span style="flex: 0 0 auto; height: 30px; padding: 0 12px; border-radius: 999px; background: #DDF3EC; color: #0A5E4D; font-size: 13px; font-weight: 600; display: flex; align-items: center">Will be saved</span>
+</div>
+<button type="button" onClick="{{create}}" style="height: 52px; border: 0; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700">Create workspace</button>
+</div>
+
+<div style="padding: 20px 24px; border-radius: 22px; border: 1.5px solid #E4DFF5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 700">You're invited to Studio Nord</span><span style="font-size: 14px; color: #55506A">From mark@studionord.co · 2 days ago</span></div>
+<button type="button" style="height: 44px; padding: 0 18px; border: 1.5px solid #E4DFF5; border-radius: 999px; background: #FFFFFF; font: inherit; font-size: 14px; font-weight: 600; color: #17112E">Join instead</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isSaving}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 48px 28px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
+<span class="mb-spin" aria-hidden="true" style="width: 44px; height: 44px; border-radius: 50%; border: 4px solid #E7DFFF; border-top-color: #4B2BE0; box-sizing: border-box"></span>
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">Saving Lumen to Lumen Store</h1>
+<p role="status" style="margin: 0; font-size: 16px; color: #55506A">Moving your draft into the workspace…</p>
+</div>
+</sc-if>
+
+<sc-if value="{{isDone}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 40px 28px; border-radius: 28px; background: #17112E; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center">
+<span aria-hidden="true" style="width: 64px; height: 64px; border-radius: 50%; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span>
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 28px; font-weight: 700; letter-spacing: -0.02em">You're all set</h1>
+<p style="margin: 0; max-width: 380px; font-size: 16px; line-height: 1.5; color: #CFC8E6">Lumen is saved. Your preview link keeps working.</p>
+<a href="Projects.dc.html" style="height: 52px; padding: 0 28px; display: flex; align-items: center; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 16px; font-weight: 700; text-decoration: none">Go to my apps</a>
+</div>
+</sc-if>
+
+<sc-if value="{{isError}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 32px 28px; border-radius: 28px; background: #FFFFFF; display: flex; flex-direction: column; gap: 14px">
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.02em">We couldn't find your draft</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #55506A">Drafts expire after 7 days, or it was already saved from another browser. Your workspace is ready, so you can start a new app in a few seconds.</p>
+<a href="Projects.dc.html" style="align-self: flex-start; height: 48px; padding: 0 22px; display: flex; align-items: center; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Create an app</a>
+</div>
+</sc-if>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"draftOutcome":{"editor":"enum","options":["saved","expired"],"default":"saved"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { step: 'form', role: 'owner' };
+}
+componentWillUnmount() {
+clearTimeout(this.t);
+}
+renderVals() {
+const s = this.state;
+const outcome = this.props.draftOutcome ?? 'saved';
+const list = [
+{ id: 'owner', label: 'I run a business' },
+{ id: 'agency', label: 'Agency or freelancer' },
+{ id: 'dev', label: 'Developer' }
+];
+return {
+isForm: s.step === 'form',
+isSaving: s.step === 'saving',
+isDone: s.step === 'done',
+isError: s.step === 'error',
+roles: list.map((r) => ({
+label: r.label,
+pressed: s.role === r.id ? 'true' : 'false',
+border: s.role === r.id ? '2px solid #4B2BE0' : '1.5px solid #E4DFF5',
+bg: s.role === r.id ? '#E7DFFF' : '#FFFFFF',
+pick: () => this.setState({ role: r.id })
+})),
+create: () => {
+this.setState({ step: 'saving' });
+clearTimeout(this.t);
+this.t = setTimeout(() => this.setState({ step: outcome === 'saved' ? 'done' : 'error' }), 1400);
+}
+};
+}
+}
+</script>
+</body>
+</html>

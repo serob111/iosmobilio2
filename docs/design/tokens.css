@@ -1,0 +1,73 @@
+/*
+ * Mobilio — дизайн-система Vivid. Токены для Tailwind v4 (@theme).
+ * Подключать в apps/web/app/globals.css после @import "tailwindcss".
+ * Шрифты (Unbounded, Onest) подключаются через next/font/google и
+ * передаются в --font-display / --font-sans через CSS-переменные next/font.
+ */
+@theme {
+  /* Бренд */
+  --color-violet: #4B2BE0;        /* бренд, ссылки, основная кнопка на светлом */
+  --color-violet-hover: #3517C4;
+  --color-ink: #17112E;           /* текст, тёмные панели */
+  --color-lime: #D7FF4F;          /* ОДНА главная кнопка на тёмном фоне */
+  --color-night: #261E44;         /* поднятые элементы на ink */
+  --color-night-line: #3A3160;    /* рамки на ink */
+  --color-night-track: #2E2650;   /* дорожка прогресса на ink */
+  --color-lilac: #E7DFFF;         /* выбранное, мягкие заливки */
+  --color-mist: #F3F0FF;          /* фон страницы */
+  --color-mist-soft: #F7F5FD;     /* вложенные блоки в карточках */
+  --color-white: #FFFFFF;
+
+  /* Текст и линии */
+  --color-slate: #55506A;         /* второстепенный текст */
+  --color-haze: #CFC8E6;          /* второстепенный текст на ink */
+  --color-line: #E4DFF5;          /* рамки полей, разделители */
+  --color-line-soft: #EFEBFA;     /* разделители внутри карточек */
+  --color-line-dashed: #CFC6F2;   /* пунктир «добавить» */
+  --color-disabled-bg: #E7DFFF;
+  --color-disabled-fg: #6E6787;
+
+  /* Статусы: основной / фон бейджа / текст бейджа */
+  --color-success: #0E7C66;  --color-success-bg: #DDF3EC;  --color-success-fg: #0A5E4D;
+  --color-warning: #A45200;  --color-warning-bg: #FFF0DC;  --color-warning-fg: #7F3F00;
+  --color-danger:  #C42B4B;  --color-danger-bg:  #FBE3E8;  --color-danger-fg:  #9C1F39;
+  --color-info-fg: #2A1A80;  /* текст на lilac-плашке */
+  --color-neutral: #8A859C;  --color-neutral-bg: #F0EEF6;
+  --color-building-fg: #3517C4;
+
+  /* Типографика */
+  --font-display: var(--font-unbounded), system-ui, sans-serif; /* только заголовки, 700–800 */
+  --font-sans: var(--font-onest), system-ui, sans-serif;        /* всё остальное, 400–700 */
+
+  /* Скругления */
+  --radius-field: 12px;   /* поля */
+  --radius-field-lg: 14px;
+  --radius-card: 24px;    /* карточки 20–24 */
+  --radius-panel: 28px;   /* панели 28–32 */
+  --radius-panel-lg: 32px;
+  --radius-pill: 999px;   /* все кнопки и бейджи */
+
+  /* Тени */
+  --shadow-card-hover: 0 12px 32px rgba(40, 20, 120, 0.12);
+  --shadow-phone: 0 40px 90px rgba(10, 5, 40, 0.5);
+
+  /* Анимация */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-hover: 150ms;
+  --duration-panel: 240ms;
+}
+
+/*
+ * Шкала типографики (px, размер/интерлиньяж):
+ *   display 56/60  Unbounded 800, letter-spacing -0.035em
+ *   h1      40/46  Unbounded 800, -0.03em
+ *   h2      26/32  Unbounded 700, -0.02em
+ *   title   18/24  Onest 700
+ *   body    17/26  Onest 400
+ *   small   15/22  Onest 400
+ *   label   13/18  Onest 600 (минимальный размер текста 13px)
+ * Отступы: 8 · 12 · 16 · 24 · 32 · 48 · 72
+ * Кнопки: высота 52 (компактные 44), всегда pill.
+ * Фокус полей: border 2px violet + box-shadow 0 0 0 4px lilac.
+ * Все анимации отключаются при prefers-reduced-motion.
+ */

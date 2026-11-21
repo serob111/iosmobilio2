@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobilio Preview my apps</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#17112E}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; box-sizing: border-box; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<div style="padding: 60px 20px 16px; display: flex; justify-content: space-between; align-items: center">
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; letter-spacing: -0.03em; font-weight: 800">My apps</h1>
+<button type="button" aria-label="Account" style="width: 44px; height: 44px; border: 0; border-radius: 50%; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0116 0"></path></svg></button>
+</div>
+
+<div style="padding: 0 20px; display: flex; flex-direction: column; gap: 12px">
+<a href="PreviewRunning.dc.html" style="padding: 16px; border-radius: 22px; background: #FFFFFF; display: flex; align-items: center; gap: 14px; text-decoration: none">
+<span style="flex: 0 0 auto; width: 60px; height: 60px; border-radius: 16px; background: #4B2BE0; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800">L</span>
+<span style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 17px; font-weight: 700">Lumen</span><span style="font-size: 13px; color: #55506A">lumenstore.com · updated today</span></span>
+<span style="padding: 8px 14px; border-radius: 999px; background: #D7FF4F; font-size: 14px; font-weight: 700">Open</span>
+</a>
+<a href="PreviewRunning.dc.html" style="padding: 16px; border-radius: 22px; background: #FFFFFF; display: flex; align-items: center; gap: 14px; text-decoration: none">
+<span style="flex: 0 0 auto; width: 60px; height: 60px; border-radius: 16px; background: #E8794A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800">C</span>
+<span style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 3px"><span style="font-size: 17px; font-weight: 700">Casa Roma</span><span style="font-size: 13px; color: #55506A">casaroma.it · updated 2 days ago</span></span>
+<span style="padding: 8px 14px; border-radius: 999px; background: #F3F0FF; font-size: 14px; font-weight: 700">Open</span>
+</a>
+</div>
+
+<div style="margin: 24px 20px 0; padding: 20px; border-radius: 22px; border: 2px dashed #CFC6F2; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+<span style="font-size: 16px; font-weight: 700">Add another app</span>
+<span style="font-size: 14px; line-height: 1.45; color: #55506A">Create it on mobilio.com, then scan the QR code shown there.</span>
+<a href="PreviewScan.dc.html" style="margin-top: 4px; height: 48px; padding: 0 22px; display: flex; align-items: center; gap: 8px; border-radius: 999px; background: #17112E; color: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3"></path><path d="M16 4h3a1 1 0 011 1v3"></path><path d="M20 16v3a1 1 0 01-1 1h-3"></path><path d="M8 20H5a1 1 0 01-1-1v-3"></path></svg>
+Scan QR
+</a>
+</div>
+
+<div style="margin: auto 20px 34px; padding: 18px; border-radius: 22px; background: #4B2BE0; color: #FFFFFF; display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 15px; font-weight: 700">This is a preview</span>
+<span style="font-size: 13px; line-height: 1.45; color: #E7DFFF">Your apps run inside Mobilio Preview. Get the real app with your own icon from the app page.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

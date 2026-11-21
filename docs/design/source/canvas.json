@@ -1,0 +1,334 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "AdHoc.dc.html": {
+      "expand": "fill",
+      "h": 1100,
+      "is_interactive": true,
+      "title": "Test on iPhone — flow",
+      "w": 1440,
+      "x": 0,
+      "y": 13560
+    },
+    "AdHocPhone.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "Test on iPhone — on the phone",
+      "w": 390,
+      "x": 1520,
+      "y": 13560
+    },
+    "Billing.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "title": "Billing — plan & invoices",
+      "w": 1440,
+      "x": 1520,
+      "y": 16800
+    },
+    "EditorAppearance.dc.html": {
+      "expand": "fill",
+      "h": 1160,
+      "is_interactive": true,
+      "title": "Editor — icon, launch, offline",
+      "w": 1440,
+      "x": 1520,
+      "y": 11980
+    },
+    "EmailBuildReady.dc.html": {
+      "h": 900,
+      "title": "Email — test build ready",
+      "w": 640,
+      "x": 720,
+      "y": 18780
+    },
+    "EmailReview.dc.html": {
+      "h": 860,
+      "title": "Email — App Store review",
+      "w": 640,
+      "x": 1440,
+      "y": 18780
+    },
+    "EmailSignIn.dc.html": {
+      "h": 720,
+      "title": "Email — sign-in link",
+      "w": 640,
+      "x": 0,
+      "y": 18780
+    },
+    "FinalDesktop.dc.html": {
+      "h": 5200,
+      "is_interactive": true,
+      "title": "Final — desktop",
+      "w": 1440,
+      "x": 1560,
+      "y": 2340
+    },
+    "FinalMobile.dc.html": {
+      "h": 7000,
+      "is_interactive": true,
+      "title": "Final — mobile",
+      "w": 390,
+      "x": 3080,
+      "y": 2340
+    },
+    "Foundations.dc.html": {
+      "h": 1760,
+      "title": "Vivid — foundations",
+      "w": 1440,
+      "x": 0,
+      "y": 9800
+    },
+    "NotFound.dc.html": {
+      "expand": "fill",
+      "h": 800,
+      "title": "404",
+      "w": 1440,
+      "x": 0,
+      "y": 20100
+    },
+    "PreviewApps.dc.html": {
+      "h": 844,
+      "title": "Preview app — My apps",
+      "w": 390,
+      "x": 4060,
+      "y": 2340
+    },
+    "PreviewExpired.dc.html": {
+      "h": 844,
+      "title": "Preview link revoked",
+      "w": 390,
+      "x": 1520,
+      "y": 20100
+    },
+    "PreviewRunning.dc.html": {
+      "h": 844,
+      "title": "Preview app — Running a preview",
+      "w": 390,
+      "x": 5000,
+      "y": 2340
+    },
+    "PreviewScan.dc.html": {
+      "h": 844,
+      "title": "Preview app — Scan QR",
+      "w": 390,
+      "x": 4530,
+      "y": 2340
+    },
+    "PreviewUpgrade.dc.html": {
+      "h": 844,
+      "title": "Preview app — Get the real app",
+      "w": 390,
+      "x": 5470,
+      "y": 2340
+    },
+    "PreviewWelcome.dc.html": {
+      "h": 844,
+      "title": "Preview app — Welcome",
+      "w": 390,
+      "x": 3590,
+      "y": 2340
+    },
+    "Pricing.dc.html": {
+      "expand": "fill",
+      "h": 1560,
+      "is_interactive": true,
+      "title": "Pricing",
+      "w": 1440,
+      "x": 0,
+      "y": 16800
+    },
+    "ProjectDesktop.dc.html": {
+      "h": 1080,
+      "is_interactive": true,
+      "title": "Project page — desktop",
+      "w": 1440,
+      "x": 5980,
+      "y": 2340
+    },
+    "ProjectMobile.dc.html": {
+      "h": 2100,
+      "is_interactive": true,
+      "title": "Project page — mobile",
+      "w": 390,
+      "x": 7540,
+      "y": 2340
+    },
+    "Projects.dc.html": {
+      "expand": "fill",
+      "h": 1000,
+      "is_interactive": true,
+      "title": "Dashboard — my apps",
+      "w": 1440,
+      "x": 0,
+      "y": 11980
+    },
+    "Publish.dc.html": {
+      "expand": "fill",
+      "h": 1300,
+      "is_interactive": true,
+      "title": "Publish to App Store — wizard",
+      "w": 1440,
+      "x": 0,
+      "y": 15080
+    },
+    "SignIn.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Sign in — magic link",
+      "w": 1440,
+      "x": 1520,
+      "y": 9800
+    },
+    "Terms.dc.html": {
+      "expand": "fill",
+      "h": 1900,
+      "title": "Legal — Terms",
+      "w": 1440,
+      "x": 1990,
+      "y": 20100
+    },
+    "Workspace.dc.html": {
+      "expand": "fill",
+      "h": 900,
+      "is_interactive": true,
+      "title": "Create workspace + claim draft",
+      "w": 1440,
+      "x": 3040,
+      "y": 9800
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-17T12:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "final",
+    "preview",
+    "project",
+    "system",
+    "dashboard",
+    "adhoc",
+    "publish",
+    "billing",
+    "emails",
+    "systempages"
+  ],
+  "notes": {
+    "adhoc": {
+      "kind": "title1",
+      "maxW": 1910,
+      "text": "Test on iPhone (Ad Hoc)",
+      "w": 240,
+      "x": 0,
+      "y": 13260
+    },
+    "billing": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Plans and billing",
+      "w": 240,
+      "x": 0,
+      "y": 16500
+    },
+    "dashboard": {
+      "kind": "title1",
+      "maxW": 2960,
+      "text": "Dashboard and editor",
+      "w": 240,
+      "x": 0,
+      "y": 11680
+    },
+    "emails": {
+      "kind": "title1",
+      "maxW": 2080,
+      "text": "Transactional emails",
+      "w": 240,
+      "x": 0,
+      "y": 18480
+    },
+    "final": {
+      "kind": "title1",
+      "maxW": 1910,
+      "text": "Final design — Vivid",
+      "w": 240,
+      "x": 1560,
+      "y": 2040
+    },
+    "preview": {
+      "kind": "title1",
+      "maxW": 2270,
+      "text": "Mobilio Preview iOS app",
+      "w": 240,
+      "x": 3785,
+      "y": 2075
+    },
+    "project": {
+      "kind": "title1",
+      "maxW": 1950,
+      "text": "Project page /p/[id]",
+      "w": 240,
+      "x": 5980,
+      "y": 2040
+    },
+    "publish": {
+      "kind": "title1",
+      "maxW": 1440,
+      "text": "Publish to the App Store",
+      "w": 240,
+      "x": 0,
+      "y": 14780
+    },
+    "system": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Foundations, sign-in, workspace",
+      "w": 240,
+      "x": 0,
+      "y": 9500
+    },
+    "systempages": {
+      "kind": "title1",
+      "maxW": 3430,
+      "text": "Errors and legal",
+      "w": 240,
+      "x": 0,
+      "y": 19800
+    }
+  },
+  "order": [
+    "FinalDesktop.dc.html",
+    "FinalMobile.dc.html",
+    "PreviewWelcome.dc.html",
+    "PreviewApps.dc.html",
+    "PreviewScan.dc.html",
+    "PreviewRunning.dc.html",
+    "PreviewUpgrade.dc.html",
+    "ProjectDesktop.dc.html",
+    "ProjectMobile.dc.html",
+    "Foundations.dc.html",
+    "SignIn.dc.html",
+    "Workspace.dc.html",
+    "Projects.dc.html",
+    "EditorAppearance.dc.html",
+    "AdHoc.dc.html",
+    "AdHocPhone.dc.html",
+    "Publish.dc.html",
+    "Pricing.dc.html",
+    "Billing.dc.html",
+    "EmailSignIn.dc.html",
+    "EmailBuildReady.dc.html",
+    "EmailReview.dc.html",
+    "NotFound.dc.html",
+    "PreviewExpired.dc.html",
+    "Terms.dc.html"
+  ],
+  "pages": [],
+  "title": "Mobilio — главная страница"
+}

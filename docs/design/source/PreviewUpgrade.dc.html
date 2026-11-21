@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobilio Preview get the real app</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; box-sizing: border-box; background: #FFFFFF; color: #17112E; font-family: 'Onest', system-ui, sans-serif">
+
+<div aria-hidden="true" style="padding: 60px 20px 0; display: flex; flex-direction: column; gap: 14px">
+<span style="font-size: 30px; font-weight: 700; letter-spacing: -0.03em">Lumen</span>
+<div style="height: 44px; border-radius: 12px; background: #F3F3F6"></div>
+<div style="height: 190px; border-radius: 24px; background: #EDE8FF"></div>
+</div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(13,10,26,0.55)"></div>
+
+<div role="dialog" aria-label="Get the real app" style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 20px 34px; border-radius: 32px 32px 0 0; background: #FFFFFF; display: flex; flex-direction: column; gap: 16px">
+<span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #DCD7EA"></span>
+
+<div style="display: flex; align-items: center; gap: 14px">
+<span style="flex: 0 0 auto; width: 64px; height: 64px; border-radius: 17px; background: #4B2BE0; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800">L</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 20px; font-weight: 700; letter-spacing: -0.02em">Make Lumen real</h1>
+<span style="font-size: 14px; color: #55506A">Your own icon, name and push notifications.</span>
+</div>
+</div>
+
+<label style="padding: 16px; border-radius: 20px; border: 2px solid #4B2BE0; background: #F6F3FF; display: flex; gap: 14px; align-items: flex-start">
+<input type="radio" name="plan" checked style="margin: 3px 0 0; width: 20px; height: 20px; accent-color: #4B2BE0">
+<span style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px">
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 16px; font-weight: 700">Test on my iPhone</span><span style="font-size: 15px; font-weight: 700">[PRICE]</span></span>
+<span style="font-size: 14px; line-height: 1.45; color: #55506A">Lumen on your home screen in minutes, installed from a link.</span>
+</span>
+</label>
+
+<label style="padding: 16px; border-radius: 20px; border: 1.5px solid #E4DFF5; display: flex; gap: 14px; align-items: flex-start">
+<input type="radio" name="plan" style="margin: 3px 0 0; width: 20px; height: 20px; accent-color: #4B2BE0">
+<span style="flex: 1 1 auto; display: flex; flex-direction: column; gap: 4px">
+<span style="display: flex; justify-content: space-between; gap: 8px"><span style="font-size: 16px; font-weight: 700">Publish on the App Store</span><span style="font-size: 15px; font-weight: 700">[PRICE]/mo</span></span>
+<span style="font-size: 14px; line-height: 1.45; color: #55506A">Live for everyone, on your own Apple account. Review help included.</span>
+</span>
+</label>
+
+<button type="button" style="height: 56px; border: 0; border-radius: 999px; background: #17112E; color: #FFFFFF; font: inherit; font-size: 17px; font-weight: 700">Continue</button>
+<a href="PreviewRunning.dc.html" style="align-self: center; min-height: 44px; display: flex; align-items: center; font-size: 15px; font-weight: 600; color: #55506A; text-decoration: none">Keep previewing</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobilio Preview running Lumen</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; box-sizing: border-box; background: #FFFFFF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column">
+
+<div style="padding: 60px 20px 12px; display: flex; justify-content: space-between; align-items: center">
+<span style="font-size: 30px; font-weight: 700; letter-spacing: -0.03em">Lumen</span>
+<span style="padding: 7px 12px; border-radius: 999px; background: #F1EDFF; font-size: 14px; font-weight: 600; color: #3A22B8">Bag · 2</span>
+</div>
+<div style="margin: 0 20px; height: 44px; border-radius: 12px; background: #F3F3F6; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; color: #6B6680">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B6680" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>Search lamps
+</div>
+<div style="margin: 16px 20px 0; height: 190px; border-radius: 24px; background: #EDE8FF; display: flex; flex-direction: column; justify-content: flex-end; padding: 20px; box-sizing: border-box; gap: 4px">
+<span style="font-size: 13px; font-weight: 600; color: #3A22B8">Spring collection</span>
+<span style="font-size: 26px; font-weight: 700; letter-spacing: -0.02em; color: #2A1A7A">Lamps that<br>glow softer</span>
+</div>
+<div style="margin: 16px 20px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 150px; border-radius: 18px; background: #F4EFE6"></div><span style="font-size: 14px; font-weight: 600">Arc lamp</span><span style="font-size: 14px; color: #55506A">$129</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 150px; border-radius: 18px; background: #E6EEF4"></div><span style="font-size: 14px; font-weight: 600">Desk light</span><span style="font-size: 14px; color: #55506A">$89</span></div>
+</div>
+
+<div style="position: absolute; left: 16px; right: 16px; bottom: 104px; padding: 8px 8px 8px 14px; border-radius: 999px; background: #17112E; color: #FFFFFF; display: flex; align-items: center; gap: 10px; box-shadow: 0 16px 36px rgba(23,17,46,0.35)">
+<span style="width: 26px; height: 26px; border-radius: 8px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 13px; border: 2px solid #17112E; border-radius: 3px"></span></span>
+<span style="flex: 1 1 auto; font-size: 14px; font-weight: 600">Preview of Lumen</span>
+<a href="PreviewUpgrade.dc.html" style="height: 40px; padding: 0 14px; display: flex; align-items: center; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 14px; font-weight: 700; text-decoration: none">Get the app</a>
+<a href="PreviewApps.dc.html" aria-label="Exit preview" style="width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.14); display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"></path><path d="M18 6L6 18"></path></svg></a>
+</div>
+
+<div style="margin-top: auto; border-top: 1px solid #EDEDF0; padding: 10px 20px 30px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 11px; font-weight: 600; color: #6B6680; background: #FFFFFF">
+<span style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #3A22B8"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"></path></svg>Home</span>
+<span style="display: flex; flex-direction: column; align-items: center; gap: 4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"></rect><rect x="13" y="4" width="7" height="7" rx="1.5"></rect><rect x="4" y="13" width="7" height="7" rx="1.5"></rect><rect x="13" y="13" width="7" height="7" rx="1.5"></rect></svg>Catalog</span>
+<span style="display: flex; flex-direction: column; align-items: center; gap: 4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14l-1.5 10h-11z"></path><path d="M9 7a3 3 0 016 0"></path></svg>Bag</span>
+<span style="display: flex; flex-direction: column; align-items: center; gap: 4px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0116 0"></path></svg>Profile</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

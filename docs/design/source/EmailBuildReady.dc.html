@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test build ready email</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+</style>
+</helmet>
+<div style="width: 640px; height: 900px; box-sizing: border-box; padding: 40px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column; gap: 20px">
+<div style="padding: 12px 16px; border-radius: 12px; background: #FFFFFF; font-size: 13px; line-height: 1.5; color: #55506A"><b style="color: #17112E">Subject:</b> Lumen is ready to install on your iPhone<br><b style="color: #17112E">Preview:</b> Open this email on your iPhone and tap Install.</div>
+<div style="border-radius: 24px; overflow: hidden; background: #FFFFFF; display: flex; flex-direction: column">
+<div style="padding: 36px 40px; background: #17112E; color: #FFFFFF; display: flex; flex-direction: column; gap: 22px">
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.02em">mobilio</span>
+<div style="display: flex; align-items: center; gap: 18px">
+<span style="flex: 0 0 auto; width: 76px; height: 76px; border-radius: 18px; background: #E8794A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 800">L</span>
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 26px; line-height: 1.15; font-weight: 800; letter-spacing: -0.03em">Lumen is ready for your iPhone</h1>
+</div>
+</div>
+<div style="padding: 32px 40px 36px; display: flex; flex-direction: column; gap: 20px">
+<p style="margin: 0; font-size: 16px; line-height: 1.55">Your test build 1.0 (4) finished. Open this email on Anna's iPhone and tap the button.</p>
+<a href="AdHocPhone.dc.html" style="align-self: flex-start; height: 52px; padding: 0 28px; display: flex; align-items: center; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font-size: 16px; font-weight: 700; text-decoration: none">Install on iPhone</a>
+<div style="padding: 18px 20px; border-radius: 18px; background: #F7F5FD; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.5">
+<span style="font-weight: 700">Installing</span>
+<span>1. Tap <b>Install on iPhone</b>, then <b>Install</b>.</span>
+<span>2. Go to your home screen and wait for the icon to load.</span>
+<span>3. Open Lumen.</span>
+</div>
+<p style="margin: 0; font-size: 14px; line-height: 1.55; color: #55506A">Reading this on a computer? Open your app page and scan the QR code with your iPhone camera: <a href="AdHoc.dc.html">Lumen → Test on iPhone</a>.</p>
+<div style="height: 1px; background: #EFEBFA"></div>
+<p style="margin: 0; font-size: 14px; line-height: 1.55; color: #55506A">This build works on your registered iPhones until [EXPIRY DATE]. Ready for the App Store? <a href="Publish.dc.html">Start publishing</a>.</p>
+</div>
+</div>
+<p style="margin: 0; text-align: center; font-size: 12px; line-height: 1.6; color: #55506A">You get this because you started a build in the Lumen Store workspace.<br>Mobilio · [COMPANY LEGAL NAME], [COMPANY ADDRESS]</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

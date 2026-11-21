@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobilio landing, mobile</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:inherit}a:hover{opacity:0.85}
+summary{cursor:pointer;list-style:none}
+summary::-webkit-details-marker{display:none}
+@keyframes mbFadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mbRise{from{opacity:0;transform:translateY(220px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes mbPop{0%{opacity:0;transform:scale(0.3)}70%{opacity:1;transform:scale(1.12)}100%{opacity:1;transform:scale(1)}}
+@keyframes mbWiggle{0%,100%{transform:rotate(0deg)}50%{transform:rotate(4deg)}}
+@keyframes mbPulse{0%,100%{box-shadow:0 0 0 0 rgba(215,255,79,0)}50%{box-shadow:0 0 0 6px rgba(215,255,79,0.35)}}
+@keyframes mbDrift{0%,100%{transform:translate(0,0)}50%{transform:translate(30px,-24px)}}
+@keyframes mbSlideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+.mb-fade{animation:mbFadeUp 0.9s cubic-bezier(0.2,0.8,0.2,1) both}
+.mb-rise{animation:mbRise 1.1s cubic-bezier(0.2,0.9,0.25,1.12) both}
+.mb-float{animation:mbFloat 5s ease-in-out infinite}
+.mb-pop{animation:mbPop 0.7s cubic-bezier(0.3,1.4,0.5,1) both}
+.mb-wiggle{animation:mbWiggle 3.2s ease-in-out infinite}
+.mb-pulse{animation:mbPulse 2.4s ease-in-out infinite}
+.mb-drift{animation:mbDrift 12s ease-in-out infinite}
+.mb-phone{transition:box-shadow 0.5s ease}
+@supports (animation-timeline: view()){
+.mb-reveal{animation:mbFadeUp linear both;animation-timeline:view();animation-range:entry 0% cover 25%}
+.mb-reveal-x{animation:mbSlideIn linear both;animation-timeline:view();animation-range:entry 0% cover 28%}
+}
+@media (prefers-reduced-motion: reduce){.mb-fade,.mb-rise,.mb-float,.mb-pop,.mb-wiggle,.mb-pulse,.mb-drift,.mb-reveal,.mb-reveal-x{animation:none !important}}
+</style>
+</helmet>
+<div style="width: 390px; min-height: 7000px; background: #FFFFFF; color: #17112E; font-family: 'Onest', system-ui, sans-serif">
+
+<section id="top" style="height: 880px; position: relative; overflow: hidden; background: {{bg}}; color: #FFFFFF">
+<div aria-hidden="true" class="mb-drift" style="position: absolute; left: -140px; top: -120px; width: 320px; height: 320px; border-radius: 50%; background: rgba(255,255,255,0.07)"></div>
+<div aria-hidden="true" class="mb-drift" style="position: absolute; right: -160px; top: 380px; width: 360px; height: 360px; border-radius: 50%; background: rgba(23,17,46,0.22); animation-delay: -6s"></div>
+
+<header class="mb-fade" style="position: relative; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between">
+<a href="#top" style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-decoration: none; color: #FFFFFF">mobilio</a>
+<div style="display: flex; align-items: center; gap: 8px">
+<a href="#start" class="mb-pulse" style="height: 44px; padding: 0 16px; display: flex; align-items: center; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 14px; font-weight: 700; text-decoration: none">Start free</a>
+<button type="button" aria-label="Open menu" style="width: 44px; height: 44px; border: 1px solid rgba(255,255,255,0.35); border-radius: 50%; background: transparent; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8h16"></path><path d="M4 16h16"></path></svg></button>
+</div>
+</header>
+
+<div style="position: relative; padding: 24px 20px 0; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px">
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 34px; line-height: 1.08; letter-spacing: -0.03em; font-weight: 800">
+<span class="mb-fade" style="display: block; animation-delay: 0.1s">Any website.</span>
+<span class="mb-fade" style="display: block; animation-delay: 0.25s">A real iPhone app.</span>
+</h1>
+<p class="mb-fade" style="margin: 0; font-size: 16px; line-height: 1.5; color: #E7DFFF; animation-delay: 0.4s">Paste your link and watch it become an app you can put on the App Store.</p>
+<form id="start" class="mb-fade" style="width: 100%; display: flex; flex-direction: column; gap: 10px; animation-delay: 0.55s">
+<label for="fm-url" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Your website address</label>
+<input id="fm-url" type="url" placeholder="{{typed}}" style="width: 100%; box-sizing: border-box; height: 54px; padding: 0 20px; border: 0; border-radius: 999px; background: #FFFFFF; color: #17112E; font: inherit; font-size: 16px; text-align: center">
+<button type="button" style="width: 100%; height: 54px; border: 0; border-radius: 999px; background: #17112E; color: #FFFFFF; font: inherit; font-size: 16px; font-weight: 700">Make it an app</button>
+</form>
+</div>
+
+<div style="position: absolute; left: -46px; top: 560px; transform: rotate(-10deg)">
+<div class="mb-rise" style="animation-delay: 0.75s"><div class="mb-float" style="animation-delay: 0.3s">
+<div class="mb-phone" style="width: 170px; height: 350px; box-sizing: border-box; padding: 3px; border-radius: 36px; background: linear-gradient(150deg, #8A7B96, #4E4359 45%, #6F617B); box-shadow: {{shadowLeft}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 6px solid #050505; border-radius: 33px; overflow: hidden; background: #FFF6EC; display: flex; flex-direction: column; color: #2B1A0E">
+<span aria-hidden="true" style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 50px; height: 15px; border-radius: 12px; background: #050505"></span>
+<div style="padding: 30px 10px 6px; font-size: 14px; font-weight: 700">Casa Roma</div>
+<div style="margin: 0 10px; height: 76px; border-radius: 12px; background: #E8794A; display: flex; align-items: flex-end; padding: 8px; box-sizing: border-box; color: #FFFFFF; font-weight: 700; font-size: 11px">Order for tonight</div>
+<div style="margin: 8px 10px 0; padding: 7px 8px; border-radius: 8px; background: #FFFFFF; font-size: 10px; display: flex; justify-content: space-between"><span style="font-weight: 600">Margherita</span><span>$14</span></div>
+</div>
+</div>
+</div></div>
+</div>
+
+<div style="position: absolute; left: 266px; top: 560px; transform: rotate(10deg)">
+<div class="mb-rise" style="animation-delay: 0.9s"><div class="mb-float" style="animation-delay: 1.4s">
+<div class="mb-phone" style="width: 170px; height: 350px; box-sizing: border-box; padding: 3px; border-radius: 36px; background: linear-gradient(150deg, #8A7B96, #4E4359 45%, #6F617B); box-shadow: {{shadowRight}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 6px solid #050505; border-radius: 33px; overflow: hidden; background: #111312; display: flex; flex-direction: column; color: #FFFFFF">
+<span aria-hidden="true" style="position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: 50px; height: 15px; border-radius: 12px; background: #000000"></span>
+<div style="padding: 30px 10px 6px; font-size: 14px; font-weight: 700">Pulse Studio</div>
+<div style="margin: 0 10px; padding: 10px; border-radius: 12px; background: #C6F24E; color: #111312; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 9px; font-weight: 600">Next class</span><span style="font-size: 12px; font-weight: 700">HIIT · 18:30</span></div>
+</div>
+</div>
+</div></div>
+</div>
+
+<div style="position: absolute; left: 90px; top: 520px; z-index: 2">
+<div class="mb-rise" style="animation-delay: 0.6s"><div class="mb-float" style="animation-delay: 0.9s">
+<div class="mb-phone" style="width: 210px; height: 432px; box-sizing: border-box; padding: 4px; border-radius: 44px; background: linear-gradient(150deg, #9A8AA8, #4B4056 40%, #7D6E8B); box-shadow: {{shadowCenter}}">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 7px solid #050505; border-radius: 40px; overflow: hidden; background: #FFFFFF; display: flex; flex-direction: column; color: #17112E">
+<span aria-hidden="true" style="position: absolute; top: 7px; left: 50%; transform: translateX(-50%); width: 64px; height: 19px; border-radius: 14px; background: #050505"></span>
+<div style="padding: 36px 13px 8px; display: flex; justify-content: space-between; align-items: center"><span style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em">Lumen</span><span style="padding: 3px 7px; border-radius: 999px; background: #F1EDFF; font-size: 9px; font-weight: 600; color: #4B2BE0">Bag · 2</span></div>
+<div style="margin: 0 13px; height: 108px; border-radius: 15px; background: #EDE8FF; display: flex; align-items: flex-end; padding: 11px; box-sizing: border-box"><span style="font-size: 15px; font-weight: 700; color: #2A1A7A">Lamps that<br>glow softer</span></div>
+<div style="margin: 9px 13px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px">
+<div style="display: flex; flex-direction: column; gap: 4px"><div style="height: 70px; border-radius: 10px; background: #F4EFE6"></div><span style="font-size: 9px; font-weight: 600">Arc lamp</span><span style="font-size: 9px; color: #55506A">$129</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><div style="height: 70px; border-radius: 10px; background: #E6EEF4"></div><span style="font-size: 9px; font-weight: 600">Desk light</span><span style="font-size: 9px; color: #55506A">$89</span></div>
+</div>
+</div>
+</div>
+</div></div>
+</div>
+
+<div style="position: absolute; left: 230px; top: 490px; transform: rotate(6deg); z-index: 3"><div class="mb-pop" style="animation-delay: 1.5s"><div class="mb-wiggle" style="padding: 8px 12px; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 12px; font-weight: 700">Push included</div></div></div>
+<div style="position: absolute; left: 16px; top: 500px; transform: rotate(-6deg); z-index: 3"><div class="mb-pop" style="animation-delay: 1.7s"><div class="mb-wiggle" style="padding: 8px 12px; border-radius: 999px; background: #FFFFFF; color: #17112E; font-size: 12px; font-weight: 700; animation-delay: -1.6s">No Mac needed</div></div></div>
+</section>
+
+<section id="how" style="padding: 72px 20px; display: flex; flex-direction: column; gap: 28px">
+<div class="mb-reveal" style="display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">Three steps. <span style="color: #4B2BE0">No code.</span></h2>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #55506A">From your link to a real app on the App Store, without a Mac or a developer.</p>
+</div>
+<div class="mb-reveal" style="padding: 24px; border-radius: 24px; background: #F3F0FF; display: flex; flex-direction: column; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 15px; background: #4B2BE0; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', system-ui, sans-serif; font-size: 18px; font-weight: 800">1</span>
+<h3 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 19px; font-weight: 700">Paste your link</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #55506A">We read your name, logo, colors and menu and build a preview in seconds.</p>
+</div>
+<div class="mb-reveal" style="padding: 24px; border-radius: 24px; background: #F3F0FF; display: flex; flex-direction: column; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 15px; background: #4B2BE0; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', system-ui, sans-serif; font-size: 18px; font-weight: 800">2</span>
+<h3 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 19px; font-weight: 700">Try it on your iPhone</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #55506A">Install a real build from a link, with your icon on the home screen.</p>
+</div>
+<div class="mb-reveal" style="padding: 24px; border-radius: 24px; background: #17112E; color: #FFFFFF; display: flex; flex-direction: column; gap: 12px">
+<span style="width: 48px; height: 48px; border-radius: 15px; background: #D7FF4F; color: #17112E; display: flex; align-items: center; justify-content: center; font-family: 'Unbounded', system-ui, sans-serif; font-size: 18px; font-weight: 800">3</span>
+<h3 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 19px; font-weight: 700">Go live on the App Store</h3>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #CFC8E6">We prepare everything and guide you through Apple review on your own account.</p>
+</div>
+</section>
+
+<section id="features" style="background: #F3F0FF; padding: 72px 20px; display: flex; flex-direction: column; gap: 24px">
+<h2 class="mb-reveal" style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">A real app, not a website in a box</h2>
+<div class="mb-reveal" style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; gap: 16px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 004 0"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h3 style="margin: 0; font-size: 18px; font-weight: 700">Push notifications</h3><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">Sales, order updates and news on the lock screen.</p></div>
+</div>
+<div class="mb-reveal" style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; gap: 16px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"></path><path d="M8.5 12l2.5 2.5 4.5-5"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h3 style="margin: 0; font-size: 18px; font-weight: 700">Apple review handled</h3><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">Checked against App Store rules before it is sent.</p></div>
+</div>
+<div class="mb-reveal" style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; gap: 16px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M8 20h8"></path><path d="M4 4l16 12"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h3 style="margin: 0; font-size: 18px; font-weight: 700">No Mac, no Xcode</h3><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">We build, sign and package the app for you.</p></div>
+</div>
+<div class="mb-reveal" style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; gap: 16px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 0114-5.3L20 9"></path><path d="M20 4v5h-5"></path><path d="M20 12a8 8 0 01-14 5.3L4 15"></path><path d="M4 20v-5h5"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h3 style="margin: 0; font-size: 18px; font-weight: 700">Always in sync</h3><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">Site changes show in the app right away.</p></div>
+</div>
+<div class="mb-reveal" style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; gap: 16px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="3"></rect><path d="M9 17h6"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h3 style="margin: 0; font-size: 18px; font-weight: 700">Native tabs and screens</h3><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">Tab bar, onboarding, offline screen, settings.</p></div>
+</div>
+<div class="mb-reveal" style="padding: 22px; border-radius: 20px; background: #FFFFFF; display: flex; gap: 16px; align-items: flex-start">
+<span style="flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.5 2.5 3.5 6 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-6-3.5-9s1-6.5 3.5-9z"></path></svg></span>
+<div style="display: flex; flex-direction: column; gap: 4px"><h3 style="margin: 0; font-size: 18px; font-weight: 700">Many languages</h3><p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">App Store page in several languages.</p></div>
+</div>
+</section>
+
+<section id="stores" style="background: #17112E; color: #FFFFFF; padding: 72px 20px; display: flex; flex-direction: column; gap: 22px">
+<div class="mb-reveal" style="display: flex; flex-direction: column; gap: 16px">
+<span style="align-self: flex-start; padding: 6px 12px; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 13px; font-weight: 700">For online stores</span>
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">Built to bring buyers back</h2>
+<p style="margin: 0; font-size: 16px; line-height: 1.55; color: #CFC8E6">Your store one tap away. Carts are saved, and your messages land where people look most.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div class="mb-reveal-x" style="padding: 14px 16px; border-radius: 18px; background: #261E44; border: 1px solid #3A3160; display: flex; gap: 12px">
+<span style="flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; background: #FFFFFF; color: #4B2BE0; display: flex; align-items: center; justify-content: center; font-weight: 800">L</span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600; color: #CFC8E6">Lumen · 9:41</span><span style="font-size: 15px">Your bag is waiting.</span></div>
+</div>
+<div class="mb-reveal-x" style="margin-left: 14px; padding: 14px 16px; border-radius: 18px; background: #261E44; border: 1px solid #3A3160; display: flex; gap: 12px">
+<span style="flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; background: #FFFFFF; color: #4B2BE0; display: flex; align-items: center; justify-content: center; font-weight: 800">L</span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600; color: #CFC8E6">Lumen · 12:15</span><span style="font-size: 15px">Your order has shipped.</span></div>
+</div>
+<div class="mb-reveal-x" style="margin-left: 28px; padding: 14px 16px; border-radius: 18px; background: #D7FF4F; color: #17112E; display: flex; gap: 12px">
+<span style="flex: 0 0 auto; width: 38px; height: 38px; border-radius: 10px; background: #17112E; color: #D7FF4F; display: flex; align-items: center; justify-content: center; font-weight: 800">L</span>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600">Lumen · 18:00</span><span style="font-size: 15px; font-weight: 600">New lamps. 20% off today.</span></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px; font-size: 16px; padding-top: 8px">
+<span style="display: flex; gap: 10px; align-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7FF4F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Flash sales by push</span>
+<span style="display: flex; gap: 10px; align-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7FF4F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Abandoned cart reminders</span>
+<span style="display: flex; gap: 10px; align-items: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7FF4F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>Order status updates</span>
+</div>
+</section>
+
+<section id="pricing" style="padding: 72px 20px; display: flex; flex-direction: column; gap: 20px">
+<div class="mb-reveal" style="display: flex; flex-direction: column; gap: 10px; text-align: center">
+<h2 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">Try free. Pay when you are sure.</h2>
+<p style="margin: 0; font-size: 16px; color: #55506A">See your app first. Upgrade only when you love it.</p>
+</div>
+<div class="mb-reveal" style="padding: 26px; border-radius: 24px; border: 1.5px solid #E4DFF5; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 19px; font-weight: 700">Preview</h3>
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 38px; font-weight: 800">$0</span>
+<p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">See your app on the site and on your phone.</p>
+<a href="#start" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 999px; border: 1.5px solid #17112E; font-weight: 700; text-decoration: none">Start free</a>
+</div>
+<div class="mb-reveal" style="padding: 26px; border-radius: 24px; background: #4B2BE0; color: #FFFFFF; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px"><h3 style="margin: 0; font-size: 19px; font-weight: 700">Test on iPhone</h3><span style="padding: 4px 10px; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 12px; font-weight: 700">Popular</span></div>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 38px; font-weight: 800">[PRICE]</span><span style="color: #E7DFFF">one-time</span></div>
+<p style="margin: 0; font-size: 15px; line-height: 1.5; color: #E7DFFF">A real build on your iPhone, with your icon on the home screen.</p>
+<a href="#start" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #D7FF4F; color: #17112E; font-weight: 700; text-decoration: none">Get it on my iPhone</a>
+</div>
+<div class="mb-reveal" style="padding: 26px; border-radius: 24px; border: 1.5px solid #E4DFF5; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-size: 19px; font-weight: 700">Publish</h3>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 38px; font-weight: 800">[PRICE]</span><span style="color: #55506A">per month</span></div>
+<p style="margin: 0; font-size: 15px; line-height: 1.5; color: #55506A">Your app live on the App Store, under your own name.</p>
+<a href="#start" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #17112E; color: #FFFFFF; font-weight: 700; text-decoration: none">Publish my app</a>
+</div>
+<p style="margin: 0; text-align: center; font-size: 13px; line-height: 1.5; color: #55506A">Publishing needs your own Apple Developer account. Apple charges $99 per year directly.</p>
+</section>
+
+<section id="faq" style="background: #F3F0FF; padding: 72px 20px; display: flex; flex-direction: column; gap: 20px">
+<h2 class="mb-reveal" style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">Questions</h2>
+<details class="mb-reveal" style="padding: 18px 20px; border-radius: 18px; background: #FFFFFF"><summary style="display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; font-size: 16px; font-weight: 600">Do I need a Mac or Xcode?<span aria-hidden="true" style="font-size: 22px; color: #4B2BE0">+</span></summary><p style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #55506A">No. You do everything in the browser. We build and sign the app.</p></details>
+<details class="mb-reveal" style="padding: 18px 20px; border-radius: 18px; background: #FFFFFF"><summary style="display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; font-size: 16px; font-weight: 600">Do I need an Apple Developer account?<span aria-hidden="true" style="font-size: 22px; color: #4B2BE0">+</span></summary><p style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #55506A">Only to publish on the App Store.</p></details>
+<details class="mb-reveal" style="padding: 18px 20px; border-radius: 18px; background: #FFFFFF"><summary style="display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; font-size: 16px; font-weight: 600">What if Apple rejects my app?<span aria-hidden="true" style="font-size: 22px; color: #4B2BE0">+</span></summary><p style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #55506A">We explain why, fix it with you and submit again.</p></details>
+<details class="mb-reveal" style="padding: 18px 20px; border-radius: 18px; background: #FFFFFF"><summary style="display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 28px; font-size: 16px; font-weight: 600">Will site changes show up in the app?<span aria-hidden="true" style="font-size: 22px; color: #4B2BE0">+</span></summary><p style="margin: 10px 0 0; font-size: 15px; line-height: 1.6; color: #55506A">Yes, right away.</p></details>
+</section>
+
+<section style="padding: 56px 20px">
+<div class="mb-reveal" style="position: relative; overflow: hidden; padding: 40px 22px; border-radius: 30px; background: {{bg}}; color: #FFFFFF; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px">
+<div aria-hidden="true" class="mb-drift" style="position: absolute; right: -80px; top: -90px; width: 220px; height: 220px; border-radius: 50%; background: rgba(255,255,255,0.08)"></div>
+<h2 style="position: relative; margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 28px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">Ready to see your app?</h2>
+<p style="position: relative; margin: 0; font-size: 15px; color: #E7DFFF">No sign-up needed for the preview.</p>
+<form style="position: relative; width: 100%; display: flex; flex-direction: column; gap: 10px">
+<label for="fm-cta" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Your website address</label>
+<input id="fm-cta" type="url" placeholder="yoursite.com" style="width: 100%; box-sizing: border-box; height: 52px; padding: 0 18px; border: 0; border-radius: 999px; background: #FFFFFF; color: #17112E; font: inherit; font-size: 16px; text-align: center">
+<button type="button" class="mb-pulse" style="width: 100%; height: 52px; border: 0; border-radius: 999px; background: #D7FF4F; color: #17112E; font: inherit; font-size: 16px; font-weight: 700">Make it an app</button>
+</form>
+</div>
+</section>
+
+<footer style="background: #17112E; color: #CFC8E6; padding: 36px 20px; display: flex; flex-direction: column; gap: 18px; font-size: 15px">
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 18px; font-weight: 800; color: #FFFFFF">mobilio</span>
+<nav aria-label="Footer" style="display: flex; gap: 24px"><a href="#privacy" style="text-decoration: none">Privacy</a><a href="#terms" style="text-decoration: none">Terms</a><a href="#contact" style="text-decoration: none">Contact</a></nav>
+<span>© 2026 Mobilio</span>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"bg":{"editor":"color","default":"#4B2BE0","options":["#4B2BE0","#5B3FA8","#17112E"]},"$preview":{"width":390,"height":7000}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { typed: '', active: 0 };
+this.sites = ['lumenstore.com', 'casaroma.it', 'pulsestudio.co'];
+this.siteIndex = 0;
+this.chars = 0;
+this.deleting = false;
+this.hold = 0;
+}
+componentDidMount() {
+this.timer = setInterval(() => this.tick(), 85);
+}
+componentWillUnmount() {
+clearInterval(this.timer);
+}
+tick() {
+const site = this.sites[this.siteIndex];
+if (!this.deleting) {
+if (this.chars < site.length) { this.chars += 1; } else { this.hold += 1; if (this.hold > 22) { this.deleting = true; this.hold = 0; } }
+} else {
+if (this.chars > 0) { this.chars -= 1; } else { this.deleting = false; this.siteIndex = (this.siteIndex + 1) % this.sites.length; }
+}
+this.setState({ typed: site.slice(0, this.chars) + '|', active: this.siteIndex });
+}
+renderVals() {
+const base = '0 20px 50px rgba(10,5,40,0.45)';
+const lit = '0 0 0 3px #D7FF4F, 0 20px 60px rgba(215,255,79,0.35)';
+const a = this.state.active;
+return {
+bg: this.props.bg ?? '#4B2BE0',
+typed: this.state.typed || 'yoursite.com',
+shadowCenter: a === 0 ? lit : '0 30px 70px rgba(10,5,40,0.55)',
+shadowLeft: a === 1 ? lit : base,
+shadowRight: a === 2 ? lit : base
+};
+}
+}
+</script>
+</body>
+</html>

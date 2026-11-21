@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign-in email</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+</style>
+</helmet>
+<div style="width: 640px; height: 720px; box-sizing: border-box; padding: 40px 40px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column; gap: 20px">
+<div style="padding: 12px 16px; border-radius: 12px; background: #FFFFFF; font-size: 13px; line-height: 1.5; color: #55506A"><b style="color: #17112E">Subject:</b> Your Mobilio sign-in link<br><b style="color: #17112E">Preview:</b> Tap to sign in. The link works for 15 minutes.</div>
+<div style="padding: 40px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 22px">
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.02em">mobilio</span>
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 28px; line-height: 1.15; font-weight: 800; letter-spacing: -0.03em">Sign in to Mobilio</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.55">Tap the button to sign in as anna@lumenstore.com. The link works once, for 15 minutes.</p>
+<a href="Workspace.dc.html" style="align-self: flex-start; height: 52px; padding: 0 28px; display: flex; align-items: center; border-radius: 999px; background: #4B2BE0; color: #FFFFFF; font-size: 16px; font-weight: 700; text-decoration: none">Sign in</a>
+<p style="margin: 0; font-size: 14px; line-height: 1.55; color: #55506A">Button not working? Paste this into your browser:<br><span style="color: #4B2BE0; word-break: break-all">https://[YOUR DOMAIN]/auth/verify?token=…</span></p>
+<div style="height: 1px; background: #EFEBFA"></div>
+<p style="margin: 0; font-size: 13px; line-height: 1.55; color: #55506A">Didn't ask for this? Ignore this email and no one gets in. Requested from Chrome on Windows, Yerevan, Armenia.</p>
+</div>
+<p style="margin: 0; text-align: center; font-size: 12px; line-height: 1.6; color: #55506A">Mobilio · [COMPANY LEGAL NAME], [COMPANY ADDRESS]</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":640,"height":720}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

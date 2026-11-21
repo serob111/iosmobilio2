@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>App editor appearance</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F3F0FF}
+a{color:#4B2BE0}a:hover{color:#3517C4}
+</style>
+</helmet>
+<div style="min-height: 1160px; background: #F3F0FF; color: #17112E; font-family: 'Onest', system-ui, sans-serif">
+
+<header style="background: #FFFFFF; border-bottom: 1px solid #E4DFF5">
+<div style="max-width: 1320px; margin: 0 auto; padding: 14px clamp(16px, 3vw, 32px); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px">
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -0.02em">mobilio</span>
+<nav aria-label="Breadcrumb" style="display: flex; align-items: center; gap: 8px; font-size: 15px; color: #55506A"><a href="Projects.dc.html" style="color: #55506A; text-decoration: none">My apps</a><span aria-hidden="true">/</span><span style="font-weight: 600; color: #17112E">Lumen</span></nav>
+</div>
+<div style="display: flex; align-items: center; gap: 12px"><span style="font-size: 14px; color: #55506A">Saved</span><button type="button" aria-label="Account" style="width: 44px; height: 44px; border: 0; border-radius: 50%; background: #4B2BE0; color: #FFFFFF; font: inherit; font-weight: 700">A</button></div>
+</div>
+<div style="max-width: 1320px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 32px); overflow-x: auto">
+<nav aria-label="Editor sections" style="display: flex; gap: 4px; font-size: 15px; font-weight: 600; white-space: nowrap">
+<a href="ProjectDesktop.dc.html" style="padding: 14px 14px 12px; color: #55506A; text-decoration: none; border-bottom: 3px solid transparent">General</a>
+<a href="EditorAppearance.dc.html" aria-current="page" style="padding: 14px 14px 12px; color: #17112E; text-decoration: none; border-bottom: 3px solid #4B2BE0">Appearance</a>
+<a href="#navigation" style="padding: 14px 14px 12px; color: #55506A; text-decoration: none; border-bottom: 3px solid transparent">Navigation</a>
+<a href="AdHoc.dc.html" style="padding: 14px 14px 12px; color: #55506A; text-decoration: none; border-bottom: 3px solid transparent">Test on iPhone</a>
+<a href="Publish.dc.html" style="padding: 14px 14px 12px; color: #55506A; text-decoration: none; border-bottom: 3px solid transparent">App Store</a>
+</nav>
+</div>
+</header>
+
+<main style="max-width: 1320px; margin: 0 auto; padding: 32px clamp(16px, 3vw, 32px) 64px; display: flex; flex-wrap: wrap-reverse; gap: 32px; align-items: flex-start">
+
+<div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+
+<section style="padding: 26px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px"><h2 style="margin: 0; font-size: 18px; font-weight: 700">App icon</h2><span style="font-size: 13px; color: #55506A">PNG, 1024 × 1024, no transparency</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: center">
+<span style="width: 96px; height: 96px; border-radius: 22px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 800">L</span>
+<div style="flex: 1 1 240px; min-height: 96px; box-sizing: border-box; border: 1.5px dashed #CFC6F2; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 16px; text-align: center">
+<button type="button" style="min-height: 44px; border: 0; background: transparent; font: inherit; font-size: 15px; font-weight: 700; color: #4B2BE0">Upload icon</button>
+<span style="font-size: 13px; color: #55506A">or drop a file here. We'll use your site's favicon until then.</span>
+</div>
+</div>
+</section>
+
+<section style="padding: 26px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 18px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 700">Launch screen</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; font-weight: 600; color: #55506A">Background</span>
+<div role="radiogroup" aria-label="Launch background" style="display: flex; gap: 10px">
+<sc-for list="{{swatches}}" as="sw" hint-placeholder-count="4">
+<button type="button" role="radio" aria-checked="{{sw.selected}}" aria-label="{{sw.label}}" onClick="{{sw.pick}}" style="width: 40px; height: 40px; border-radius: 50%; border: 1px solid #E4DFF5; background: {{sw.color}}; box-shadow: {{sw.ring}}"></button>
+</sc-for>
+</div>
+</div>
+<label style="min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 15px; font-weight: 600">Show app name under logo<input type="checkbox" checked style="width: 22px; height: 22px; accent-color: #4B2BE0"></label>
+</div>
+</section>
+
+<section style="padding: 26px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px"><h2 style="margin: 0; font-size: 18px; font-weight: 700">Welcome screens</h2><label style="display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600">On<input type="checkbox" checked style="width: 22px; height: 22px; accent-color: #4B2BE0"></label></div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="padding: 14px; border-radius: 16px; background: #F7F5FD; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start"><span style="width: 28px; height: 28px; border-radius: 8px; background: #E7DFFF; color: #3517C4; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span><div style="display: flex; flex-direction: column; gap: 8px"><label for="w1t" style="position: absolute; left: -9999px">Screen 1 title</label><input id="w1t" type="text" value="Light for every room" style="height: 44px; padding: 0 12px; border: 1.5px solid #E4DFF5; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 600; color: #17112E"><label for="w1b" style="position: absolute; left: -9999px">Screen 1 text</label><input id="w1b" type="text" value="Browse 300+ lamps made to last." style="height: 44px; padding: 0 12px; border: 1.5px solid #E4DFF5; border-radius: 10px; font: inherit; font-size: 15px; color: #17112E"></div></div>
+<div style="padding: 14px; border-radius: 16px; background: #F7F5FD; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start"><span style="width: 28px; height: 28px; border-radius: 8px; background: #E7DFFF; color: #3517C4; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span><div style="display: flex; flex-direction: column; gap: 8px"><label for="w2t" style="position: absolute; left: -9999px">Screen 2 title</label><input id="w2t" type="text" value="Know when it ships" style="height: 44px; padding: 0 12px; border: 1.5px solid #E4DFF5; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 600; color: #17112E"><label for="w2b" style="position: absolute; left: -9999px">Screen 2 text</label><input id="w2b" type="text" value="Turn on notifications for order updates." style="height: 44px; padding: 0 12px; border: 1.5px solid #E4DFF5; border-radius: 10px; font: inherit; font-size: 15px; color: #17112E"></div></div>
+</div>
+<button type="button" style="height: 44px; border: 1.5px dashed #CFC6F2; border-radius: 12px; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #4B2BE0">+ Add screen (up to 3)</button>
+</section>
+
+<section style="padding: 26px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 700">Offline screen</h2>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="off-msg" style="font-size: 13px; font-weight: 600; color: #55506A">Message</label><input id="off-msg" type="text" value="You're offline. We'll reload as soon as you're back." style="height: 48px; padding: 0 14px; border: 1.5px solid #E4DFF5; border-radius: 12px; font: inherit; font-size: 16px; color: #17112E"></div>
+</section>
+
+<section style="padding: 26px; border-radius: 24px; background: #FFFFFF; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 4px"><h2 style="margin: 0; font-size: 18px; font-weight: 700">Links that stay in the app</h2><span style="font-size: 14px; line-height: 1.45; color: #55506A">Pages on these domains open inside your app. Everything else opens in Safari.</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<span style="height: 36px; padding: 0 8px 0 14px; border-radius: 999px; background: #F3F0FF; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600">lumenstore.com<span style="font-size: 12px; color: #55506A">· main</span></span>
+<span style="height: 36px; padding: 0 4px 0 14px; border-radius: 999px; background: #F3F0FF; display: flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 600">checkout.shopify.com<button type="button" aria-label="Remove checkout.shopify.com" style="width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: #55506A; font: inherit; font-size: 16px">×</button></span>
+<button type="button" style="height: 36px; padding: 0 14px; border: 1.5px dashed #CFC6F2; border-radius: 999px; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: #4B2BE0">+ Add domain</button>
+</div>
+</section>
+</div>
+
+<aside style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 16px; border-radius: 32px; background: #17112E">
+<div role="tablist" aria-label="Preview" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 4px; border-radius: 999px; background: #261E44">
+<sc-for list="{{views}}" as="v" hint-placeholder-count="4">
+<button type="button" role="tab" aria-selected="{{v.selected}}" onClick="{{v.pick}}" style="height: 36px; padding: 0 12px; border: 0; border-radius: 999px; background: {{v.bg}}; color: {{v.fg}}; font: inherit; font-size: 13px; font-weight: 600">{{v.label}}</button>
+</sc-for>
+</div>
+<div style="width: 280px; height: 576px; box-sizing: border-box; padding: 4px; border-radius: 56px; background: linear-gradient(150deg, #9A8AA8, #4B4056 40%, #7D6E8B)">
+<div style="position: relative; width: 100%; height: 100%; box-sizing: border-box; border: 8px solid #050505; border-radius: 52px; overflow: hidden; background: {{screenBg}}; display: flex; flex-direction: column">
+<span aria-hidden="true" style="position: absolute; z-index: 2; top: 9px; left: 50%; transform: translateX(-50%); width: 80px; height: 24px; border-radius: 20px; background: #050505"></span>
+
+<sc-if value="{{vHome}}" hint-placeholder-val="{{ true }}">
+<div style="flex: 1 1 auto; padding: 56px 20px 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 12px; align-content: start; background: linear-gradient(170deg, #3B2D7A, #1C163A)">
+<sc-for list="{{homeIcons}}" as="ic" hint-placeholder-count="8">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 5px"><span style="width: 50px; height: 50px; border-radius: 12px; background: {{ic.bg}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 800">{{ic.letter}}</span><span style="font-size: 10px; color: #FFFFFF">{{ic.label}}</span></div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{vLaunch}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+<span style="width: 84px; height: 84px; border-radius: 20px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 38px; font-weight: 800">L</span>
+<span style="font-size: 20px; font-weight: 700; color: {{launchText}}">Lumen</span>
+</div>
+</sc-if>
+
+<sc-if value="{{vWelcome}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1 1 auto; padding: 60px 22px 26px; display: flex; flex-direction: column; gap: 14px; color: #17112E">
+<div style="flex: 1 1 auto; border-radius: 22px; background: #F4EFE6; display: flex; align-items: center; justify-content: center"><span style="width: 90px; height: 90px; border-radius: 50%; background: {{accent}}; opacity: 0.85"></span></div>
+<span style="font-size: 22px; line-height: 1.15; font-weight: 700">Light for every room</span>
+<span style="font-size: 14px; line-height: 1.45; color: #55506A">Browse 300+ lamps made to last.</span>
+<div style="display: flex; gap: 6px"><span style="width: 18px; height: 6px; border-radius: 3px; background: {{accent}}"></span><span style="width: 6px; height: 6px; border-radius: 3px; background: #D8D3E6"></span></div>
+<span style="height: 46px; border-radius: 999px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700">Continue</span>
+</div>
+</sc-if>
+
+<sc-if value="{{vOffline}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 1 1 auto; padding: 0 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; color: #17112E">
+<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#55506A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.5a15 15 0 0120 0"></path><path d="M5.5 12a10 10 0 0113 0"></path><path d="M9 15.5a5 5 0 016 0"></path><path d="M12 19h.01"></path><path d="M3 3l18 18"></path></svg>
+<span style="font-size: 15px; line-height: 1.45">You're offline. We'll reload as soon as you're back.</span>
+<span style="height: 42px; padding: 0 20px; border-radius: 999px; background: {{accent}}; color: #FFFFFF; display: flex; align-items: center; font-size: 14px; font-weight: 700">Try again</span>
+</div>
+</sc-if>
+
+</div>
+</div>
+<span style="font-size: 13px; color: #CFC8E6">Preview updates as you edit</span>
+</aside>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#E8794A","options":["#E8794A","#4B2BE0","#0E7C66","#C2185B"]},"$preview":{"width":1440,"height":1160}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { view: 'home', bg: '#FFFFFF' };
+}
+renderVals() {
+const s = this.state;
+const accent = this.props.accent ?? '#E8794A';
+const bgs = [
+{ color: '#FFFFFF', label: 'White', dark: false },
+{ color: '#F4EFE6', label: 'Sand', dark: false },
+{ color: '#17112E', label: 'Ink', dark: true },
+{ color: accent, label: 'Brand color', dark: true }
+];
+const cur = bgs.find((b) => b.color === s.bg) || bgs[0];
+const vs = [
+{ id: 'home', label: 'Home screen' },
+{ id: 'launch', label: 'Launch' },
+{ id: 'welcome', label: 'Welcome' },
+{ id: 'offline', label: 'Offline' }
+];
+return {
+accent,
+swatches: bgs.map((b) => ({
+color: b.color, label: b.label,
+selected: s.bg === b.color ? 'true' : 'false',
+ring: s.bg === b.color ? '0 0 0 3px #FFFFFF, 0 0 0 5px #4B2BE0' : 'none',
+pick: () => this.setState({ bg: b.color, view: 'launch' })
+})),
+views: vs.map((v) => ({
+label: v.label,
+selected: s.view === v.id ? 'true' : 'false',
+bg: s.view === v.id ? '#FFFFFF' : 'transparent',
+fg: s.view === v.id ? '#17112E' : '#CFC8E6',
+pick: () => this.setState({ view: v.id })
+})),
+vHome: s.view === 'home',
+vLaunch: s.view === 'launch',
+vWelcome: s.view === 'welcome',
+vOffline: s.view === 'offline',
+screenBg: s.view === 'launch' ? cur.color : '#FFFFFF',
+launchText: cur.dark ? '#FFFFFF' : '#17112E',
+homeIcons: [
+{ letter: 'L', label: 'Lumen', bg: accent },
+{ letter: 'M', label: 'Mail', bg: '#2F6FE0' },
+{ letter: 'C', label: 'Calendar', bg: '#E0453A' },
+{ letter: 'P', label: 'Photos', bg: '#D9A21B' },
+{ letter: 'M', label: 'Maps', bg: '#2E9E5B' },
+{ letter: 'N', label: 'Notes', bg: '#C9A227' },
+{ letter: 'W', label: 'Weather', bg: '#3A86C8' },
+{ letter: 'S', label: 'Settings', bg: '#6B6680' }
+]
+};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mobilio Preview welcome</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&amp;family=Onest:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#FFFFFF}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; box-sizing: border-box; background: #4B2BE0; color: #FFFFFF; font-family: 'Onest', system-ui, sans-serif; display: flex; flex-direction: column; padding: 64px 24px 40px">
+<div aria-hidden="true" style="position: absolute; left: -120px; top: -100px; width: 320px; height: 320px; border-radius: 50%; background: rgba(255,255,255,0.08)"></div>
+<div aria-hidden="true" style="position: absolute; right: -140px; top: 300px; width: 340px; height: 340px; border-radius: 50%; background: rgba(23,17,46,0.25)"></div>
+
+<div style="position: relative; display: flex; align-items: center; gap: 10px">
+<span style="width: 36px; height: 36px; border-radius: 11px; background: #D7FF4F; display: flex; align-items: center; justify-content: center"><span style="width: 12px; height: 19px; border: 2.5px solid #17112E; border-radius: 4px"></span></span>
+<span style="font-family: 'Unbounded', system-ui, sans-serif; font-size: 20px; font-weight: 800">mobilio</span>
+<span style="padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.4); font-size: 12px; font-weight: 600">Preview</span>
+</div>
+
+<div style="position: relative; flex: 1 1 auto; display: flex; align-items: center; justify-content: center">
+<div style="position: relative; width: 220px; height: 220px">
+<div style="position: absolute; left: 10px; top: 30px; width: 86px; height: 86px; border-radius: 22px; background: #E8794A; transform: rotate(-12deg); display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 800; color: #FFFFFF; box-shadow: 0 20px 40px rgba(10,5,40,0.35)">C</div>
+<div style="position: absolute; left: 67px; top: 64px; width: 96px; height: 96px; border-radius: 24px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 38px; font-weight: 800; color: #4B2BE0; box-shadow: 0 24px 50px rgba(10,5,40,0.4); z-index: 2">L</div>
+<div style="position: absolute; left: 128px; top: 20px; width: 86px; height: 86px; border-radius: 22px; background: #111312; transform: rotate(12deg); display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 800; color: #C6F24E; box-shadow: 0 20px 40px rgba(10,5,40,0.35)">P</div>
+</div>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 14px">
+<h1 style="margin: 0; font-family: 'Unbounded', system-ui, sans-serif; font-size: 30px; line-height: 1.1; letter-spacing: -0.03em; font-weight: 800">See your app on your iPhone</h1>
+<p style="margin: 0; font-size: 16px; line-height: 1.5; color: #E7DFFF">Open the apps you made on mobilio.com. Only you can see them.</p>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 12px; margin-top: 28px">
+<a href="PreviewScan.dc.html" style="height: 56px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 999px; background: #D7FF4F; color: #17112E; font-size: 17px; font-weight: 700; text-decoration: none">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#17112E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3"></path><path d="M16 4h3a1 1 0 011 1v3"></path><path d="M20 16v3a1 1 0 01-1 1h-3"></path><path d="M8 20H5a1 1 0 01-1-1v-3"></path><rect x="9" y="9" width="6" height="6" rx="1"></rect></svg>
+Scan QR from website
+</a>
+<a href="PreviewApps.dc.html" style="height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3); font-size: 17px; font-weight: 600; text-decoration: none">Sign in with email</a>
+<p style="margin: 6px 0 0; text-align: center; font-size: 13px; color: #E7DFFF">No account yet? Create your app at mobilio.com</p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
