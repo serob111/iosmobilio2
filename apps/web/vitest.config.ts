@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    setupFiles: ['./test/setup.ts'],
+    setupFiles: ['./test/setup.ts', './test/componentSetup.ts'],
     exclude: ['**/node_modules/**', '**/e2e/**', '**/.next/**'],
     coverage: {
       provider: 'v8',

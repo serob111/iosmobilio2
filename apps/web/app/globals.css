@@ -1,26 +1,176 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Mobilio — design system "Vivid". Source of truth: docs/design/tokens.css.
+ * Light only — the product has no dark theme.
+ */
+@theme {
+  /* Brand */
+  --color-violet: #4b2be0;
+  --color-violet-hover: #3517c4;
+  --color-ink: #17112e;
+  --color-lime: #d7ff4f;
+  --color-night: #261e44;
+  --color-night-line: #3a3160;
+  --color-night-track: #2e2650;
+  --color-lilac: #e7dfff;
+  --color-mist: #f3f0ff;
+  --color-mist-soft: #f7f5fd;
+  --color-white: #ffffff;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Text and lines */
+  --color-slate: #55506a;
+  --color-haze: #cfc8e6;
+  --color-line: #e4dff5;
+  --color-line-soft: #efebfa;
+  --color-line-dashed: #cfc6f2;
+  --color-disabled-bg: #e7dfff;
+  --color-disabled-fg: #6e6787;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Status: main / badge background / badge text */
+  --color-success: #0e7c66;
+  --color-success-bg: #ddf3ec;
+  --color-success-fg: #0a5e4d;
+  --color-warning: #a45200;
+  --color-warning-bg: #fff0dc;
+  --color-warning-fg: #7f3f00;
+  --color-danger: #c42b4b;
+  --color-danger-bg: #fbe3e8;
+  --color-danger-fg: #9c1f39;
+  --color-info-fg: #2a1a80;
+  --color-neutral: #8a859c;
+  --color-neutral-bg: #f0eef6;
+  --color-building-fg: #3517c4;
+
+  /* Typography */
+  --font-display: var(--font-unbounded), system-ui, sans-serif;
+  --font-sans: var(--font-onest), system-ui, sans-serif;
+
+  /* Radii */
+  --radius-field: 12px;
+  --radius-field-lg: 14px;
+  --radius-card: 24px;
+  --radius-panel: 28px;
+  --radius-panel-lg: 32px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-card-hover: 0 12px 32px rgba(40, 20, 120, 0.12);
+  --shadow-phone: 0 40px 90px rgba(10, 5, 40, 0.5);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-hover: 150ms;
+  --duration-panel: 240ms;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-mist);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+
+@keyframes mbFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes mbRise {
+  from {
+    opacity: 0;
+    transform: translateY(220px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes mbFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+@keyframes mbPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes mbWiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+@keyframes mbPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(215, 255, 79, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(215, 255, 79, 0.35);
+  }
+}
+@keyframes mbDrift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(40px, -30px);
+  }
+}
+@keyframes mbSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes mbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
