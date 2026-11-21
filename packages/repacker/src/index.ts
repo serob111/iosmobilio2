@@ -9,3 +9,5 @@ export {
   type InfoPlistDict,
   type ClientIdentity,
 } from './info-plist.js';
+export { generateIcons, ICON_FILES } from './icons.js';
+export { generateSplash } from './splash.js';
