@@ -15,3 +15,4 @@ export { validateProjectConfig, writeConfigJson } from './config-bundle.js';
 export { buildEntitlements, writeEntitlements, type EntitlementsInput } from './entitlements.js';
 export { embedProvisioningProfile } from './provisioning.js';
 export { assertValidBundleId, assertValidTeamId } from './validation.js';
+export { signBundle, verifyBundle, type RcodesignConfig, type SigningCredentials } from './sign.js';
