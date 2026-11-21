@@ -169,6 +169,13 @@
       "when": 1795294600000,
       "tag": "0023_provisioning_profiles_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795296871424,
+      "tag": "0024_builds_kind_and_step_timings",
+      "breakpoints": true
     }
   ]
 }
