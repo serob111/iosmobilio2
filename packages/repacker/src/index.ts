@@ -16,3 +16,4 @@ export { buildEntitlements, writeEntitlements, type EntitlementsInput } from './
 export { embedProvisioningProfile } from './provisioning.js';
 export { assertValidBundleId, assertValidTeamId } from './validation.js';
 export { signBundle, verifyBundle, type RcodesignConfig, type SigningCredentials } from './sign.js';
+export { repack, type RepackInput, type RepackResult, type RepackStepTiming } from './repack.js';
