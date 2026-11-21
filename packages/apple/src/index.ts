@@ -8,3 +8,4 @@ export {
   type ProvisioningProfileRecord,
   type EnsureAdHocProfileOptions,
 } from './profiles.js';
+export { validateAppleEnv, withP12FromBase64, type AppleEnvCredentials } from './env.js';
