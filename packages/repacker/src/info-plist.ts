@@ -1,15 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseBinary, buildBinary, type PlistValue } from 'plist';
 import { RepackError } from './errors.js';
+import { assertValidBundleId } from './validation.js';
 
 export type InfoPlistDict = Record<string, unknown>;
 
 const MAX_DISPLAY_NAME_LENGTH = 30;
 const CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f]/;
-// Reverse-DNS, matching what the server-side generator actually produces
-// (am.mobilio.t.<id>) — see sanitizeBundleId's own doc comment for why this is
-// validated here too, not just trusted from the caller.
-const BUNDLE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)+$/;
 
 export async function readInfoPlist(path: string): Promise<InfoPlistDict> {
   const raw = await readFile(path);
@@ -41,18 +38,6 @@ function sanitizeDisplayName(displayName: string): string {
     throw new RepackError('INVALID_CONFIG', 'displayName must not contain control characters');
   }
   return trimmed;
-}
-
-/**
- * bundleId is generated only by the server (am.mobilio.t.<id>), never taken from user
- * input directly — this check is defense in depth against a caller bug reaching this
- * deep into the pipeline with something unvalidated, not the primary place that
- * invariant is enforced.
- */
-function assertValidBundleId(bundleId: string): void {
-  if (!BUNDLE_ID_PATTERN.test(bundleId)) {
-    throw new RepackError('INVALID_CONFIG', `bundleId "${bundleId}" is not a valid reverse-DNS identifier`);
-  }
 }
 
 /** A custom URL scheme for the client's own deep links — reverse-DNS dots aren't valid in a URL scheme, so bundleId becomes bundleId-with-hyphens. */
