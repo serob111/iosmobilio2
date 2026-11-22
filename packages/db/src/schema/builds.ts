@@ -53,6 +53,13 @@ export const builds = pgTable(
     finishedAt: timestamp('finished_at', { withTimezone: true }),
     // Object storage key of the produced .ipa once uploaded (packages/storage's buildIpaKey).
     ipaKey: text('ipa_key'),
+    // The shell_releases version this specific 'adhoc' build was actually repacked
+    // from (CFBundleShortVersionString) — recorded once the repack job completes, not
+    // read back from the *currently* active shell_releases row at install time, which
+    // may have moved on to a newer base by then. The install endpoint's manifest.plist
+    // needs this exact value, not "whatever's active now". NULL until done; always
+    // NULL for 'appstore' kind.
+    shortVersion: text('short_version'),
     // Per-step duration, in the exact shape packages/repacker's own repack() already
     // returns (RepackStepTiming[] = {step, durationMs}[]) — the worker's repack job
     // appends its own steps (download, ensureBundleId, ensureAdHocProfile, upload,

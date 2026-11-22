@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildIpaKey,
-  buildManifestKey,
   draftIconKey,
   projectIconKey,
   shellReleaseIpaKey,
@@ -22,12 +21,6 @@ describe('object storage key builders', () => {
   it('buildIpaKey nests under the project, then the specific build', () => {
     expect(buildIpaKey(ORG_ID, PROJECT_ID, BUILD_ID)).toBe(
       `orgs/${ORG_ID}/projects/${PROJECT_ID}/builds/${BUILD_ID}/app.ipa`,
-    );
-  });
-
-  it('buildManifestKey nests under the same build directory as buildIpaKey, with its own filename', () => {
-    expect(buildManifestKey(ORG_ID, PROJECT_ID, BUILD_ID)).toBe(
-      `orgs/${ORG_ID}/projects/${PROJECT_ID}/builds/${BUILD_ID}/manifest.plist`,
     );
   });
 

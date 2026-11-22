@@ -38,14 +38,6 @@ export function buildIpaKey(orgId: string, projectId: string, buildId: string): 
   return `orgs/${orgId}/projects/${projectId}/builds/${buildId}/app.ipa`;
 }
 
-/** The itms-services manifest.plist for a build's install link — same path prefix as buildIpaKey, so both live under the same build's "directory". */
-export function buildManifestKey(orgId: string, projectId: string, buildId: string): string {
-  assertUuid(orgId, 'orgId');
-  assertUuid(projectId, 'projectId');
-  assertUuid(buildId, 'buildId');
-  return `orgs/${orgId}/projects/${projectId}/builds/${buildId}/manifest.plist`;
-}
-
 export function draftIconKey(draftId: string): string {
   assertUuid(draftId, 'draftId');
   return `drafts/${draftId}/icon.png`;
