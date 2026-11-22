@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { createDb } from '../src/client';
-import { runInTenantContext, runInBuildContext, getTenantDb } from '../src/tenant-context';
+import { runInTenantContext, runInBuildContext, runInWorkerBuildContext, getTenantDb } from '../src/tenant-context';
 import { organizations, memberships, invitations, users, projects, builds } from '../src/schema';
 
 // See packages/db/test/tenant-context.integration.test.ts for why this skips locally
@@ -305,6 +305,69 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
   it('a direct query outside any context sees zero builds (fail closed)', async () => {
     await insertBuild();
     const seen = await app.db.select().from(builds);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('runInWorkerBuildContext finds a build by its raw id alone — no token, no org_id needed', async () => {
+    const buildId = await insertBuild();
+
+    const result = await runInWorkerBuildContext(app.db, buildId, async (build) => {
+      expect(build.id).toBe(buildId);
+      expect(build.orgId).toBe(orgAId);
+      return build.status;
+    });
+
+    expect(result).toBe('queued');
+  });
+
+  it('runInWorkerBuildContext can update the one build it looked up (status/step_timings/ipaKey)', async () => {
+    const buildId = await insertBuild();
+
+    const updated = await runInWorkerBuildContext(app.db, buildId, () =>
+      getTenantDb()
+        .update(builds)
+        .set({ status: 'done', stepTimings: [{ step: 'repack', durationMs: 42 }], ipaKey: 'orgs/x/builds/y/app.ipa' })
+        .where(eq(builds.id, buildId))
+        .returning(),
+    );
+
+    expect(updated).toHaveLength(1);
+    expect(updated![0]!.status).toBe('done');
+    expect(updated![0]!.stepTimings).toEqual([{ step: 'repack', durationMs: 42 }]);
+  });
+
+  it("runInWorkerBuildContext does NOT see a different build, even in the same project/org — it's scoped to exactly the one id looked up", async () => {
+    const buildId = await insertBuild();
+    const otherBuildId = uuidv7();
+
+    const seenOther = await runInWorkerBuildContext(app.db, buildId, () =>
+      getTenantDb().select().from(builds).where(eq(builds.id, otherBuildId)),
+    );
+    expect(seenOther).toHaveLength(0);
+
+    const seenAll = await runInWorkerBuildContext(app.db, buildId, () => getTenantDb().select().from(builds));
+    expect(seenAll).toHaveLength(1);
+    expect(seenAll![0]!.id).toBe(buildId);
+  });
+
+  it('runInWorkerBuildContext does NOT see memberships/invitations/organizations — it never sets app.org_id', async () => {
+    const buildId = await insertBuild();
+
+    const seenMemberships = await runInWorkerBuildContext(app.db, buildId, () => getTenantDb().select().from(memberships));
+    expect(seenMemberships).toHaveLength(0);
+
+    const seenOrgs = await runInWorkerBuildContext(app.db, buildId, () => getTenantDb().select().from(organizations));
+    expect(seenOrgs).toHaveLength(0);
+  });
+
+  it('runInWorkerBuildContext returns undefined for a build id that does not exist', async () => {
+    const result = await runInWorkerBuildContext(app.db, uuidv7(), async () => 'should not run');
+    expect(result).toBeUndefined();
+  });
+
+  it('a direct query outside any context sees zero builds even by raw id (fail closed) — app.worker_build_id must actually be set', async () => {
+    const buildId = await insertBuild();
+    const seen = await app.db.select().from(builds).where(eq(builds.id, buildId));
     expect(seen).toHaveLength(0);
   });
 
