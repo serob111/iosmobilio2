@@ -7,9 +7,21 @@ export type AppleEnvCredentials = {
   ascCredentials: AscCredentials;
   signingP12Base64: string;
   signingP12Password: string;
+  /** The ASC certificates resource id matching SIGNING_P12_BASE64's own certificate — ensureAdHocProfile's certificateId. */
+  distributionCertId: string;
+  /** Our one shared Apple Developer Team ID — not secret (already visible inside every signed .ipa's own entitlements); needed for entitlements' application-identifier/team-identifier. */
+  teamId: string;
 };
 
-const REQUIRED_VARS = ['ASC_ISSUER_ID', 'ASC_KEY_ID', 'ASC_PRIVATE_KEY', 'SIGNING_P12_BASE64', 'SIGNING_P12_PASSWORD'] as const;
+const REQUIRED_VARS = [
+  'ASC_ISSUER_ID',
+  'ASC_KEY_ID',
+  'ASC_PRIVATE_KEY',
+  'SIGNING_P12_BASE64',
+  'SIGNING_P12_PASSWORD',
+  'ASC_DISTRIBUTION_CERT_ID',
+  'APPLE_TEAM_ID',
+] as const;
 
 /**
  * Some secret stores can't hold a real multi-line value and round-trip a PEM's
@@ -46,6 +58,8 @@ export function validateAppleEnv(env: Record<string, string | undefined> = proce
     },
     signingP12Base64: env.SIGNING_P12_BASE64!,
     signingP12Password: env.SIGNING_P12_PASSWORD!,
+    distributionCertId: env.ASC_DISTRIBUTION_CERT_ID!,
+    teamId: env.APPLE_TEAM_ID!,
   };
 }
 

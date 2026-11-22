@@ -8,6 +8,8 @@ const VALID_ENV = {
   ASC_PRIVATE_KEY: '-----BEGIN EC PRIVATE KEY-----\nabc\n-----END EC PRIVATE KEY-----',
   SIGNING_P12_BASE64: Buffer.from('fake p12 bytes').toString('base64'),
   SIGNING_P12_PASSWORD: 'super-secret',
+  ASC_DISTRIBUTION_CERT_ID: 'cert-123',
+  APPLE_TEAM_ID: 'ABCDE12345',
 };
 
 describe('validateAppleEnv', () => {
@@ -17,6 +19,8 @@ describe('validateAppleEnv', () => {
       ascCredentials: { issuerId: 'issuer-1', keyId: 'KEY123', privateKeyPem: VALID_ENV.ASC_PRIVATE_KEY },
       signingP12Base64: VALID_ENV.SIGNING_P12_BASE64,
       signingP12Password: 'super-secret',
+      distributionCertId: 'cert-123',
+      teamId: 'ABCDE12345',
     });
   });
 
@@ -30,7 +34,7 @@ describe('validateAppleEnv', () => {
     expect(result.ascCredentials.privateKeyPem).toBe(VALID_ENV.ASC_PRIVATE_KEY);
   });
 
-  it.each(['ASC_ISSUER_ID', 'ASC_KEY_ID', 'ASC_PRIVATE_KEY', 'SIGNING_P12_BASE64', 'SIGNING_P12_PASSWORD'])(
+  it.each(['ASC_ISSUER_ID', 'ASC_KEY_ID', 'ASC_PRIVATE_KEY', 'SIGNING_P12_BASE64', 'SIGNING_P12_PASSWORD', 'ASC_DISTRIBUTION_CERT_ID', 'APPLE_TEAM_ID'])(
     'throws naming the missing var, without ever including the value, when %s is unset',
     (missingVar) => {
       const env = { ...VALID_ENV, [missingVar]: undefined };
@@ -44,7 +48,9 @@ describe('validateAppleEnv', () => {
   );
 
   it('reports every missing var at once, not just the first', () => {
-    expect(() => validateAppleEnv({})).toThrow(/ASC_ISSUER_ID.*ASC_KEY_ID.*ASC_PRIVATE_KEY.*SIGNING_P12_BASE64.*SIGNING_P12_PASSWORD/s);
+    expect(() => validateAppleEnv({})).toThrow(
+      /ASC_ISSUER_ID.*ASC_KEY_ID.*ASC_PRIVATE_KEY.*SIGNING_P12_BASE64.*SIGNING_P12_PASSWORD.*ASC_DISTRIBUTION_CERT_ID.*APPLE_TEAM_ID/s,
+    );
   });
 });
 
