@@ -94,7 +94,7 @@ async function runFullJourney(page: Page, locale: Locale): Promise<void> {
     await page.waitForURL('**/login**');
     await page.getByPlaceholder('you@example.com').fill(email);
     await page.getByRole('button', { name: t.login.sendLink }).click();
-    await expect(page.getByText(t.login.sent)).toBeVisible();
+    await expect(page.getByText(t.login.checkEmailTitle)).toBeVisible();
 
     const signInMail = await waitForMail(email, '/api/auth/magic-link/verify', sinceSignIn);
     await resetRateLimitBuckets();
@@ -139,7 +139,7 @@ async function runFullJourney(page: Page, locale: Locale): Promise<void> {
     await page.goto(localePath(locale, '/login'));
     await page.getByPlaceholder('you@example.com').fill(email);
     await page.getByRole('button', { name: t.login.sendLink }).click();
-    await expect(page.getByText(t.login.sent)).toBeVisible();
+    await expect(page.getByText(t.login.checkEmailTitle)).toBeVisible();
 
     const secondSignInMail = await waitForMail(email, '/api/auth/magic-link/verify', sinceSecondSignIn);
     await resetRateLimitBuckets();

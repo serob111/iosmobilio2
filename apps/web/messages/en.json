@@ -5,14 +5,25 @@
     "projects": "Projects"
   },
   "login": {
-    "title": "Sign in to Mobilio",
+    "title": "Sign in or create an account",
+    "subheading": "No password. We'll email you a link that signs you in.",
+    "emailLabel": "Work email",
     "emailPlaceholder": "you@example.com",
     "sendLink": "Send magic link",
     "sending": "Sending…",
-    "sent": "Check your email for a sign-in link.",
     "sendError": "Couldn't send the link. Please try again.",
     "or": "or",
-    "continueWithGoogle": "Continue with Google"
+    "continueWithGoogle": "Continue with Google",
+    "termsNotice": "By continuing you agree to the <terms>Terms</terms> and acknowledge the <privacy>Privacy Policy</privacy>.",
+    "checkEmailTitle": "Check your email",
+    "sentTo": "We sent a sign-in link to <b>{email}</b>. It works for 15 minutes, on any device.",
+    "nothingArrived": "Nothing arrived?",
+    "lookInSpam": "Look in spam or promotions. The email comes from {fromAddress}.",
+    "resendLink": "Resend link",
+    "resendIn": "Resend in {seconds} s",
+    "useDifferentEmail": "Use a different email",
+    "draftWaiting": "<b>{name}</b> is waiting. Sign in and we'll save it to your account.",
+    "heroTagline": "Your website, as an iPhone app. Preview free, test on your own phone, publish under your name."
   },
   "logout": {
     "signingOut": "Signing out…"
