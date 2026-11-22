@@ -64,6 +64,21 @@ describe('validateBuildEnv', () => {
     expect(() => validateBuildEnv()).toThrow(/32 bytes/);
   });
 
+  it('BUILD_RUNNER=repack only requires API_PUBLIC_URL, not any of the GitHub/token vars', () => {
+    process.env.BUILD_RUNNER = 'repack';
+    process.env.API_PUBLIC_URL = 'https://api.example.com';
+    delete process.env.GITHUB_DISPATCH_TOKEN;
+    delete process.env.GITHUB_REPO;
+    delete process.env.BUILD_TOKEN_KEY;
+    expect(() => validateBuildEnv()).not.toThrow();
+  });
+
+  it('BUILD_RUNNER=repack still requires API_PUBLIC_URL', () => {
+    process.env.BUILD_RUNNER = 'repack';
+    delete process.env.API_PUBLIC_URL;
+    expect(() => validateBuildEnv()).toThrow(/API_PUBLIC_URL/);
+  });
+
   it('BUILD_RUNNER=fake skips every other check, even with nothing else set', () => {
     process.env.BUILD_RUNNER = 'fake';
     delete process.env.API_PUBLIC_URL;
