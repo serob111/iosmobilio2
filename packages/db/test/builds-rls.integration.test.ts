@@ -308,6 +308,20 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it("runInWorkerBuildContext can also read the build's own project (projects_worker_access), but not a different project in the same org", async () => {
+    const buildId = await insertBuild();
+
+    const seenOwnProject = await runInWorkerBuildContext(app.db, buildId, () =>
+      getTenantDb().select().from(projects).where(eq(projects.id, projectAId)),
+    );
+    expect(seenOwnProject).toHaveLength(1);
+
+    const seenOtherProject = await runInWorkerBuildContext(app.db, buildId, () =>
+      getTenantDb().select().from(projects).where(eq(projects.id, projectA2Id)),
+    );
+    expect(seenOtherProject).toHaveLength(0);
+  });
+
   it('runInWorkerBuildContext finds a build by its raw id alone — no token, no org_id needed', async () => {
     const buildId = await insertBuild();
 

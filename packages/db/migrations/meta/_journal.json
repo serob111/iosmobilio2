@@ -183,6 +183,13 @@
       "when": 1795371200000,
       "tag": "0025_worker_build_access",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795371400000,
+      "tag": "0026_projects_worker_access",
+      "breakpoints": true
     }
   ]
 }
