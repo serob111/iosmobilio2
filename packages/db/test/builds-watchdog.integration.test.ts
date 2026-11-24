@@ -87,9 +87,10 @@ describe.skipIf(!hasLiveDb)('builds watchdog: public.fail_stuck_builds (live Pos
     return result.rows.map((row) => ({ id: row.id, orgId: row.org_id, projectId: row.project_id }));
   }
 
-  it('fails a queued build stuck past 30 minutes (by created_at)', async () => {
+  it('fails an appstore build queued past 30 minutes (by created_at) — unchanged threshold', async () => {
     const tokenHash = `watchdog-hash-${uuidv7()}`;
     const buildId = await insertBuild({
+      kind: 'appstore',
       tokenHash,
       tokenExpiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
       createdAt: new Date(Date.now() - 31 * 60 * 1000),
@@ -106,9 +107,10 @@ describe.skipIf(!hasLiveDb)('builds watchdog: public.fail_stuck_builds (live Pos
     expect(row?.finishedAt).not.toBeNull();
   });
 
-  it('fails a building build stuck past 60 minutes (by started_at)', async () => {
+  it('fails an appstore build stuck building past 60 minutes (by started_at) — unchanged threshold', async () => {
     const tokenHash = `watchdog-hash-${uuidv7()}`;
     const buildId = await insertBuild({
+      kind: 'appstore',
       status: 'building',
       tokenHash,
       tokenExpiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
@@ -120,6 +122,41 @@ describe.skipIf(!hasLiveDb)('builds watchdog: public.fail_stuck_builds (live Pos
 
     const [row] = await migrator.db.select().from(builds).where(eq(builds.id, buildId));
     expect(row?.status).toBe('failed');
+  });
+
+  it('does NOT fail an appstore build only 4 minutes queued — the 30-minute threshold does not apply early', async () => {
+    const buildId = await insertBuild({ kind: 'appstore', createdAt: new Date(Date.now() - 4 * 60 * 1000) });
+    const failed = await callWatchdog(app.db);
+    expect(failed.map((r) => r.id)).not.toContain(buildId);
+  });
+
+  it('fails an adhoc build queued past 3 minutes (by created_at) — the new, much shorter threshold', async () => {
+    const buildId = await insertBuild({ kind: 'adhoc', createdAt: new Date(Date.now() - 4 * 60 * 1000) });
+
+    const failed = await callWatchdog(app.db);
+    expect(failed.map((r) => r.id)).toContain(buildId);
+
+    const [row] = await migrator.db.select().from(builds).where(eq(builds.id, buildId));
+    expect(row?.status).toBe('failed');
+    expect(row?.error).toBe('timeout');
+  });
+
+  it('fails an adhoc build stuck building past 5 minutes (by started_at) — the new, much shorter threshold', async () => {
+    const buildId = await insertBuild({ kind: 'adhoc', status: 'building', startedAt: new Date(Date.now() - 6 * 60 * 1000) });
+
+    const failed = await callWatchdog(app.db);
+    expect(failed.map((r) => r.id)).toContain(buildId);
+
+    const [row] = await migrator.db.select().from(builds).where(eq(builds.id, buildId));
+    expect(row?.status).toBe('failed');
+  });
+
+  it('does NOT fail an adhoc build only 2 minutes queued — under its own 3-minute threshold', async () => {
+    const buildId = await insertBuild({ kind: 'adhoc', createdAt: new Date(Date.now() - 2 * 60 * 1000) });
+    const failed = await callWatchdog(app.db);
+    expect(failed.map((r) => r.id)).not.toContain(buildId);
+    const [row] = await migrator.db.select().from(builds).where(eq(builds.id, buildId));
+    expect(row?.status).toBe('queued');
   });
 
   it('does not touch a fresh queued build, a fresh building build, or a done build', async () => {
@@ -148,7 +185,7 @@ describe.skipIf(!hasLiveDb)('builds watchdog: public.fail_stuck_builds (live Pos
   });
 
   it('frees the one-active-build-per-project slot: a new build can be created for the same project afterward', async () => {
-    await insertBuild({ createdAt: new Date(Date.now() - 31 * 60 * 1000) });
+    await insertBuild({ kind: 'appstore', createdAt: new Date(Date.now() - 31 * 60 * 1000) });
 
     // Confirms the slot really was occupied before the sweep.
     let blocked: unknown;
@@ -169,6 +206,7 @@ describe.skipIf(!hasLiveDb)('builds watchdog: public.fail_stuck_builds (live Pos
   it("a watchdog-failed build's token stops working immediately", async () => {
     const tokenHash = `watchdog-hash-${uuidv7()}`;
     await insertBuild({
+      kind: 'appstore',
       tokenHash,
       tokenExpiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
       createdAt: new Date(Date.now() - 31 * 60 * 1000),
@@ -200,8 +238,9 @@ describe.skipIf(!hasLiveDb)('builds watchdog: public.fail_stuck_builds (live Pos
   });
 
   it('batches: a LIMIT smaller than the number of stuck builds only fails that many per call', async () => {
-    const idA = await insertBuild({ createdAt: new Date(Date.now() - 31 * 60 * 1000) });
+    const idA = await insertBuild({ kind: 'appstore', createdAt: new Date(Date.now() - 31 * 60 * 1000) });
     const idB = await insertBuild({
+      kind: 'appstore',
       projectId: project2Id,
       createdAt: new Date(Date.now() - 31 * 60 * 1000),
     });

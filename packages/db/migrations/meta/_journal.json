@@ -204,6 +204,13 @@
       "when": 1795548900000,
       "tag": "0028_builds_install_select",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795549900000,
+      "tag": "0029_builds_watchdog_adhoc_thresholds",
+      "breakpoints": true
     }
   ]
 }
