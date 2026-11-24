@@ -8,6 +8,7 @@ import { FakeRunnerController } from './fake-runner.controller.js';
 import { BuildsService } from './builds.service.js';
 import { BuildRunnerGuard } from './build-runner.guard.js';
 import { BuildRateLimitService } from './build-rate-limit.js';
+import { InstallRateLimitService } from './install-rate-limit.js';
 import { BUILD_RUNNER } from './build-runner.js';
 import { GithubActionsRunner } from './github-actions-runner.js';
 import { FakeRunner } from './fake-runner.js';
@@ -51,6 +52,7 @@ const controllers =
     BuildsService,
     BuildRunnerGuard,
     BuildRateLimitService,
+    InstallRateLimitService,
     GithubActionsRunner,
     FakeRunner,
     RepackRunner,

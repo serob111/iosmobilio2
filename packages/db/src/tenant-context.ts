@@ -185,6 +185,38 @@ export async function runInWorkerBuildContext<T>(
 }
 
 /**
+ * For the public, unauthenticated install endpoint (apps/api) — an iOS device fetching
+ * an itms-services manifest.plist or the .ipa itself has no session/cookies, only the
+ * three ids already in its own URL path. Looks the build up by raw id
+ * (builds_install_select, see 0028_builds_install_select.sql) — SELECT only, never
+ * UPDATE, unlike runInWorkerBuildContext's app.worker_build_id/builds_worker_access,
+ * which grants a trusted background job full read/write access to the one build (and
+ * project's provisioning_profiles) it's processing. A public endpoint must never be
+ * able to write a build row through this path even by accident, so it gets its own GUC
+ * and its own read-only policy rather than reusing the worker's. Also sets
+ * app.install_project_id once the build's project is known, so the same transaction can
+ * read that one project's config too (projects_install_select) — the manifest needs its
+ * bundleId/display name. Returns undefined when no row matches, so the controller 404s
+ * rather than leaking "exists but ___".
+ */
+export async function runInInstallLookupContext<T>(
+  db: Db,
+  buildId: string,
+  fn: (build: typeof builds.$inferSelect) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.install_build_id', ${buildId}, true)`);
+    const [build] = await scoped.select().from(builds).where(eq(builds.id, buildId));
+    if (!build) {
+      return undefined;
+    }
+    await scoped.execute(sql`select set_config('app.install_project_id', ${build.projectId}, true)`);
+    return storage.run(scoped, () => fn(build));
+  });
+}
+
+/**
  * Throws instead of silently falling back to an unscoped connection — a repository
  * calling this outside `runInTenantContext` is a bug, not a case to handle gracefully.
  */

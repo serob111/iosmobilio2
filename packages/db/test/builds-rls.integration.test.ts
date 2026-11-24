@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { createDb } from '../src/client';
-import { runInTenantContext, runInBuildContext, runInWorkerBuildContext, getTenantDb } from '../src/tenant-context';
+import { runInTenantContext, runInBuildContext, runInWorkerBuildContext, runInInstallLookupContext, getTenantDb } from '../src/tenant-context';
 import { organizations, memberships, invitations, users, projects, builds } from '../src/schema';
 
 // See packages/db/test/tenant-context.integration.test.ts for why this skips locally
@@ -380,6 +380,50 @@ describe.skipIf(!hasLiveDb)('builds RLS (live Postgres)', () => {
   });
 
   it('a direct query outside any context sees zero builds even by raw id (fail closed) — app.worker_build_id must actually be set', async () => {
+    const buildId = await insertBuild();
+    const seen = await app.db.select().from(builds).where(eq(builds.id, buildId));
+    expect(seen).toHaveLength(0);
+  });
+
+  it('runInInstallLookupContext finds a build by its raw id and can also read its own project (projects_install_select)', async () => {
+    const buildId = await insertBuild();
+
+    const result = await runInInstallLookupContext(app.db, buildId, async (build) => {
+      expect(build.id).toBe(buildId);
+      const [project] = await getTenantDb().select().from(projects).where(eq(projects.id, build.projectId));
+      return project;
+    });
+
+    expect(result?.id).toBe(projectAId);
+  });
+
+  it('runInInstallLookupContext does NOT see a different project, even in the same org', async () => {
+    const buildId = await insertBuild();
+    const seenOther = await runInInstallLookupContext(app.db, buildId, () =>
+      getTenantDb().select().from(projects).where(eq(projects.id, projectA2Id)),
+    );
+    expect(seenOther).toHaveLength(0);
+  });
+
+  it('runInInstallLookupContext grants SELECT only — an UPDATE through it affects 0 rows, unlike runInWorkerBuildContext', async () => {
+    const buildId = await insertBuild();
+
+    const updated = await runInInstallLookupContext(app.db, buildId, () =>
+      getTenantDb().update(builds).set({ status: 'failed', error: 'should never apply' }).where(eq(builds.id, buildId)).returning(),
+    );
+    expect(updated).toHaveLength(0);
+
+    // Confirm it's truly unaffected, not just that the UPDATE's own WHERE missed it.
+    const stillQueued = await runInInstallLookupContext(app.db, buildId, async (build) => build.status);
+    expect(stillQueued).toBe('queued');
+  });
+
+  it('runInInstallLookupContext returns undefined for a build id that does not exist', async () => {
+    const result = await runInInstallLookupContext(app.db, uuidv7(), async () => 'should not run');
+    expect(result).toBeUndefined();
+  });
+
+  it('a direct query outside any context sees zero builds even under the install GUC name (fail closed) — app.install_build_id must actually be set', async () => {
     const buildId = await insertBuild();
     const seen = await app.db.select().from(builds).where(eq(builds.id, buildId));
     expect(seen).toHaveLength(0);

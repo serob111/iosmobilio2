@@ -14,6 +14,7 @@ export {
   runInClaimContext,
   runInBuildContext,
   runInWorkerBuildContext,
+  runInInstallLookupContext,
   runInPreviewLookupContext,
   getTenantDb,
 } from './tenant-context';

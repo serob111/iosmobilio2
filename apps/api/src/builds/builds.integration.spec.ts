@@ -5,6 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { http, HttpResponse } from 'msw';
 import { Redis } from 'ioredis';
+import { uuidv7 } from 'uuidv7';
 import { server } from '../../test/mocks/server.js';
 import { createApp } from '../create-app.js';
 import { FakeRunner } from './fake-runner.js';
@@ -252,6 +253,37 @@ describe.skipIf(!hasLiveServices)(
         expect(fetched.status).toBe(200);
         const bytes = Buffer.from(await fetched.arrayBuffer());
         expect(bytes.equals(zip)).toBe(true);
+
+        // The public install.ipa route — no Cookie at all, same as a real device would
+        // see it — needs only ipaKey+status='done', not shortVersion, so it works for
+        // this build (which went through the GitHub/fake runner's upload path, which
+        // never sets shortVersion — that's a repack-job-only field). Proves the
+        // builds_install_select/projects_install_select RLS wiring (packages/db) and
+        // the public route itself work end to end, against the real build this test
+        // already produced.
+        const publicIpaRedirect = await request(app.getHttpServer())
+          .get(`/orgs/${orgId}/projects/${projectId}/builds/${buildId}/install.ipa`)
+          .redirects(0);
+        expect(publicIpaRedirect.status).toBe(302);
+        const publicFetched = await fetch(publicIpaRedirect.headers.location as string);
+        expect(Buffer.from(await publicFetched.arrayBuffer()).equals(zip)).toBe(true);
+
+        // manifest.plist additionally needs shortVersion, which this build never got
+        // (only processRepackJob sets it) — confirms the endpoint correctly refuses
+        // rather than serving a manifest with a blank/wrong version.
+        const manifestRes = await request(app.getHttpServer()).get(
+          `/orgs/${orgId}/projects/${projectId}/builds/${buildId}/manifest.plist`,
+        );
+        expect(manifestRes.status).toBe(404);
+        expect(manifestRes.body.error.code).toBe('IPA_NOT_READY');
+
+        // Wrong project id in the path (but a real build id) — must 404, not leak the
+        // manifest for a mismatched path.
+        const wrongProjectManifest = await request(app.getHttpServer()).get(
+          `/orgs/${orgId}/projects/${uuidv7()}/builds/${buildId}/manifest.plist`,
+        );
+        expect(wrongProjectManifest.status).toBe(404);
+        expect(wrongProjectManifest.body.error.code).toBe('NOT_FOUND');
 
         // The active-build slot is free again now that this one is done.
         const secondBuild = await request(app.getHttpServer())
