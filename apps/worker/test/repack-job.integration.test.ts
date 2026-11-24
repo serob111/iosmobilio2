@@ -191,6 +191,61 @@ describe.skipIf(!hasLiveDb)('processRepackJob (live Postgres, mocked Apple/repac
     );
   });
 
+  it('writes step_timings incrementally — a client polling mid-flight sees real, partial progress, not nothing until the job finishes', async () => {
+    const buildId = await insertBuild();
+    const storage = fakeStorage();
+
+    // Hold ensureAdHocProfile open until the test explicitly releases it, so there's a
+    // real window where earlier steps have already run and later ones genuinely
+    // haven't — the only way to prove step_timings updates *during* the job, not just
+    // once at the very end.
+    let releaseEnsureAdHocProfile: () => void = () => undefined;
+    mockEnsureAdHocProfile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseEnsureAdHocProfile = () =>
+            resolve({
+              profileId: 'apple-profile-1',
+              profileContent: Buffer.from('fake profile bytes'),
+              devicesHash: 'hash',
+              expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
+            });
+        }),
+    );
+
+    const jobPromise = processRepackJob(app.db, storage, buildId, jobConfig);
+
+    // Poll until ensureAdHocProfile's own timing entry appears — proves everything
+    // before it (fetchActiveBase/fetchProject/downloadBase/downloadIcon/ensureBundleId/
+    // listDevices) was already persisted while the job is still genuinely mid-flight,
+    // not resolved yet.
+    let sawListDevices = false;
+    for (let i = 0; i < 50 && !sawListDevices; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const [build] = await runInTenantContext(migrator.db, { orgId, userId }, () =>
+        getTenantDb().select().from(schema.builds).where(eq(schema.builds.id, buildId)),
+      );
+      const steps = ((build?.stepTimings as { step: string }[] | null) ?? []).map((t) => t.step);
+      if (steps.includes('listDevices')) {
+        sawListDevices = true;
+        // The build is still 'building' at this exact point — not done, not failed —
+        // and sign/uploadIpa (which only happen after ensureAdHocProfile) are provably
+        // absent yet.
+        expect(build!.status).toBe('building');
+        expect(steps).not.toContain('uploadIpa');
+      }
+    }
+    expect(sawListDevices).toBe(true);
+
+    releaseEnsureAdHocProfile();
+    await jobPromise;
+
+    const [finalBuild] = await runInTenantContext(migrator.db, { orgId, userId }, () =>
+      getTenantDb().select().from(schema.builds).where(eq(schema.builds.id, buildId)),
+    );
+    expect(finalBuild!.status).toBe('done');
+  });
+
   it('marks the build failed and records the error + partial timings when a step throws', async () => {
     const buildId = await insertBuild();
     const storage = fakeStorage();

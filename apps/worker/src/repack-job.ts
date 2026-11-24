@@ -46,6 +46,29 @@ function timed<T>(timings: RepackStepTiming[], step: string, fn: () => Promise<T
   );
 }
 
+/**
+ * Persists the timings captured so far, so a client polling the build row mid-flight
+ * (apps/web) sees real, incremental progress rather than nothing until the job
+ * finishes entirely — without this, step_timings only ever existed in this function's
+ * own local variable until the very last write, making "real progress from
+ * step_timings" indistinguishable from no progress reporting at all while building.
+ * Best-effort and never awaited-to-failure: a progress write failing must not abort a
+ * job that's otherwise succeeding, so errors here are swallowed, not propagated.
+ */
+async function reportProgress(db: Db, buildId: string, timings: RepackStepTiming[]): Promise<void> {
+  await runInWorkerBuildContext(db, buildId, (build) =>
+    getTenantDb().update(schema.builds).set({ stepTimings: timings }).where(eq(schema.builds.id, build.id)),
+  ).catch(() => undefined);
+}
+
+async function timedAndReported<T>(db: Db, buildId: string, timings: RepackStepTiming[], step: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await timed(timings, step, fn);
+  } finally {
+    await reportProgress(db, buildId, timings);
+  }
+}
+
 /** Marks the build 'building' in its own short, independently-committed transaction — see the module doc comment for why this can't share a transaction with the rest of the job. */
 async function markBuilding(db: Db, buildId: string): Promise<{ orgId: string; projectId: string }> {
   const result = await runInWorkerBuildContext(db, buildId, async (build) => {
@@ -78,6 +101,12 @@ async function markBuilding(db: Db, buildId: string): Promise<{ orgId: string; p
  * provisioning-profile cache's own find/save, the final status update) is its own
  * independently-committed runInWorkerBuildContext call.
  *
+ * Persists step_timings incrementally (reportProgress, after every job-level step) —
+ * not just once at the very end — so a client polling the build row while it's still
+ * 'building' (apps/web) sees real, live progress rather than nothing until the job
+ * finishes. repack() itself has no progress callback, so its own dozen-odd internal
+ * steps land as one chunk once it resolves, not individually.
+ *
  * Deliberately does NOT write a manifest.plist anywhere either: the install endpoint
  * (apps/api, upcoming) generates both the manifest and the .ipa's signed download url
  * together, at request time, from build.shortVersion (set below) + the project's
@@ -90,7 +119,7 @@ export async function processRepackJob(db: Db, storage: ObjectStorage, buildId: 
   try {
     const { orgId, projectId } = await markBuilding(db, buildId);
 
-    const [release] = await timed(timings, 'fetchActiveBase', () =>
+    const [release] = await timedAndReported(db, buildId, timings, 'fetchActiveBase', () =>
       // shell_releases has no tenant concept at all (shell_releases_app_access is
       // permissive — USING(true)); a plain, unscoped query is correct here, not a gap.
       db.select().from(schema.shellReleases).where(eq(schema.shellReleases.isActive, true)),
@@ -99,7 +128,7 @@ export async function processRepackJob(db: Db, storage: ObjectStorage, buildId: 
       throw new Error('No active shell_releases version is registered');
     }
 
-    const project = await timed(timings, 'fetchProject', async () => {
+    const project = await timedAndReported(db, buildId, timings, 'fetchProject', async () => {
       const found = await runInWorkerBuildContext(db, buildId, async () => {
         const [row] = await getTenantDb().select().from(schema.projects).where(eq(schema.projects.id, projectId));
         return row;
@@ -112,16 +141,20 @@ export async function processRepackJob(db: Db, storage: ObjectStorage, buildId: 
     const projectConfig = validateProjectConfig(project.config);
 
     const [baseIpaPath, iconPng1024] = await Promise.all([
-      timed(timings, 'downloadBase', () => getCachedBaseIpa(storage, shellReleaseIpaKey(release.version), release.sha256, { cacheDir: config.cacheDir })),
-      timed(timings, 'downloadIcon', async () => streamToBuffer(await storage.getStream(projectIconKey(orgId, projectId)))),
+      timedAndReported(db, buildId, timings, 'downloadBase', () =>
+        getCachedBaseIpa(storage, shellReleaseIpaKey(release.version), release.sha256, { cacheDir: config.cacheDir }),
+      ),
+      timedAndReported(db, buildId, timings, 'downloadIcon', async () => streamToBuffer(await storage.getStream(projectIconKey(orgId, projectId)))),
     ]);
 
     const client = new AppStoreConnectClient({ credentials: config.appleEnv.ascCredentials });
 
-    const bundle = await timed(timings, 'ensureBundleId', () => ensureBundleId(client, projectConfig.bundleId, projectConfig.name));
-    const deviceIds = await timed(timings, 'listDevices', () => listRegisteredDeviceIds(client));
+    const bundle = await timedAndReported(db, buildId, timings, 'ensureBundleId', () =>
+      ensureBundleId(client, projectConfig.bundleId, projectConfig.name),
+    );
+    const deviceIds = await timedAndReported(db, buildId, timings, 'listDevices', () => listRegisteredDeviceIds(client));
     const profileCache = new DrizzleProvisioningProfileCache(db, buildId, projectId);
-    const profile = await timed(timings, 'ensureAdHocProfile', () =>
+    const profile = await timedAndReported(db, buildId, timings, 'ensureAdHocProfile', () =>
       ensureAdHocProfile(client, {
         bundleIdResourceId: bundle.resourceId,
         bundleIdentifier: projectConfig.bundleId,
@@ -133,6 +166,11 @@ export async function processRepackJob(db: Db, storage: ObjectStorage, buildId: 
     );
 
     const outputIpaPath = join(workDir, 'output.ipa');
+    // repack() has no progress callback of its own, so its dozen-odd internal steps
+    // (checksum, extract, icons, sign, verify, archive, ...) land as one chunk here,
+    // appended all at once once it resolves — real step_timings data either way, just
+    // coarser-grained than the job-level steps above, which this code does control
+    // individually.
     const repackResult = await withP12FromBase64(config.appleEnv.signingP12Base64, (p12Path) =>
       repack({
         baseIpaPath,
@@ -152,9 +190,12 @@ export async function processRepackJob(db: Db, storage: ObjectStorage, buildId: 
       }),
     );
     timings.push(...repackResult.timings);
+    await reportProgress(db, buildId, timings);
 
     const ipaKey = buildIpaKey(orgId, projectId, buildId);
-    await timed(timings, 'uploadIpa', () => storage.putStream(ipaKey, createReadStream(repackResult.outputIpaPath), 'application/octet-stream'));
+    await timedAndReported(db, buildId, timings, 'uploadIpa', () =>
+      storage.putStream(ipaKey, createReadStream(repackResult.outputIpaPath), 'application/octet-stream'),
+    );
 
     await runInWorkerBuildContext(db, buildId, (build) =>
       getTenantDb()
