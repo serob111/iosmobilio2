@@ -116,9 +116,18 @@ describe.skipIf(!hasLiveDb)('processRepackJob (live Postgres, mocked Apple/repac
       await tx.delete(schema.projects);
       await tx.delete(schema.memberships);
     });
+    // shell_releases has no tenant scoping at all and no other file in this suite
+    // touches its isActive flag, so an unscoped sweep here is safe and actively useful
+    // (also clears out any stale active row a previously-crashed run left behind, which
+    // would otherwise collide with this file's own "one active release" insert above).
+    // organizations/users are NOT swept the same way — scoped to exactly this file's own
+    // fixture rows instead, since vitest runs test files in parallel by default and an
+    // unscoped delete there could race against another integration test file's own
+    // concurrently-running fixture setup against the same live Postgres (confirmed by
+    // hitting exactly that race once).
     await migrator.db.delete(schema.shellReleases);
-    await migrator.db.delete(schema.organizations);
-    await migrator.db.delete(schema.users);
+    await migrator.db.delete(schema.organizations).where(eq(schema.organizations.id, orgId));
+    await migrator.db.delete(schema.users).where(eq(schema.users.id, userId));
     await migrator.pool.end();
     await app.pool.end();
   });
