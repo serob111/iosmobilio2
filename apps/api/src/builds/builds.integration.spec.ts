@@ -237,6 +237,13 @@ describe.skipIf(!hasLiveServices)(
           .set('Cookie', cookie)
           .expect(200);
         expect(getBuildRes.body.status).toBe('done');
+        // kind/stepTimings are both real response fields now (web progress UI) — this
+        // build went through the GitHub/fake runner's own upload flow, never the
+        // repack job, so stepTimings genuinely stays null throughout (only
+        // processRepackJob ever writes it); kind still defaults to 'adhoc' regardless
+        // of which runner actually handled it.
+        expect(getBuildRes.body.kind).toBe('adhoc');
+        expect(getBuildRes.body.stepTimings).toBeNull();
 
         // The token is cleared on the done transition — the exact same bearer token
         // no longer resolves to anything, not even a stale-state error.

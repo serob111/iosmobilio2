@@ -40,6 +40,7 @@ function build(overrides: Partial<BuildSummary> = {}): BuildSummary {
     startedAt: null,
     finishedAt: null,
     createdAt: new Date().toISOString(),
+    stepTimings: null,
     ...overrides,
   };
 }
@@ -50,6 +51,7 @@ function fakeBuilds(overrides: Partial<Builds> = {}): Builds {
     list: vi.fn(async () => []),
     get: vi.fn(async () => build()),
     ipaUrl: vi.fn((buildId: string) => `http://api.test/builds/${buildId}/ipa`),
+    installUrl: vi.fn((buildId: string) => `itms-services://?action=download-manifest&url=http://api.test/builds/${buildId}/manifest.plist`),
     ...overrides,
   };
 }
@@ -85,6 +87,43 @@ describe("BuildsBlock", () => {
     const link = await screen.findByRole("link", { name: "Download .ipa" });
     expect(link).toHaveAttribute("href", "http://api.test/builds/build-1/ipa");
     expect(builds.ipaUrl).toHaveBeenCalledWith("build-1");
+  });
+
+  it("a done build also shows the itms-services install link using builds.installUrl(), the thing that actually triggers an iOS install prompt", async () => {
+    const builds = fakeBuilds({ list: vi.fn(async () => [build({ status: "done" })]) });
+    render(<BuildsBlock builds={builds} />);
+
+    const link = await screen.findByRole("link", { name: "Install on iPhone" });
+    expect(link).toHaveAttribute("href", "itms-services://?action=download-manifest&url=http://api.test/builds/build-1/manifest.plist");
+    expect(builds.installUrl).toHaveBeenCalledWith("build-1");
+  });
+
+  it("a building build with real step_timings shows the completed steps, not a fake/animated progress bar", async () => {
+    const builds = fakeBuilds({
+      list: vi.fn(async () => [
+        build({
+          status: "building",
+          stepTimings: [
+            { step: "fetchActiveBase", durationMs: 12 },
+            { step: "ensureAdHocProfile", durationMs: 1500 },
+          ],
+        }),
+      ]),
+    });
+    render(<BuildsBlock builds={builds} />);
+
+    expect(await screen.findByText("Fetch Active Base")).toBeInTheDocument();
+    expect(screen.getByText("Ensure Ad Hoc Profile")).toBeInTheDocument();
+    expect(screen.getByText("12ms")).toBeInTheDocument();
+    expect(screen.getByText("1.5s")).toBeInTheDocument();
+  });
+
+  it("a queued build with no step_timings yet shows no progress list at all", async () => {
+    const builds = fakeBuilds({ list: vi.fn(async () => [build({ status: "queued", stepTimings: null })]) });
+    render(<BuildsBlock builds={builds} />);
+
+    await screen.findByText("Queued");
+    expect(screen.queryByText("Progress")).not.toBeInTheDocument();
   });
 
   it("a failed build shows the error message and lets the user retry", async () => {

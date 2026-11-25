@@ -110,8 +110,10 @@
     "statusBuilding": "Building",
     "statusDone": "Ready",
     "statusFailed": "Failed",
+    "progress": "Progress",
+    "installOnIphone": "Install on iPhone",
     "downloadIpa": "Download .ipa",
-    "disclaimer": "This .ipa is unsigned — you'll need to sideload and sign it yourself before installing.",
+    "disclaimer": "This build only installs on a device registered with our Apple Developer account (Ad Hoc — limited to 100 devices per year on our account).",
     "error": "Build error"
   },
   "errors": {

@@ -352,6 +352,11 @@ export async function regenerateProjectPreviewLink(orgId: string, projectId: str
 
 export type BuildStatus = "queued" | "building" | "done" | "failed";
 
+export interface BuildStepTiming {
+  step: string;
+  durationMs: number;
+}
+
 export interface BuildSummary {
   id: string;
   status: BuildStatus;
@@ -360,6 +365,11 @@ export interface BuildSummary {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  // Only ever populated for 'adhoc' (repack) builds, written incrementally by the
+  // worker as the build actually progresses — never a simulated/fake progress bar.
+  // Always null for the 'appstore'/GitHub-Actions path, which has no equivalent
+  // per-step breakdown to report.
+  stepTimings: BuildStepTiming[] | null;
 }
 
 export async function startBuild(orgId: string, projectId: string): Promise<{ id: string; status: BuildStatus }> {
@@ -394,4 +404,23 @@ export async function getBuild(orgId: string, projectId: string, buildId: string
 /** The actual download link — intentionally a plain href, not fetched by this client: it's a @Redirect() to a signed URL, and the browser following it directly avoids buffering a multi-MB file through JS. Note this is deliberately NOT runUrl (the GitHub Actions run URL) — that's never exposed to the client at all (see builds.controller.ts's BuildSummary). */
 export function buildIpaUrl(orgId: string, projectId: string, buildId: string): string {
   return `${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/builds/${buildId}/ipa`;
+}
+
+/**
+ * The public (unauthenticated, no session cookie needed) manifest.plist url — the
+ * device installing the app has no web session, so this must be the PUBLIC
+ * .../manifest.plist route, never .../ipa (which requires OrgGuard/ProjectGuard).
+ */
+export function buildManifestUrl(orgId: string, projectId: string, buildId: string): string {
+  return `${API_BASE_URL}/orgs/${orgId}/projects/${projectId}/builds/${buildId}/manifest.plist`;
+}
+
+/**
+ * What actually triggers iOS's own OTA-install prompt when tapped on a real device —
+ * merely downloading the raw .ipa (buildIpaUrl) does nothing useful on iOS itself,
+ * unlike on a desktop browser. Must be an actual link navigation (itms-services: isn't
+ * fetchable via JS), so this is built once and used as a plain href, same as buildIpaUrl.
+ */
+export function buildItmsServicesInstallUrl(orgId: string, projectId: string, buildId: string): string {
+  return `itms-services://?action=download-manifest&url=${encodeURIComponent(buildManifestUrl(orgId, projectId, buildId))}`;
 }

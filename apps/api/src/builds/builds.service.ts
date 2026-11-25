@@ -36,6 +36,7 @@ function isActiveBuildConflict(error: unknown): boolean {
 
 export type BuildSummary = {
   id: string;
+  kind: string;
   status: string;
   runId: number | null;
   runUrl: string | null;
@@ -43,6 +44,8 @@ export type BuildSummary = {
   startedAt: Date | null;
   finishedAt: Date | null;
   createdAt: Date;
+  /** RepackStepTiming[] ({step, durationMs}[]) — only ever non-null for 'adhoc' builds, written incrementally by the repack job as it runs, not just once at completion. */
+  stepTimings: unknown;
 };
 
 @Injectable()
@@ -116,6 +119,7 @@ export class BuildsService {
       getTenantDb()
         .select({
           id: schema.builds.id,
+          kind: schema.builds.kind,
           status: schema.builds.status,
           runId: schema.builds.runId,
           runUrl: schema.builds.runUrl,
@@ -123,6 +127,7 @@ export class BuildsService {
           startedAt: schema.builds.startedAt,
           finishedAt: schema.builds.finishedAt,
           createdAt: schema.builds.createdAt,
+          stepTimings: schema.builds.stepTimings,
         })
         .from(schema.builds)
         .where(eq(schema.builds.projectId, projectId))
