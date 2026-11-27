@@ -126,23 +126,17 @@ async function renderTryPage() {
 }
 
 describe("TryPage", () => {
-  it("shows a workspace-name form (not a disabled button) when the signed-in user has zero organizations, and submitting creates an org then claims", async () => {
+  it("redirects to /workspace (not an inline form) when the signed-in user has zero organizations", async () => {
     mockHappyDraftLoad();
     fetchMe.mockResolvedValue({ user: { id: "u1", name: "A", email: "a@x.com" }, organizations: [] });
-    createOrganization.mockResolvedValue({ orgId: "org-new", slug: "a" });
-    claimDraft.mockResolvedValue({ id: "project-1" });
-    const user = userEvent.setup();
 
     await renderTryPage();
+
     await waitFor(() => expect(screen.getByTestId("project-editor")).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByPlaceholderText("Workspace name")).toBeInTheDocument());
-
-    await user.type(screen.getByPlaceholderText("Workspace name"), "My Workspace");
-    await user.click(screen.getByRole("button", { name: "Create workspace and save" }));
-
-    await waitFor(() => expect(claimDraft).toHaveBeenCalledWith("org-new"));
-    expect(createOrganization).toHaveBeenCalledWith("My Workspace");
-    expect(push).toHaveBeenCalledWith("/projects/org-new/project-1");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace"));
+    expect(screen.queryByPlaceholderText("Workspace name")).not.toBeInTheDocument();
+    expect(createOrganization).not.toHaveBeenCalled();
+    expect(claimDraft).not.toHaveBeenCalled();
   });
 
   it("redirects to /login with callbackUrl on a 401 from the load effect, not a silent no-draft redirect", async () => {

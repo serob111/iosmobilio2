@@ -127,6 +127,18 @@ describe('OrganizationsService', () => {
       await service.createOrganization('user-1', 'Acme Inc');
       expect(valuesMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ name: 'Acme Inc' }));
     });
+
+    it('passes the optional segment through to the insert', async () => {
+      const service = await buildService();
+      await service.createOrganization('user-1', 'Acme Inc', 'agency');
+      expect(valuesMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ segment: 'agency' }));
+    });
+
+    it('leaves segment undefined when not given', async () => {
+      const service = await buildService();
+      await service.createOrganization('user-1', 'Acme Inc');
+      expect(valuesMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ segment: undefined }));
+    });
   });
 
   describe('getUserOrganizations', () => {

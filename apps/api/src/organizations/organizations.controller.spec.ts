@@ -25,12 +25,28 @@ describe('OrganizationsController', () => {
       const result = await controller.create(request, { name: 'Acme' });
 
       expect(result).toEqual({ orgId: 'org-1', slug: 'acme' });
-      expect(createOrganization).toHaveBeenCalledWith('user-1', 'Acme');
+      expect(createOrganization).toHaveBeenCalledWith('user-1', 'Acme', undefined);
     });
 
     it('rejects a missing name', async () => {
       const controller = new OrganizationsController(fakeService());
       await expect(controller.create(request, {})).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('passes a valid optional segment through', async () => {
+      const createOrganization = vi.fn().mockResolvedValue({ orgId: 'org-1', slug: 'acme' });
+      const controller = new OrganizationsController(fakeService({ createOrganization }));
+
+      await controller.create(request, { name: 'Acme', segment: 'agency' });
+
+      expect(createOrganization).toHaveBeenCalledWith('user-1', 'Acme', 'agency');
+    });
+
+    it('rejects an invalid segment', async () => {
+      const controller = new OrganizationsController(fakeService());
+      await expect(controller.create(request, { name: 'Acme', segment: 'freelancer' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
   });
 

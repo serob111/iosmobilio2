@@ -4,7 +4,7 @@ import { OrgGuard } from './org.guard.js';
 import { RoleGuard } from './role.guard.js';
 import { Roles } from './roles.decorator.js';
 import { OrganizationsService } from './organizations.service.js';
-import { requireString, requireRole } from './validation.js';
+import { requireString, requireRole, optionalSegment } from './validation.js';
 import '../auth/auth.types.js';
 import '../tenant/tenant.types.js';
 
@@ -14,8 +14,10 @@ export class OrganizationsController {
 
   @Post()
   async create(@Req() request: Request, @Body() body: unknown) {
-    const name = requireString((body as Record<string, unknown> | null)?.name, 'name');
-    return this.organizationsService.createOrganization(request.user!.id, name);
+    const record = body as Record<string, unknown> | null;
+    const name = requireString(record?.name, 'name');
+    const segment = optionalSegment(record?.segment);
+    return this.organizationsService.createOrganization(request.user!.id, name, segment);
   }
 
   @Get(':orgId')

@@ -14,6 +14,7 @@ import { DbService } from '../db/db.service.js';
 import { MAIL_SENDER, type MailSender } from '../mail/mail-sender.js';
 
 export type OrgRole = 'owner' | 'admin' | 'member';
+export type OrgSegment = 'owner' | 'agency' | 'developer';
 
 function hashToken(rawToken: string): string {
   return createHash('sha256').update(rawToken).digest('hex');
@@ -30,12 +31,13 @@ export class OrganizationsService {
     ownerUserId: string,
     name: string,
     slugBase: string,
+    segment?: OrgSegment,
   ): Promise<{ orgId: string; slug: string }> {
     const orgId = uuidv7();
     const slug = `${slugify(slugBase) || 'org'}-${orgId.slice(0, 8)}`;
     await runInTenantContext(this.dbService.db, { orgId, userId: ownerUserId }, async () => {
       const tx = getTenantDb();
-      await tx.insert(schema.organizations).values({ id: orgId, name, slug });
+      await tx.insert(schema.organizations).values({ id: orgId, name, slug, segment });
       await tx.insert(schema.memberships).values({ userId: ownerUserId, orgId, role: 'owner' });
     });
     return { orgId, slug };
@@ -52,9 +54,9 @@ export class OrganizationsService {
     return { orgId };
   }
 
-  /** POST /orgs — any authenticated user can create a new organization, becoming its owner. */
-  async createOrganization(userId: string, name: string): Promise<{ orgId: string; slug: string }> {
-    return this.insertOrganization(userId, name, name);
+  /** POST /orgs — any authenticated user can create a new organization, becoming its owner. `segment` is the Workspace screen's optional "which fits you best" chip, never required. */
+  async createOrganization(userId: string, name: string, segment?: OrgSegment): Promise<{ orgId: string; slug: string }> {
+    return this.insertOrganization(userId, name, name, segment);
   }
 
   /** GET /me's organizations list — every org the user belongs to, with their role in each. */

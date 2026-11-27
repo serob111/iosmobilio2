@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { requireString, requireRole } from './validation.js';
+import { requireString, requireRole, optionalSegment } from './validation.js';
 
 describe('requireString', () => {
   it('returns the value when it is a non-empty string', () => {
@@ -18,5 +18,19 @@ describe('requireRole', () => {
 
   it.each([undefined, null, 'superuser', 42])('throws BadRequestException for %p', (value) => {
     expect(() => requireRole(value)).toThrow(BadRequestException);
+  });
+});
+
+describe('optionalSegment', () => {
+  it.each(['owner', 'agency', 'developer'] as const)('accepts %s', (segment) => {
+    expect(optionalSegment(segment)).toBe(segment);
+  });
+
+  it.each([undefined, null])('returns undefined for %p (segment is optional)', (value) => {
+    expect(optionalSegment(value)).toBeUndefined();
+  });
+
+  it.each(['freelancer', 42, ''])('throws BadRequestException for an invalid, present value %p', (value) => {
+    expect(() => optionalSegment(value)).toThrow(BadRequestException);
   });
 });

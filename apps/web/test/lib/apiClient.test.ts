@@ -8,6 +8,7 @@ import {
   createDraft,
   createDraftEditorPreviewLink,
   createDraftPreviewLink,
+  createOrganization,
   createProjectEditorPreviewLink,
   createProjectPreviewLink,
   draftIconUrl,
@@ -84,6 +85,34 @@ describe('fetchMe', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).code).toBe('UNKNOWN');
     expect((error as ApiError).message).toBe('Request failed with status 500');
+  });
+});
+
+describe('createOrganization', () => {
+  it('posts the name with no segment key dropped by JSON.stringify when segment is omitted', async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${API_BASE}/orgs`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ orgId: 'org-1', slug: 'acme' });
+      }),
+    );
+
+    await expect(createOrganization('Acme')).resolves.toEqual({ orgId: 'org-1', slug: 'acme' });
+    expect(body).toEqual({ name: 'Acme' });
+  });
+
+  it('posts the optional segment when given', async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${API_BASE}/orgs`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ orgId: 'org-1', slug: 'acme' });
+      }),
+    );
+
+    await createOrganization('Acme', 'agency');
+    expect(body).toEqual({ name: 'Acme', segment: 'agency' });
   });
 });
 

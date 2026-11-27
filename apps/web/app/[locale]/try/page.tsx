@@ -9,7 +9,6 @@ import {
   claimDraft,
   createDraftEditorPreviewLink,
   createDraftPreviewLink,
-  createOrganization,
   fetchDraftPreviewLink,
   fetchMe,
   fetchPreviewDto,
@@ -50,7 +49,6 @@ export default function TryPage() {
   const [selectedOrgId, setSelectedOrgId] = useState("");
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
-  const [workspaceName, setWorkspaceName] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +108,15 @@ export default function TryPage() {
     }
   }, [state.status, router]);
 
+  // A signed-in user with zero organizations gets the full Workspace screen (name +
+  // "which fits you" + claim), not a cramped inline form here — see docs/design/README.md's
+  // screens table. The claim logic itself now lives solely on that page, not duplicated here.
+  useEffect(() => {
+    if (me && me.organizations.length === 0) {
+      router.replace("/workspace");
+    }
+  }, [me, router]);
+
   async function handleClaim() {
     if (!selectedOrgId) return;
     setClaiming(true);
@@ -117,20 +124,6 @@ export default function TryPage() {
     try {
       const { id } = await claimDraft(selectedOrgId);
       router.push(`/projects/${selectedOrgId}/${id}`);
-    } catch (error) {
-      setClaimError(apiErrorMessage(error));
-      setClaiming(false);
-    }
-  }
-
-  async function handleCreateWorkspaceAndClaim() {
-    if (!workspaceName.trim()) return;
-    setClaiming(true);
-    setClaimError(null);
-    try {
-      const { orgId } = await createOrganization(workspaceName.trim());
-      const { id } = await claimDraft(orgId);
-      router.push(`/projects/${orgId}/${id}`);
     } catch (error) {
       setClaimError(apiErrorMessage(error));
       setClaiming(false);
@@ -172,28 +165,7 @@ export default function TryPage() {
         <Link href={{ pathname: "/login", query: { callbackUrl: pathname } }} className="text-sm font-medium text-[#4B2BE0] underline">
           {t("saveAsProject")}
         </Link>
-      ) : me.organizations.length === 0 ? (
-        <div className="flex flex-col items-center gap-2">
-          <input
-            type="text"
-            value={workspaceName}
-            onChange={(e) => setWorkspaceName(e.target.value)}
-            placeholder={t("workspaceNamePlaceholder")}
-            aria-label={t("workspaceNameLabel")}
-            maxLength={50}
-            className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-sm text-[#17112E] outline-none focus:border-blue-500"
-          />
-          <button
-            type="button"
-            onClick={handleCreateWorkspaceAndClaim}
-            disabled={claiming || !workspaceName.trim()}
-            className="rounded-full border border-zinc-300 px-5 py-2 text-sm font-semibold text-[#17112E] hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {claiming ? t("saving") : t("createWorkspaceAndSave")}
-          </button>
-          {claimError ? <p className="text-sm text-red-600">{claimError}</p> : null}
-        </div>
-      ) : (
+      ) : me.organizations.length === 0 ? null : (
         <div className="flex flex-col items-center gap-2">
           {me.organizations.length > 1 ? (
             <select

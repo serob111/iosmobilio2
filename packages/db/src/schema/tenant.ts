@@ -4,11 +4,15 @@ import { uuidv7 } from 'uuidv7';
 import { users } from './auth';
 
 export const orgRole = pgEnum('org_role', ['owner', 'admin', 'member']);
+export const orgSegment = pgEnum('org_segment', ['owner', 'agency', 'developer']);
 
 export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().$defaultFn(() => uuidv7()),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
+  // Self-reported "which of these fits you" from the Workspace screen — optional, never
+  // required to create an organization, purely for segmenting onboarding later.
+  segment: orgSegment('segment'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
