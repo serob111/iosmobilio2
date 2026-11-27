@@ -21,6 +21,7 @@ export class ResendMailSender implements MailSender {
         to: message.to,
         subject: message.subject,
         text: message.body,
+        ...(message.html ? { html: message.html } : {}),
       }),
     });
     if (!response.ok) {

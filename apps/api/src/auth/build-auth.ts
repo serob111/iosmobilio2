@@ -4,6 +4,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { uuidv7 } from 'uuidv7';
 import type { Db } from '@mobilio/db';
 import type { MailSender } from '../mail/mail-sender.js';
+import { magicLinkEmail } from '../mail/magic-link-email.js';
 import type { createRedisSecondaryStorage } from './redis-secondary-storage.js';
 
 export interface BuildAuthDeps {
@@ -61,11 +62,7 @@ export function buildAuth(deps: BuildAuthDeps) {
     plugins: [
       magicLink({
         sendMagicLink: async ({ email, url }) => {
-          await deps.mailSender.send({
-            to: email,
-            subject: 'Sign in to Mobilio',
-            body: `Click to sign in: ${url}`,
-          });
+          await deps.mailSender.send(magicLinkEmail(email, url));
         },
       }),
     ],
