@@ -375,5 +375,21 @@
     "organization": "Organization",
     "main": "Main",
     "account": "Account"
+  },
+  "notFound": {
+    "homeLabel": "Mobilio home",
+    "title": "This page didn't make it into the app",
+    "body": "The link may be old or mistyped. Your apps and previews are safe.",
+    "projectsCta": "Go to my apps",
+    "homeCta": "Home page",
+    "phoneLabel": "Nothing here"
+  },
+  "previewExpired": {
+    "title": "This preview link no longer works",
+    "body": "The owner turned it off or made a new one. Ask them for the latest link.",
+    "createCta": "Make an app from your website",
+    "ownerPrompt": "Is this your app?",
+    "signIn": "Sign in",
+    "ownerSuffix": "to share a new link."
   }
 }
