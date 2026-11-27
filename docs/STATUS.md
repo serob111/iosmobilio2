@@ -27,7 +27,7 @@ Goal: replace the ~10-minute GitHub Actions macOS build-from-source with repacki
 pre-built shell `.ipa` — unzip, patch Info.plist/config/icon/splash, re-sign with
 `rcodesign`, re-zip, target under 2 minutes, runnable on an ordinary Linux box.
 
-**Done** (through `c1e9229`, 2026-11-25 — HEAD of `stage-3`):
+**Done** (through `933a185`, 2026-11-26 — HEAD of `stage-3`):
 - `packages/repacker`: streaming zip extract/create + checksum, Info.plist patching, client
   icon/splash generation (`sharp`), config/splash bundle + entitlements/profile writing,
   `rcodesign` sign+verify, full `repack()` orchestrator (`d6e2822`..`466658f`).
@@ -42,17 +42,19 @@ pre-built shell `.ipa` — unzip, patch Info.plist/config/icon/splash, re-sign w
   (`422693d`, `79a65a2`, `29032f0`, `0fdde00`).
 - Public install endpoint (`manifest.plist` + `install.ipa`) and adhoc builds' own, shorter
   watchdog thresholds (`bb9c5ec`, `968e44b`).
+- `apps/web`: closed a real MSW `onUnhandledRequest`-bypass gap in apps/web's own test
+  suite, same catch-all-handler fix already shipped for apps/api (`91288fa`). Live build
+  progress in `BuildsBlock` — `step_timings` surfaced as a per-step checklist with
+  durations, humanized from the repack job's own step names, plus the actual
+  `itms-services://` "Install on iPhone" link (merely linking the raw `.ipa` triggers no
+  install prompt on-device) and a corrected Ad Hoc disclaimer (`933a185`).
 
-**In progress** (uncommitted on `stage-3`, working tree as of 2026-11-25 — not yet reviewed
-or landed): `apps/web` wiring for the install/download flow (`BuildsBlock.tsx`,
-`apiClient.ts`, `ProjectAdapter.ts`, `messages/{en,ru}.json`) and a stricter shared MSW
-network-guard test policy (`apps/web/test/msw-policy.ts`, `allowed-network-hosts.ts`,
-updated `mocks/server.ts`/`setup.ts`).
-
-**Next**: finish and commit the in-progress install/download UI; verify a repacked `.ipa`
-actually installs and launches on a real iPhone via the manifest/install endpoints (device
-testing — can't be done from this sandbox); confirm repack wall-clock time against the
-<2-minute target under realistic load.
+**Next** (Фаза 6 of repack, not yet started): fixture base `.ipa` for tests/CI, a real
+end-to-end repack integration test, `npm run bench:repack` with p50/p95 assertions against
+the <2-minute target, a Playwright E2E test for the full "Test on iPhone" flow, and a
+README covering the repack architecture/release process/env vars/limitations. After that:
+verify a repacked `.ipa` actually installs and launches on a real iPhone via the
+manifest/install endpoints (device testing — can't be done from this sandbox).
 
 ## Parallel branch: design-web
 
