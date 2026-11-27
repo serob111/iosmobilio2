@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { Logo } from "./Logo";
@@ -27,6 +28,7 @@ export interface AppHeaderProps {
 
 /** The signed-in app chrome from the Projects mock: org switcher, section nav, account menu. */
 export function AppHeader({ organizations, currentOrgId, onOrgChange, nav, email, signOutLabel, onSignOut }: AppHeaderProps) {
+  const t = useTranslations("appHeader");
   const [menuOpen, setMenuOpen] = useState(false);
   const initial = email.charAt(0).toUpperCase() || "?";
 
@@ -34,13 +36,13 @@ export function AppHeader({ organizations, currentOrgId, onOrgChange, nav, email
     <header className="border-b border-line bg-white">
       <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center justify-between gap-3 px-5 py-3.5 sm:px-8">
         <div className="flex flex-wrap items-center gap-3 sm:gap-7">
-          <Link href="/" aria-label="Mobilio home">
+          <Link href="/" aria-label={t("home")}>
             <Logo tone="ink" className="text-[19px]" />
           </Link>
 
           {organizations.length > 0 ? (
             <label className="sr-only" htmlFor="app-header-org">
-              Organization
+              {t("organization")}
             </label>
           ) : null}
           {organizations.length > 0 ? (
@@ -48,7 +50,7 @@ export function AppHeader({ organizations, currentOrgId, onOrgChange, nav, email
               id="app-header-org"
               value={currentOrgId}
               onChange={(event) => onOrgChange(event.target.value)}
-              className="h-10 rounded-field-lg border-[1.5px] border-line bg-white px-3 text-sm font-semibold text-ink outline-none focus:border-2 focus:border-violet"
+              className="h-10 max-w-full rounded-field-lg border-[1.5px] border-line bg-white px-3 text-sm font-semibold text-ink outline-none focus:border-2 focus:border-violet"
             >
               {organizations.map((org) => (
                 <option key={org.id} value={org.id}>
@@ -58,7 +60,7 @@ export function AppHeader({ organizations, currentOrgId, onOrgChange, nav, email
             </select>
           ) : null}
 
-          <nav aria-label="Main" className="flex flex-wrap gap-1 text-[15px] font-semibold">
+          <nav aria-label={t("main")} className="flex flex-wrap gap-1 text-[15px] font-semibold">
             {nav.map((item) => (
               <Link
                 key={item.href}
@@ -78,7 +80,7 @@ export function AppHeader({ organizations, currentOrgId, onOrgChange, nav, email
         <div className="relative">
           <button
             type="button"
-            aria-label="Account"
+            aria-label={t("account")}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
 
@@ -11,6 +11,10 @@ vi.mock("@/i18n/navigation", () => ({
     </a>
   ),
 }));
+
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../messages/en.json";
+const render = (node: React.ReactNode) => rtlRender(<NextIntlClientProvider locale="en" messages={messages}>{node}</NextIntlClientProvider>);
 
 const { AppHeader } = await import("./AppHeader");
 

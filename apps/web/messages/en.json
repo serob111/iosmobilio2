@@ -218,13 +218,37 @@
     "draftNotFoundCta": "Create an app"
   },
   "projects": {
-    "title": "Your projects",
-    "empty": "No projects yet.",
+    "title": "My apps",
+    "empty": "No apps yet",
     "openProject": "Open",
     "organization": "Organization",
     "notFound": "Project not found",
     "loadError": "Something went wrong loading this project.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "emptyBody": "Paste your website address. In about a minute you'll see it as an iPhone app, free.",
+    "firstApp": "Create your first app",
+    "newApp": "New app",
+    "count": "{count, plural, one {# app} other {# apps}} in {workspace}",
+    "websiteAddress": "Website address",
+    "urlPlaceholder": "example.com",
+    "createPreview": "Create preview",
+    "creating": "Creating…",
+    "loading": "Loading your apps…",
+    "loadListError": "We couldn’t load your apps. Please try again.",
+    "updated": "Updated {date}",
+    "statusUnavailable": "Build status unavailable",
+    "status": {
+      "draft": "Preview only",
+      "building": "Building",
+      "ready": "Build ready",
+      "failed": "Build failed"
+    },
+    "next": {
+      "draft": "Test on iPhone",
+      "building": "Build in progress",
+      "ready": "View build",
+      "failed": "See what happened"
+    }
   },
   "builds": {
     "title": "Build .ipa",
@@ -345,5 +369,11 @@
     "CSRF_ORIGIN_MISMATCH": "Your session looks invalid. Please reload the page and try again.",
     "INTERNAL_ERROR": "Something went wrong on our side. Please try again.",
     "UNKNOWN": "Something went wrong. Please try again."
+  },
+  "appHeader": {
+    "home": "Mobilio home",
+    "organization": "Organization",
+    "main": "Main",
+    "account": "Account"
   }
 }

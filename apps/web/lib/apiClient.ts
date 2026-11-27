@@ -246,6 +246,17 @@ export interface ProjectSummary {
   updatedAt: string;
 }
 
+export async function createProject(orgId: string, url: string): Promise<{ id: string }> {
+  const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/projects`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) return throwApiError(res);
+  return res.json() as Promise<{ id: string }>;
+}
+
 export async function listProjects(orgId: string): Promise<ProjectSummary[]> {
   const res = await fetch(`${API_BASE_URL}/orgs/${orgId}/projects`, { credentials: "include" });
   if (!res.ok) {

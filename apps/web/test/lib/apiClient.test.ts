@@ -9,6 +9,7 @@ import {
   createDraftEditorPreviewLink,
   createDraftPreviewLink,
   createOrganization,
+  createProject,
   createProjectEditorPreviewLink,
   createProjectPreviewLink,
   draftIconUrl,
@@ -289,6 +290,21 @@ describe('listProjects', () => {
     const rows = [{ id: 'p1', name: 'A', sourceUrl: 'https://a.example', createdAt: 'now', updatedAt: 'now' }];
     server.use(http.get(`${API_BASE}/orgs/org1/projects`, () => HttpResponse.json(rows)));
     await expect(listProjects('org1')).resolves.toEqual(rows);
+  });
+});
+
+describe('createProject', () => {
+  it('POSTs the website address to the selected organization', async () => {
+    let capturedBody: unknown;
+    server.use(
+      http.post(`${API_BASE}/orgs/org1/projects`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: 'project-1' }, { status: 201 });
+      }),
+    );
+
+    await expect(createProject('org1', 'example.com')).resolves.toEqual({ id: 'project-1' });
+    expect(capturedBody).toEqual({ url: 'example.com' });
   });
 });
 
