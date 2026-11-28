@@ -1,9 +1,29 @@
 import { defineConfig, devices } from '@playwright/test';
 import { MAIL_LOG_FILE } from './e2e/mailLog';
 
+function readPort(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`${name} must be an integer between 1 and 65535`);
+  }
+  return port;
+}
+
+const webPort = readPort('E2E_WEB_PORT', 3100);
+const apiPort = readPort('E2E_API_PORT', 3011);
+const databaseName = process.env.E2E_DATABASE_NAME ?? 'mobilio';
+if (!/^[a-z_][a-z0-9_]*$/i.test(databaseName)) {
+  throw new Error('E2E_DATABASE_NAME must be a PostgreSQL identifier');
+}
+const webOrigin = `http://localhost:${webPort}`;
+const apiOrigin = `http://localhost:${apiPort}`;
+const useBuild = process.env.E2E_USE_BUILD === '1';
+
 // Local defaults match this repo's docker-compose host ports (see root .env.example);
 // CI's e2e job overrides these to match its services: containers (see ci.yml).
-const apiDatabaseUrl = process.env.E2E_API_DATABASE_URL ?? 'postgres://mobilio_app:mobilio_app_pw@localhost:5433/mobilio';
+const apiDatabaseUrl = process.env.E2E_API_DATABASE_URL ?? `postgres://mobilio_app:mobilio_app_pw@localhost:5433/${databaseName}`;
 const apiRedisUrl = process.env.E2E_API_REDIS_URL ?? 'redis://localhost:6380';
 const apiS3Endpoint = process.env.E2E_API_S3_ENDPOINT ?? 'http://localhost:9000';
 
@@ -15,17 +35,18 @@ export default defineConfig({
   retries: 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:3100',
+    baseURL: webOrigin,
     trace: 'retain-on-failure',
   },
   webServer: [
     {
-      command: 'npx tsx e2e/server.ts',
-      port: 3100,
+      command: useBuild ? `npx next start -p ${webPort}` : 'npx tsx e2e/server.ts',
+      port: webPort,
       reuseExistingServer: false,
       timeout: 60_000,
       env: {
-        NEXT_PUBLIC_API_BASE_URL: 'http://localhost:3011',
+        E2E_WEB_PORT: String(webPort),
+        NEXT_PUBLIC_API_BASE_URL: apiOrigin,
         // Lets builds.spec.ts exercise the Builds UI block — safe to leave on for
         // every other spec too, since none of them ever reach a project editor page.
         NEXT_PUBLIC_ENABLE_BUILDS: 'true',
@@ -40,16 +61,16 @@ export default defineConfig({
       // depends on, causing "can't resolve dependencies" at boot.
       command: 'npx nest start',
       cwd: '../api',
-      port: 3011,
+      port: apiPort,
       reuseExistingServer: false,
       timeout: 60_000,
       env: {
         DATABASE_URL: apiDatabaseUrl,
         REDIS_URL: apiRedisUrl,
         BETTER_AUTH_SECRET: 'e2e-test-secret-not-for-production-use-only',
-        WEB_ORIGIN: 'http://localhost:3100',
-        API_BASE_URL: 'http://localhost:3011',
-        PORT: '3011',
+        WEB_ORIGIN: webOrigin,
+        API_BASE_URL: apiOrigin,
+        PORT: String(apiPort),
         MAIL_LOG_FILE,
         // validatePreviewEnv (src/preview/validate-preview-env.ts) refuses to start
         // without PREVIEW_PROXY_DOMAIN set to a different registrable domain from
@@ -68,10 +89,10 @@ export default defineConfig({
         // validatePreviewEnv requires this unconditionally now (share links' raw slug
         // must be encryptable for redisplay) — any 32 bytes, base64, work for a test run.
         PREVIEW_SLUG_KEY: Buffer.alloc(32, 9).toString('base64'),
-        // This api answers on :3011, not the scheme's default port — without this,
+        // This api answers on the configured non-default port — without this,
         // every generated preview link would silently point at :80, where nothing here
         // is listening. Real deployments (always on 443 behind a reverse proxy) never set this.
-        PREVIEW_PROXY_PORT: '3011',
+        PREVIEW_PROXY_PORT: String(apiPort),
         // Lets the real api's safeFetch/proxyFetch calls reach the real local "site"
         // servers preview-proxy.spec.ts spins up itself — see
         // net/safe-fetch.ts's getSafeFetchTestOverrides for why this is scoped to

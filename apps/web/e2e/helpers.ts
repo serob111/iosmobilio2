@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { Redis } from 'ioredis';
 import { MAIL_LOG_FILE } from './mailLog';
 
+export const E2E_WEB_ORIGIN = `http://localhost:${process.env.E2E_WEB_PORT ?? 3100}`;
+export const E2E_API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT ?? 3011}`;
+
 export interface LoggedMail {
   to: string;
   subject: string;

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { E2E_API_ORIGIN, E2E_WEB_ORIGIN } from './helpers';
 
-const API_ORIGIN = 'http://localhost:3011';
 const PROXY_ORIGIN = 'http://preview.e2e.test';
 const SLUG = 'e2e-test-slug';
 
@@ -28,10 +28,10 @@ const PREVIEW_DTO = {
  * e2e specs that do need a real session/RLS round trip.
  */
 test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR code', async ({ page }) => {
-  await page.route(`${API_ORIGIN}/drafts`, async (route) => {
+  await page.route(`${E2E_API_ORIGIN}/drafts`, async (route) => {
     await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
   });
-  await page.route(`${API_ORIGIN}/drafts/me`, async (route) => {
+  await page.route(`${E2E_API_ORIGIN}/drafts/me`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -58,16 +58,16 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
   });
   // The editor's own live-preview iframe link — a distinct, never-revoking endpoint
   // from the share link below (see preview-link.service.ts's editor/share split).
-  await page.route(`${API_ORIGIN}/drafts/me/preview-link/editor`, async (route) => {
+  await page.route(`${E2E_API_ORIGIN}/drafts/me/preview-link/editor`, async (route) => {
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
-      body: JSON.stringify({ url: `http://localhost:3100/preview/${SLUG}` }),
+      body: JSON.stringify({ url: `${E2E_WEB_ORIGIN}/preview/${SLUG}` }),
     });
   });
   // The share link PreviewLinkButton manages: GET first (none active yet, 404), then
   // POST to create one — same shape either way for this test's purposes.
-  await page.route(`${API_ORIGIN}/drafts/me/preview-link`, async (route) => {
+  await page.route(`${E2E_API_ORIGIN}/drafts/me/preview-link`, async (route) => {
     if (route.request().method() === 'GET') {
       await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({}) });
       return;
@@ -75,13 +75,13 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
     await route.fulfill({
       status: 201,
       contentType: 'application/json',
-      body: JSON.stringify({ url: `http://localhost:3100/preview/${SLUG}` }),
+      body: JSON.stringify({ url: `${E2E_WEB_ORIGIN}/preview/${SLUG}` }),
     });
   });
-  await page.route(`${API_ORIGIN}/preview/${SLUG}`, async (route) => {
+  await page.route(`${E2E_API_ORIGIN}/preview/${SLUG}`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(PREVIEW_DTO) });
   });
-  await page.route(`${API_ORIGIN}/me`, async (route) => {
+  await page.route(`${E2E_API_ORIGIN}/me`, async (route) => {
     await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({}) });
   });
   await page.route(`${PROXY_ORIGIN}/icon.png`, async (route) => {
@@ -120,5 +120,5 @@ test('enter a URL, see the draft preview in a frame, switch tabs, and see the QR
 
   await page.getByRole('button', { name: 'Open on iPhone' }).click();
   await expect(page.getByAltText('Preview QR code')).toBeVisible();
-  await expect(page.getByRole('link', { name: `http://localhost:3100/preview/${SLUG}` })).toBeVisible();
+  await expect(page.getByRole('link', { name: `${E2E_WEB_ORIGIN}/preview/${SLUG}` })).toBeVisible();
 });

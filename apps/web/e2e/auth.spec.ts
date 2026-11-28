@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { extractUrl, readMailLines, resetRateLimitBuckets, waitForMail } from './helpers';
+import { E2E_API_ORIGIN, E2E_WEB_ORIGIN, extractUrl, readMailLines, resetRateLimitBuckets, waitForMail } from './helpers';
 
 async function signInByMagicLink(page: Page, email: string): Promise<void> {
   await resetRateLimitBuckets();
@@ -13,7 +13,7 @@ async function signInByMagicLink(page: Page, email: string): Promise<void> {
   const mail = await waitForMail(email, '/api/auth/magic-link/verify', sinceLine);
   await resetRateLimitBuckets();
   await page.goto(extractUrl(mail.body));
-  await page.waitForURL('http://localhost:3100/**');
+  await page.waitForURL(`${E2E_WEB_ORIGIN}/**`);
 }
 
 test.describe('auth', () => {
@@ -47,7 +47,7 @@ test.describe('auth', () => {
 
     await signInByMagicLink(page, ownerEmail);
 
-    const me = await page.request.get('http://localhost:3011/me');
+    const me = await page.request.get(`${E2E_API_ORIGIN}/me`);
     const meBody = await me.json();
     const orgId = meBody.organizations[0].id as string;
 
@@ -58,8 +58,8 @@ test.describe('auth', () => {
     // in-page fetch(), Playwright's request fixture doesn't attach an Origin header on
     // its own, so it's set explicitly here to pass apps/api's CSRF Origin check the way
     // a real browser-driven request naturally would.
-    const inviteRes = await page.request.post(`http://localhost:3011/orgs/${orgId}/invitations`, {
-      headers: { Origin: 'http://localhost:3100' },
+    const inviteRes = await page.request.post(`${E2E_API_ORIGIN}/orgs/${orgId}/invitations`, {
+      headers: { Origin: E2E_WEB_ORIGIN },
       data: { email: inviteeEmail, role: 'member' },
     });
     expect(inviteRes.ok()).toBe(true);
@@ -73,8 +73,8 @@ test.describe('auth', () => {
 
     await signInByMagicLink(page, inviteeEmail);
 
-    const acceptRes = await page.request.post('http://localhost:3011/invitations/accept', {
-      headers: { Origin: 'http://localhost:3100' },
+    const acceptRes = await page.request.post(`${E2E_API_ORIGIN}/invitations/accept`, {
+      headers: { Origin: E2E_WEB_ORIGIN },
       data: { token },
     });
     expect(acceptRes.ok()).toBe(true);

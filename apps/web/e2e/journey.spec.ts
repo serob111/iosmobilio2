@@ -3,9 +3,9 @@ import type { AddressInfo } from 'node:net';
 import { expect, test, type Page } from '@playwright/test';
 import enMessages from '../messages/en.json';
 import ruMessages from '../messages/ru.json';
-import { extractUrl, readMailLines, resetRateLimitBuckets, waitForMail } from './helpers';
+import { E2E_API_ORIGIN, extractUrl, readMailLines, resetRateLimitBuckets, waitForMail } from './helpers';
 
-const API_BASE = 'http://localhost:3011';
+const API_BASE = E2E_API_ORIGIN;
 const ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
 type Locale = 'en' | 'ru';

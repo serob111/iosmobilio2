@@ -22,8 +22,12 @@ $env:E2E_WEB_PORT='3200'
 $env:E2E_API_PORT='3211'
 $env:E2E_DATABASE_NAME='mobilio_design'
 $env:E2E_USE_BUILD='1'
-npm.cmd run build
+$env:NEXT_PUBLIC_API_BASE_URL='http://localhost:3211'
+$env:NEXT_PUBLIC_ENABLE_BUILDS='true'
+npm.cmd run build --workspace=mobilio-web
+Push-Location apps/web
 npx.cmd playwright test --workers=1
+Pop-Location
 ```
 
 Create and migrate `mobilio_design` before the run when it does not exist. Do not stop, reuse, or modify processes and databases belonging to another worktree.
