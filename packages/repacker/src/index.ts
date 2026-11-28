@@ -1,4 +1,19 @@
-// Placeholder package — reserved for a future .ipa repacking implementation.
-// No logic lives here yet; see project memory/history for why the "build once,
-// repack per-request" approach was shelved in favor of a full CI build per request.
-export const REPACKER_PLACEHOLDER = true;
+export { RepackError, type RepackErrorCode } from './errors.js';
+export { sha256File, assertBaseChecksum } from './checksum.js';
+export { extractZip } from './extract.js';
+export { createZip } from './archive.js';
+export {
+  readInfoPlist,
+  writeInfoPlist,
+  applyClientIdentity,
+  type InfoPlistDict,
+  type ClientIdentity,
+} from './info-plist.js';
+export { generateIcons, ICON_FILES } from './icons.js';
+export { generateSplash } from './splash.js';
+export { validateProjectConfig, writeConfigJson } from './config-bundle.js';
+export { buildEntitlements, writeEntitlements, type EntitlementsInput } from './entitlements.js';
+export { embedProvisioningProfile } from './provisioning.js';
+export { assertValidBundleId, assertValidTeamId } from './validation.js';
+export { signBundle, verifyBundle, type RcodesignConfig, type SigningCredentials } from './sign.js';
+export { repack, type RepackInput, type RepackResult, type RepackStepTiming } from './repack.js';

@@ -11,7 +11,10 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@mobilio/apple": "*",
+    "@mobilio/config": "*",
     "@mobilio/db": "*",
+    "@mobilio/repacker": "*",
     "@mobilio/storage": "*",
     "@sentry/node": "^11.8.0",
     "bullmq": "^6.1.0",

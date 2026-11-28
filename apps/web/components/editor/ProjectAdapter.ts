@@ -1,6 +1,7 @@
 import type { ProjectConfig } from "@mobilio/config";
 import {
   buildIpaUrl,
+  buildItmsServicesInstallUrl,
   getBuild,
   listBuilds,
   projectIconUrl,
@@ -30,6 +31,7 @@ export function createProjectAdapter(
           list: () => listBuilds(orgId, projectId),
           get: (buildId) => getBuild(orgId, projectId, buildId),
           ipaUrl: (buildId) => buildIpaUrl(orgId, projectId, buildId),
+          installUrl: (buildId) => buildItmsServicesInstallUrl(orgId, projectId, buildId),
         }
       : undefined,
   };

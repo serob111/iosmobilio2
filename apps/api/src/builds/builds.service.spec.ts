@@ -33,6 +33,7 @@ const BUILD_ID = '01a16033-3d3b-718f-b2f4-9508ec870bad';
 const {
   runInTenantContextMock,
   runInBuildContextMock,
+  runInInstallLookupContextMock,
   getTenantDbMock,
   insertMock,
   valuesMock,
@@ -54,9 +55,11 @@ const {
   });
   const runInTenantContextMock = vi.fn(async (_db: unknown, _identity: unknown, fn: () => Promise<unknown>) => fn());
   const runInBuildContextMock = vi.fn();
+  const runInInstallLookupContextMock = vi.fn();
   return {
     runInTenantContextMock,
     runInBuildContextMock,
+    runInInstallLookupContextMock,
     getTenantDbMock,
     insertMock,
     valuesMock,
@@ -70,6 +73,7 @@ const {
 vi.mock('@mobilio/db', () => ({
   runInTenantContext: runInTenantContextMock,
   runInBuildContext: runInBuildContextMock,
+  runInInstallLookupContext: runInInstallLookupContextMock,
   getTenantDb: getTenantDbMock,
   schema: {
     builds: { id: 'builds.id', projectId: 'builds.projectId', createdAt: 'builds.createdAt' },
@@ -97,6 +101,7 @@ describe('BuildsService', () => {
   beforeEach(() => {
     runInTenantContextMock.mockClear();
     runInBuildContextMock.mockReset();
+    runInInstallLookupContextMock.mockReset();
     getTenantDbMock.mockReset().mockReturnValue({ insert: insertMock, update: updateMock, select: selectMock });
     insertMock.mockClear();
     valuesMock.mockReset().mockReturnValue(chainTo(undefined));
@@ -439,6 +444,89 @@ describe('BuildsService', () => {
       const url = await service.getIpaUrl(ORG_ID, USER_ID, PROJECT_ID, BUILD_ID);
       expect(url).toBe('https://signed.example/app.ipa');
       expect(storageSignedUrl).toHaveBeenCalledWith(winningKey, 300, 'cafe-uyut.ipa');
+    });
+  });
+
+  describe('getInstallManifest', () => {
+    function mockBuild(build: Record<string, unknown> | undefined) {
+      runInInstallLookupContextMock.mockImplementation(async (_db: unknown, _buildId: string, fn: (b: unknown) => unknown) =>
+        build ? fn(build) : undefined,
+      );
+    }
+
+    it('throws 404 NOT_FOUND when no build matches the id at all', async () => {
+      mockBuild(undefined);
+      const service = await buildService();
+      await expect(service.getInstallManifest(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("throws 404 NOT_FOUND when the build's own orgId/projectId don't match the url's path segments", async () => {
+      mockBuild({ orgId: 'some-other-org', projectId: PROJECT_ID, status: 'done', ipaKey: 'key', shortVersion: '1.0.0' });
+      const service = await buildService();
+      await expect(service.getInstallManifest(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws 404 IPA_NOT_READY when the build is not done yet', async () => {
+      mockBuild({ orgId: ORG_ID, projectId: PROJECT_ID, status: 'building', ipaKey: null, shortVersion: null });
+      const service = await buildService();
+      await expect(service.getInstallManifest(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns a manifest.plist with the bundleId/name from the project config and the shortVersion from the build', async () => {
+      mockBuild({ orgId: ORG_ID, projectId: PROJECT_ID, status: 'done', ipaKey: 'key', shortVersion: '1.2.3' });
+      selectMock.mockReturnValue({
+        from: () => ({ where: () => chainTo([{ config: { bundleId: 'am.mobilio.t.cafe', name: 'Cafe Mobilio' } }]) }),
+      });
+      process.env.API_PUBLIC_URL = 'https://api.example';
+      const service = await buildService();
+
+      const xml = await service.getInstallManifest(ORG_ID, PROJECT_ID, BUILD_ID);
+
+      expect(xml).toContain('am.mobilio.t.cafe');
+      expect(xml).toContain('1.2.3');
+      expect(xml).toContain('Cafe Mobilio');
+      expect(xml).toContain(`https://api.example/orgs/${ORG_ID}/projects/${PROJECT_ID}/builds/${BUILD_ID}/install.ipa`);
+    });
+
+    it('throws 404 NOT_FOUND when the build is done but its project row is somehow gone', async () => {
+      mockBuild({ orgId: ORG_ID, projectId: PROJECT_ID, status: 'done', ipaKey: 'key', shortVersion: '1.2.3' });
+      selectMock.mockReturnValue({ from: () => ({ where: () => chainTo([]) }) });
+      const service = await buildService();
+      await expect(service.getInstallManifest(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('getInstallIpaUrl', () => {
+    function mockBuild(build: Record<string, unknown> | undefined) {
+      runInInstallLookupContextMock.mockImplementation(async (_db: unknown, _buildId: string, fn: (b: unknown) => unknown) =>
+        build ? fn(build) : undefined,
+      );
+    }
+
+    it('throws 404 NOT_FOUND when no build matches the id', async () => {
+      mockBuild(undefined);
+      const service = await buildService();
+      await expect(service.getInstallIpaUrl(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("throws 404 NOT_FOUND when the build's own projectId doesn't match the url", async () => {
+      mockBuild({ orgId: ORG_ID, projectId: 'some-other-project', status: 'done', ipaKey: 'key' });
+      const service = await buildService();
+      await expect(service.getInstallIpaUrl(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws 404 IPA_NOT_READY when the build has no ipaKey yet', async () => {
+      mockBuild({ orgId: ORG_ID, projectId: PROJECT_ID, status: 'building', ipaKey: null });
+      const service = await buildService();
+      await expect(service.getInstallIpaUrl(ORG_ID, PROJECT_ID, BUILD_ID)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("returns a fresh signed url for the build's own ipaKey", async () => {
+      mockBuild({ orgId: ORG_ID, projectId: PROJECT_ID, status: 'done', ipaKey: 'orgs/o/projects/p/builds/b/app.ipa-attempt' });
+      const service = await buildService();
+      const url = await service.getInstallIpaUrl(ORG_ID, PROJECT_ID, BUILD_ID);
+      expect(url).toBe('https://signed.example/app.ipa');
+      expect(storageSignedUrl).toHaveBeenCalledWith('orgs/o/projects/p/builds/b/app.ipa-attempt', 300, 'app.ipa');
     });
   });
 });

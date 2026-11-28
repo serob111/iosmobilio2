@@ -15,22 +15,35 @@ export function validateBuildEnv(): void {
     return;
   }
 
+  // Required for both remaining runners: the install endpoint's manifest.plist (and
+  // GithubActionsRunner's own dispatch payload) both need an absolute, HTTPS base URL
+  // for this API, not something runner-specific.
   const apiPublicUrl = process.env.API_PUBLIC_URL;
   if (!apiPublicUrl || !apiPublicUrl.startsWith('https://')) {
     throw new Error('API_PUBLIC_URL must be set and start with https:// when BUILD_RUNNER is not "fake"');
   }
+
+  if (runner === 'repack') {
+    // RepackRunner only enqueues {buildId} for apps/worker to pick up — it never talks
+    // to GitHub and never needs BUILD_TOKEN_KEY (that only encrypts the callback token
+    // GithubActionsRunner's dispatch payload carries). The worker process validates its
+    // own ASC/signing env independently (see @mobilio/apple's validateAppleEnv) when it
+    // actually processes a job, not at this (api) process's boot time.
+    return;
+  }
+
   if (!process.env.GITHUB_DISPATCH_TOKEN) {
-    throw new Error('GITHUB_DISPATCH_TOKEN must be set when BUILD_RUNNER is not "fake"');
+    throw new Error('GITHUB_DISPATCH_TOKEN must be set when BUILD_RUNNER is "github"');
   }
   if (!process.env.GITHUB_REPO) {
-    throw new Error('GITHUB_REPO must be set when BUILD_RUNNER is not "fake"');
+    throw new Error('GITHUB_REPO must be set when BUILD_RUNNER is "github"');
   }
 
   const key = process.env.BUILD_TOKEN_KEY;
   if (!key) {
-    throw new Error('BUILD_TOKEN_KEY must be set when BUILD_RUNNER is not "fake"');
+    throw new Error('BUILD_TOKEN_KEY must be set when BUILD_RUNNER is "github"');
   }
   if (Buffer.from(key, 'base64').length !== 32) {
-    throw new Error('BUILD_TOKEN_KEY must decode to exactly 32 bytes (base64) when BUILD_RUNNER is not "fake"');
+    throw new Error('BUILD_TOKEN_KEY must decode to exactly 32 bytes (base64) when BUILD_RUNNER is "github"');
   }
 }

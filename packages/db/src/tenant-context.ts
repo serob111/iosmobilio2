@@ -151,6 +151,72 @@ export async function runInPreviewLookupContext<T>(
 }
 
 /**
+ * For the repack worker job (apps/worker) — it receives only a raw build id (a BullMQ
+ * job payload, {buildId}), with no session, no org identity, and no per-build secret
+ * token the way the GitHub Actions runner's HTTP callback flow has (an in-process
+ * worker job never calls back over HTTP at all, so there's nothing to hand it a token
+ * for). Looks the build up by id first (builds_worker_access,
+ * see 0025_worker_build_access.sql), then, once its project is known, sets
+ * app.worker_build_project_id so the same transaction can also read/write that one
+ * project's provisioning_profiles row under provisioning_profiles_worker_access.
+ * Deliberately narrower than runInTenantContext: never sets app.org_id, so this cannot
+ * reach memberships/invitations/other projects in the same org. Trust here is
+ * structural, not a secret: no HTTP-request-driven code path ever sets either GUC, so a
+ * build id alone is never enough for an ordinary request to reach these policies — same
+ * trust category as builds_watchdog's SECURITY DEFINER sweep, just scoped to one build.
+ * Returns undefined when no row matches, so the job can fail cleanly rather than crash
+ * on a build that somehow no longer exists.
+ */
+export async function runInWorkerBuildContext<T>(
+  db: Db,
+  buildId: string,
+  fn: (build: typeof builds.$inferSelect) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.worker_build_id', ${buildId}, true)`);
+    const [build] = await scoped.select().from(builds).where(eq(builds.id, buildId));
+    if (!build) {
+      return undefined;
+    }
+    await scoped.execute(sql`select set_config('app.worker_build_project_id', ${build.projectId}, true)`);
+    return storage.run(scoped, () => fn(build));
+  });
+}
+
+/**
+ * For the public, unauthenticated install endpoint (apps/api) — an iOS device fetching
+ * an itms-services manifest.plist or the .ipa itself has no session/cookies, only the
+ * three ids already in its own URL path. Looks the build up by raw id
+ * (builds_install_select, see 0028_builds_install_select.sql) — SELECT only, never
+ * UPDATE, unlike runInWorkerBuildContext's app.worker_build_id/builds_worker_access,
+ * which grants a trusted background job full read/write access to the one build (and
+ * project's provisioning_profiles) it's processing. A public endpoint must never be
+ * able to write a build row through this path even by accident, so it gets its own GUC
+ * and its own read-only policy rather than reusing the worker's. Also sets
+ * app.install_project_id once the build's project is known, so the same transaction can
+ * read that one project's config too (projects_install_select) — the manifest needs its
+ * bundleId/display name. Returns undefined when no row matches, so the controller 404s
+ * rather than leaking "exists but ___".
+ */
+export async function runInInstallLookupContext<T>(
+  db: Db,
+  buildId: string,
+  fn: (build: typeof builds.$inferSelect) => Promise<T>,
+): Promise<T | undefined> {
+  return db.transaction(async (tx) => {
+    const scoped = tx as unknown as Db;
+    await scoped.execute(sql`select set_config('app.install_build_id', ${buildId}, true)`);
+    const [build] = await scoped.select().from(builds).where(eq(builds.id, buildId));
+    if (!build) {
+      return undefined;
+    }
+    await scoped.execute(sql`select set_config('app.install_project_id', ${build.projectId}, true)`);
+    return storage.run(scoped, () => fn(build));
+  });
+}
+
+/**
  * Throws instead of silently falling back to an unscoped connection — a repository
  * calling this outside `runInTenantContext` is a bug, not a case to handle gracefully.
  */

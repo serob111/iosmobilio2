@@ -7,11 +7,15 @@
     "packages/*"
   ],
   "scripts": {
-    "postinstall": "npm run build --workspace=@mobilio/config && npm run build --workspace=@mobilio/db && npm run build --workspace=@mobilio/storage",
+    "postinstall": "npm run build --workspace=@mobilio/config && npm run build --workspace=@mobilio/db && npm run build --workspace=@mobilio/storage && npm run build --workspace=@mobilio/repacker && npm run build --workspace=@mobilio/apple",
     "build:config": "npm run build --workspace=@mobilio/config",
     "build:db": "npm run build --workspace=@mobilio/db",
+    "build:repacker": "npm run build --workspace=@mobilio/repacker",
+    "build:apple": "npm run build --workspace=@mobilio/apple",
     "test:config": "npm test --workspace=@mobilio/config",
+    "test:apple": "npm test --workspace=@mobilio/apple",
     "typecheck:config": "npm run typecheck --workspace=@mobilio/config",
+    "typecheck:apple": "npm run typecheck --workspace=@mobilio/apple",
     "typecheck:shell": "npm run typecheck --workspace=mobilio-shell",
     "shell": "npm run start --workspace=mobilio-shell",
     "dev": "docker compose up -d postgres redis minio && concurrently -n web,api,worker -c blue,green,yellow \"npm run dev --workspace=mobilio-web\" \"npm run dev --workspace=mobilio-api\" \"npm run dev --workspace=mobilio-worker\"",

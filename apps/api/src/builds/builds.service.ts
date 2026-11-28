@@ -8,7 +8,7 @@ import {
   NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
-import { runInTenantContext, runInBuildContext, getTenantDb, schema, eq, and, desc } from '@mobilio/db';
+import { runInTenantContext, runInBuildContext, runInInstallLookupContext, getTenantDb, schema, eq, and, desc } from '@mobilio/db';
 import type { ProjectConfig } from '@mobilio/config';
 import { type ObjectStorage, ObjectNotFoundError, buildIpaKey, projectIconKey } from '@mobilio/storage';
 import { uuidv7 } from 'uuidv7';
@@ -18,6 +18,7 @@ import { generateLetterAvatar } from '../projects/icon.js';
 import { BUILD_RUNNER, type BuildRunner } from './build-runner.js';
 import { generateBuildToken } from './build-token.js';
 import { createIpaValidationStream, IpaValidationError } from './ipa-stream.js';
+import { buildManifestPlist } from './manifest-plist.js';
 
 /**
  * Opaque identifier for which version of the apps/shell build template a build ran
@@ -35,6 +36,7 @@ function isActiveBuildConflict(error: unknown): boolean {
 
 export type BuildSummary = {
   id: string;
+  kind: string;
   status: string;
   runId: number | null;
   runUrl: string | null;
@@ -42,6 +44,8 @@ export type BuildSummary = {
   startedAt: Date | null;
   finishedAt: Date | null;
   createdAt: Date;
+  /** RepackStepTiming[] ({step, durationMs}[]) — only ever non-null for 'adhoc' builds, written incrementally by the repack job as it runs, not just once at completion. */
+  stepTimings: unknown;
 };
 
 @Injectable()
@@ -115,6 +119,7 @@ export class BuildsService {
       getTenantDb()
         .select({
           id: schema.builds.id,
+          kind: schema.builds.kind,
           status: schema.builds.status,
           runId: schema.builds.runId,
           runUrl: schema.builds.runUrl,
@@ -122,6 +127,7 @@ export class BuildsService {
           startedAt: schema.builds.startedAt,
           finishedAt: schema.builds.finishedAt,
           createdAt: schema.builds.createdAt,
+          stepTimings: schema.builds.stepTimings,
         })
         .from(schema.builds)
         .where(eq(schema.builds.projectId, projectId))
@@ -174,6 +180,63 @@ export class BuildsService {
     const slug = (project?.config as ProjectConfig | undefined)?.slug ?? 'app';
 
     return this.storage.signedUrl(build.ipaKey, 300, `${slug}.ipa`);
+  }
+
+  // ---------------------------------------------------------------------------------
+  // Public install-facing (runInInstallLookupContext — no session, no token: the only
+  // "proof" a device presents is the three ids already in its own itms-services url)
+  // ---------------------------------------------------------------------------------
+
+  /**
+   * GET /orgs/:orgId/projects/:projectId/builds/:buildId/manifest.plist — what an
+   * itms-services://?action=download-manifest&url=... link actually points at. Both
+   * this and the .ipa's own signed url (getInstallIpaUrl) are generated fresh on every
+   * request, never stored — a persisted manifest.plist would either embed a presigned
+   * S3 url that expires in minutes, or go stale the moment anything it references
+   * changes, for a file meant to be fetchable for as long as the build exists.
+   */
+  async getInstallManifest(orgId: string, projectId: string, buildId: string): Promise<string> {
+    const result = await runInInstallLookupContext(this.dbService.db, buildId, async (build) => {
+      if (build.orgId !== orgId || build.projectId !== projectId) {
+        return { kind: 'not-found' } as const;
+      }
+      if (build.status !== 'done' || !build.ipaKey || !build.shortVersion) {
+        return { kind: 'not-ready' } as const;
+      }
+      const [project] = await getTenantDb().select().from(schema.projects).where(eq(schema.projects.id, projectId));
+      if (!project) {
+        return { kind: 'not-found' } as const;
+      }
+      return { kind: 'ready', shortVersion: build.shortVersion, project } as const;
+    });
+
+    if (!result || result.kind === 'not-found') {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Build not found' });
+    }
+    if (result.kind === 'not-ready') {
+      throw new NotFoundException({ code: 'IPA_NOT_READY', message: 'No .ipa available for this build yet' });
+    }
+
+    const projectConfig = result.project.config as ProjectConfig;
+    const apiPublicUrl = process.env.API_PUBLIC_URL ?? '';
+    return buildManifestPlist({
+      ipaUrl: `${apiPublicUrl}/orgs/${orgId}/projects/${projectId}/builds/${buildId}/install.ipa`,
+      bundleId: projectConfig.bundleId,
+      shortVersion: result.shortVersion,
+      displayName: projectConfig.name,
+    });
+  }
+
+  /** GET /orgs/:orgId/projects/:projectId/builds/:buildId/install.ipa — 302 to a fresh signed S3 url; this is the stable address manifest.plist's own url points at. */
+  async getInstallIpaUrl(orgId: string, projectId: string, buildId: string): Promise<string> {
+    const build = await runInInstallLookupContext(this.dbService.db, buildId, async (row) => row);
+    if (!build || build.orgId !== orgId || build.projectId !== projectId) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Build not found' });
+    }
+    if (build.status !== 'done' || !build.ipaKey) {
+      throw new NotFoundException({ code: 'IPA_NOT_READY', message: 'No .ipa available for this build yet' });
+    }
+    return this.storage.signedUrl(build.ipaKey, 300, 'app.ipa');
   }
 
   // ---------------------------------------------------------------------------------

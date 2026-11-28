@@ -10,6 +10,7 @@ import { PreviewShell } from "@/components/preview/PreviewShell";
 import type { PreviewDto } from "@/lib/apiClient";
 import type { ProjectEditorAdapter } from "./types";
 import { BuildsBlock } from "./BuildsBlock";
+import { AppleAppSiteAssociation } from "./AppleAppSiteAssociation";
 
 type Props = {
   adapter: ProjectEditorAdapter;
@@ -322,6 +323,7 @@ function FeaturesEditor({
           <input type="checkbox" checked={features.deepLinks} onChange={(e) => onChange({ ...features, deepLinks: e.target.checked })} />
           {t("featureDeepLinks")}
         </label>
+        {features.deepLinks ? <AppleAppSiteAssociation bundleId={config.bundleId} allowedDomains={config.allowedDomains} /> : null}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"

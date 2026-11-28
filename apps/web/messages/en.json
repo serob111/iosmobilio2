@@ -156,6 +156,10 @@
     "featureOffline": "Works offline",
     "featureShare": "Share button",
     "featureDeepLinks": "Deep links",
+    "deepLinksInstructions": "Upload this file to your domain so universal links open directly in the app:",
+    "deepLinksNoDomains": "No domain found for this project yet.",
+    "deepLinksCopy": "Copy",
+    "deepLinksCopied": "Copied",
     "featurePullToRefresh": "Pull to refresh",
     "save": "Save",
     "saving": "Saving…",
@@ -258,8 +262,10 @@
     "statusBuilding": "Building",
     "statusDone": "Ready",
     "statusFailed": "Failed",
+    "progress": "Progress",
+    "installOnIphone": "Install on iPhone",
     "downloadIpa": "Download .ipa",
-    "disclaimer": "This .ipa is unsigned — you'll need to sideload and sign it yourself before installing.",
+    "disclaimer": "This build only installs on a device registered with our Apple Developer account (Ad Hoc — limited to 100 devices per year on our account).",
     "error": "Build error"
   },
   "pricing": {
