@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { MAIL_LOG_FILE } from './e2e/mailLog';
+import { getE2ERedisUrl } from './e2e/environment';
 
 function readPort(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -24,8 +25,12 @@ const useBuild = process.env.E2E_USE_BUILD === '1';
 // Local defaults match this repo's docker-compose host ports (see root .env.example);
 // CI's e2e job overrides these to match its services: containers (see ci.yml).
 const apiDatabaseUrl = process.env.E2E_API_DATABASE_URL ?? `postgres://mobilio_app:mobilio_app_pw@localhost:5433/${databaseName}`;
-const apiRedisUrl = process.env.E2E_API_REDIS_URL ?? 'redis://localhost:6380';
+const apiRedisUrl = getE2ERedisUrl();
 const apiS3Endpoint = process.env.E2E_API_S3_ENDPOINT ?? 'http://localhost:9000';
+const apiS3Bucket = process.env.E2E_S3_BUCKET ?? 'mobilio';
+if (!apiS3Bucket.trim()) {
+  throw new Error('E2E_S3_BUCKET must not be empty');
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -102,7 +107,7 @@ export default defineConfig({
         // this suite never exercises file upload/download itself, so these just need to be set,
         // not correct against a real bucket.
         S3_ENDPOINT: apiS3Endpoint,
-        S3_BUCKET: 'mobilio',
+        S3_BUCKET: apiS3Bucket,
         S3_ACCESS_KEY_ID: 'mobilio',
         S3_SECRET_ACCESS_KEY: 'mobilio_minio_pw',
         S3_FORCE_PATH_STYLE: 'true',

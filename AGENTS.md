@@ -1,6 +1,8 @@
 # design-web agent instructions
 
-Read `CLAUDE.md`, `docs/STATUS.md`, and `docs/design/README.md` before changing code. Their project rules apply in addition to this file.
+Read `CLAUDE.md`, `docs/STATUS.md`, `docs/design/README.md`, and
+`docs/design/STATUS-design.md` before changing code. Their project rules apply in addition
+to this file.
 
 ## Scope
 
@@ -21,6 +23,8 @@ Codex must use an isolated Playwright environment so another session can run rep
 $env:E2E_WEB_PORT='3200'
 $env:E2E_API_PORT='3211'
 $env:E2E_DATABASE_NAME='mobilio_design'
+$env:E2E_REDIS_DB='5'
+$env:E2E_S3_BUCKET='mobilio-design'
 $env:E2E_USE_BUILD='1'
 $env:NEXT_PUBLIC_API_BASE_URL='http://localhost:3211'
 $env:NEXT_PUBLIC_ENABLE_BUILDS='true'
@@ -30,13 +34,19 @@ npx.cmd playwright test --workers=1
 Pop-Location
 ```
 
-Create and migrate `mobilio_design` before the run when it does not exist. Do not stop, reuse, or modify processes and databases belonging to another worktree.
+Create and migrate `mobilio_design`, and ensure the `mobilio-design` S3 bucket exists,
+before the run when they do not exist. The API, BullMQ queues, auth, preview caches,
+rate-limit keys, and E2E cleanup helpers must all use Redis database 5 through the same
+generated `REDIS_URL`. Do not stop, reuse, or modify processes, databases, Redis keys, or
+S3 objects belonging to another worktree.
 
 ## Design workflow
 
 Use `docs/design/screens/*.png` as the visual reference and `docs/design/source/*.dc.html` for exact values and states. Use real API data in product code; mock data belongs only in tests and screenshot fixtures. All visible copy must use `next-intl` with both English and Russian messages. Verify responsive behavior at 1440, 390, and 320 pixels and keep screenshots in `docs/design/implemented`.
 
-Keep one commit per screen or independent fix, with its tests. At the end of the phase, update `docs/STATUS.md` and stop after the report.
+Keep one commit per screen or independent fix, with its tests. Never edit
+`docs/STATUS.md`; the main stage-3 session owns it. At the end of a design phase, update
+`docs/design/STATUS-design.md` and stop after the report.
 
 ## Report format
 

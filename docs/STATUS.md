@@ -62,18 +62,6 @@ manifest/install endpoints (device testing — can't be done from this sandbox).
 `docs/design` (sourced from `mobilio-design-docs/`) — independent of the repack work above,
 merges separately when ready.
 
-**Part A complete** (2026-11-28): foundations, landing, pricing, sign-in, workspace,
-projects, general 404, expired preview, legal pages, and the sign-in email are implemented
-with English/Russian copy and responsive screenshots in `docs/design/implemented`
-(`f8fcff2`..`e1f5244`). `design-web` was merged with `origin/stage-3` (`4e895be`), its
-working boundaries and report format were recorded in `AGENTS.md` (`8c2821c`), and
-Playwright received isolated web/API/database settings plus opt-in production-build mode
-(`eb1fe1c`). Validation: full typecheck and lint passed; Vitest passed 959 tests with 201
-live-infrastructure tests skipped; Playwright passed 8/8 against `next start`, real local
-PostgreSQL/Redis/MinIO, and the fake build runner on ports 3200/3211 with database
-`mobilio_design`. No real Apple service or GitHub Actions run was performed. The branch is
-paused after Part A pending the owner's next signal.
-
 ## Plan, in order
 
 1. **repack** (current, see above)

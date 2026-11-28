@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { Redis } from 'ioredis';
+import { getE2ERedisUrl } from './environment';
 import { MAIL_LOG_FILE } from './mailLog';
 
 export const E2E_WEB_ORIGIN = `http://localhost:${process.env.E2E_WEB_PORT ?? 3100}`;
@@ -45,8 +46,7 @@ export function extractUrl(body: string): string {
 }
 
 function redisClient(): Redis {
-  const redisUrl = process.env.E2E_API_REDIS_URL ?? 'redis://localhost:6380';
-  return new Redis(redisUrl);
+  return new Redis(getE2ERedisUrl());
 }
 
 // Rate-limit buckets are keyed "<client-ip>|<path>" and shared across the whole Redis
